@@ -42,6 +42,7 @@ var steer_angle := 0.0
 var on_ground := false
 var wheels_on_ground := 0
 var air_time := 0.0
+var landing_impact := 0.0
 var wheelspin := 0.0
 var slip_angle := 0.0 # body side-slip
 var surface := "road"
@@ -564,6 +565,8 @@ func _physics_process(dt: float) -> void:
 		apply_torque(right * float(input.throttle - input.brake) * inertia.x * 0.6)
 		apply_torque(-fwd * float(input.steer) * inertia.z * 0.5)
 	else:
+		if air_time > 0.35:
+			landing_impact = absf(linear_velocity.y) + air_time * 4.0
 		air_time = 0.0
 	if up.y < 0.4 and speed < 4.0:
 		# Gently flip upright when stuck on the side or roof.

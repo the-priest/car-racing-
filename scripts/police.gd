@@ -179,11 +179,12 @@ func update(dt: float) -> void:
 	pursuit_time += dt
 	heat = clampi(maxi(min_heat, 1 + int(pursuit_time / 35.0)), 1, 5)
 	var want := mini(1 + heat, 7)
-	if cops.size() < want:
+	# No reinforcements once you've broken line of contact (cooldown running).
+	if cops.size() < want and cooldown <= 0.0:
 		reinforce -= dt
 		if reinforce <= 0.0:
 			reinforce = 5.0
-			spawn_near(160.0, 340.0, "chase")
+			spawn_near(200.0, 380.0, "chase")
 	var nearest := INF
 	for c in cops.duplicate():
 		var d2: float = c.car.global_position.distance_to(p.global_position)

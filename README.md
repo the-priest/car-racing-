@@ -29,10 +29,12 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 2. Clone this repo.
 3. Linux executable:
    ```bash
+   mkdir -p build/linux
    godot --headless --path . --export-release "Linux" build/linux/VelocityHeat.x86_64
    ./build/linux/VelocityHeat.x86_64
    ```
-   Windows: `godot --headless --path . --export-release "Windows" build/windows/VelocityHeat.exe`
+   Windows: `mkdir -p build/windows` then `godot --headless --path . --export-release "Windows" build/windows/VelocityHeat.exe`
+   (Export templates must match your Godot version exactly, e.g. 4.7.2.)
 4. Or just open the project in the Godot editor and press **F5**.
 
 World data and audio are pre-baked in `assets/`. To regenerate them: `node bake/bake_world.mjs` and `node bake/bake_audio.mjs` (Node 18+).

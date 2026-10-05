@@ -256,7 +256,7 @@ func _process(delta: float) -> void:
 			_next_sub()
 	phone_panel.visible = career.pending_call >= 0 and career.ringing > 0.0
 	if phone_panel.visible:
-		phone_l.text = "INCOMING CALL\n%s\n[%s] Answer" % [career._caller(career.pending_call), "D-pad ↓" if game.using_pad else "TAB"]
+		phone_l.text = "INCOMING CALL\n%s\n[%s] Answer" % [career._caller(career.pending_call), Settings.glyph("phone")]
 	var d: Dictionary = game.drift
 	drift_l.text = _fmt(int(d.chain)) if d.chain > 0 else ""
 	drift_m.text = ("DRIFT x%d" % d.mult) if d.chain > 0 else ""

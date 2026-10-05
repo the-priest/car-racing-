@@ -27,65 +27,111 @@ func setup(g: Node) -> void:
 
 func _make_theme() -> Theme:
 	var t := Theme.new()
-	t.default_font_size = 22
+	t.default_font_size = 24
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(1, 1, 1, 0.05)
-	normal.border_color = Color(1, 1, 1, 0.1)
-	normal.set_border_width_all(1)
+	normal.bg_color = Color(1, 1, 1, 0.045)
+	normal.border_color = Color(1, 1, 1, 0.0)
 	normal.border_width_left = 4
-	normal.border_color = Color(1, 1, 1, 0.08)
-	normal.set_content_margin_all(12)
-	normal.content_margin_left = 22
+	normal.set_corner_radius_all(3)
+	normal.content_margin_left = 24
+	normal.content_margin_right = 18
+	normal.content_margin_top = 13
+	normal.content_margin_bottom = 13
 	var focus := normal.duplicate() as StyleBoxFlat
-	focus.bg_color = Color(1.0, 0.48, 0.1, 0.32)
+	focus.bg_color = Color(1.0, 0.48, 0.1, 0.28)
 	focus.border_color = ACCENT
+	focus.shadow_color = Color(1.0, 0.45, 0.1, 0.25)
+	focus.shadow_size = 8
 	var pressed := focus.duplicate() as StyleBoxFlat
 	pressed.bg_color = Color(1.0, 0.48, 0.1, 0.5)
 	var disabled := normal.duplicate() as StyleBoxFlat
 	disabled.bg_color = Color(1, 1, 1, 0.02)
-	for type in ["Button"]:
-		t.set_stylebox("normal", type, normal)
-		t.set_stylebox("hover", type, focus)
-		t.set_stylebox("focus", type, focus)
-		t.set_stylebox("pressed", type, pressed)
-		t.set_stylebox("disabled", type, disabled)
-		t.set_color("font_color", type, Color(0.93, 0.95, 0.98))
-		t.set_color("font_focus_color", type, Color.WHITE)
-		t.set_color("font_hover_color", type, Color.WHITE)
-		t.set_color("font_disabled_color", type, Color(1, 1, 1, 0.35))
+	t.set_stylebox("normal", "Button", normal)
+	t.set_stylebox("hover", "Button", focus)
+	t.set_stylebox("focus", "Button", focus)
+	t.set_stylebox("pressed", "Button", pressed)
+	t.set_stylebox("hover_pressed", "Button", pressed)
+	t.set_stylebox("disabled", "Button", disabled)
+	t.set_color("font_color", "Button", Color(0.9, 0.92, 0.96))
+	t.set_color("font_focus_color", "Button", Color.WHITE)
+	t.set_color("font_hover_color", "Button", Color.WHITE)
+	t.set_color("font_pressed_color", "Button", Color.WHITE)
+	t.set_color("font_disabled_color", "Button", Color(1, 1, 1, 0.3))
 	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(0.02, 0.025, 0.045, 0.86)
-	panel.set_corner_radius_all(6)
-	panel.set_content_margin_all(28)
+	panel.bg_color = Color(0.03, 0.035, 0.06, 0.9)
+	panel.border_color = Color(1.0, 0.48, 0.1, 0.55)
+	panel.border_width_top = 3
+	panel.set_corner_radius_all(8)
+	panel.shadow_color = Color(0, 0, 0, 0.5)
+	panel.shadow_size = 24
+	panel.set_content_margin_all(34)
 	t.set_stylebox("panel", "PanelContainer", panel)
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(1, 1, 1, 0.1)
+	bar_bg.set_corner_radius_all(4)
+	t.set_stylebox("background", "ProgressBar", bar_bg)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(1, 1, 1, 0.25)
+	sb.set_corner_radius_all(3)
+	t.set_stylebox("grabber", "VScrollBar", sb)
+	t.set_stylebox("grabber_highlight", "VScrollBar", sb)
+	t.set_stylebox("scroll", "VScrollBar", StyleBoxEmpty.new())
 	return t
 
-func _screen(name: String, side := false) -> VBoxContainer:
+func _screen(name: String, side := false, scroll_h := 0) -> VBoxContainer:
 	var bg := Control.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.theme = theme_ui
-	var shade := ColorRect.new()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Soft gradient shade behind the panel (left-heavy for side menus).
+	var shade := TextureRect.new()
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade.color = Color(0, 0, 0, 0.35 if not side else 0.0)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	var g := Gradient.new()
+	g.set_color(0, Color(0.01, 0.012, 0.025, 0.92 if side else 0.7))
+	g.set_color(1, Color(0.01, 0.012, 0.025, 0.0 if side else 0.7))
+	var gt := GradientTexture2D.new()
+	gt.gradient = g
+	gt.fill_from = Vector2(0.0, 0.5)
+	gt.fill_to = Vector2(0.75, 0.5)
+	shade.texture = gt
 	bg.add_child(shade)
 	var panel := PanelContainer.new()
+	var holder: Control
 	if side:
-		panel.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-		panel.custom_minimum_size = Vector2(620, 0)
+		var margin := MarginContainer.new()
+		margin.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+		margin.custom_minimum_size = Vector2(700, 0)
+		margin.add_theme_constant_override("margin_left", 70)
+		margin.add_theme_constant_override("margin_top", 60)
+		margin.add_theme_constant_override("margin_bottom", 60)
+		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bg.add_child(margin)
+		margin.add_child(panel)
+		holder = margin
 	else:
-		panel.set_anchors_preset(Control.PRESET_CENTER)
-		panel.custom_minimum_size = Vector2(640, 0)
-		panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	bg.add_child(panel)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(0, 0)
-	panel.add_child(scroll)
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bg.add_child(center)
+		center.add_child(panel)
+		panel.custom_minimum_size = Vector2(760, 0)
+		holder = center
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	box.add_theme_constant_override("separation", 8)
-	scroll.add_child(box)
+	box.add_theme_constant_override("separation", 10)
+	var scroll: ScrollContainer = null
+	if scroll_h > 0 or side:
+		scroll = ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.follow_focus = true
+		scroll.custom_minimum_size = Vector2(0, scroll_h)
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		panel.add_child(scroll)
+		scroll.add_child(box)
+	else:
+		panel.add_child(box)
 	bg.visible = false
 	add_child(bg)
 	screens[name] = {"root": bg, "box": box, "scroll": scroll}
@@ -171,7 +217,7 @@ func _clear(box: Node) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if current == "" or current == "loading":
 		return
-	if event.is_action_pressed("ui_cancel") or (event.is_action_pressed("pause") and current != "main") or (event is InputEventJoypadButton and event.button_index == JOY_BUTTON_B and event.pressed):
+	if event.is_action_pressed("ui_cancel") or (event.is_action_pressed("pause") and current != "main"):
 		if current != "main":
 			back()
 			get_viewport().set_input_as_handled()
@@ -205,7 +251,7 @@ func _rebuild(name: String) -> void:
 			"main": _screen("main", true)
 			"pause": _screen("pause")
 			"garage": _screen("garage", true)
-			"settings": _screen("settings")
+			"settings": _screen("settings", false, 760)
 			"controls": _screen("controls")
 			"credits": _screen("credits")
 			"results": _screen("results")
@@ -359,12 +405,20 @@ const SETTINGS := [
 	["music", "Music volume", [0.0, 0.25, 0.5, 0.75, 1.0], ["Off", "25%", "50%", "75%", "100%"]],
 	["sfx", "Effects volume", [0.0, 0.25, 0.5, 0.85, 1.0], ["Off", "25%", "50%", "85%", "100%"]],
 	["show_fps", "Show FPS", [false, true], ["Off", "On"]],
+	["vibration", "Controller vibration", [0.0, 0.5, 0.75, 1.0, 1.5], ["Off", "Low", "Medium", "Full", "Extreme"]],
+	["steer_sens", "Steering sensitivity", [0.7, 0.85, 1.0, 1.15, 1.3], ["70%", "85%", "100%", "115%", "130%"]],
+	["deadzone", "Stick deadzone", [0.03, 0.05, 0.08, 0.12, 0.18], ["3%", "5%", "8%", "12%", "18%"]],
+	["steer_curve", "Steering response", [1.0, 1.3, 1.6, 2.0], ["Linear", "Smooth", "Precise centre", "Very precise"]],
 ]
 
 func _build_settings(box: VBoxContainer) -> void:
 	_title(box, "SETTINGS")
 	if Settings.needs_restart():
-		_text(box, "Restart the game to switch renderer for the selected preset.", 16, ACCENT)
+		_text(box, "This preset uses a different renderer. Restart to apply it fully.", 17, ACCENT)
+		_button(box, "RESTART NOW", func():
+			game.persist()
+			OS.set_restart_on_exit(true)
+			get_tree().quit())
 	for row in SETTINGS:
 		var key: String = row[0]
 		var values: Array = row[2]
@@ -380,6 +434,8 @@ func _build_settings(box: VBoxContainer) -> void:
 			Settings.set_value(key, values[i])
 			update_text.call(i)
 			game.on_settings_changed()
+			if key == "quality":
+				show_screen("settings", false)
 		b.pressed.connect(func(): cycle.call(1))
 		b.gui_input.connect(func(ev: InputEvent):
 			if ev.is_action_pressed("ui_left"):
@@ -393,12 +449,15 @@ func _build_settings(box: VBoxContainer) -> void:
 
 func _build_controls(box: VBoxContainer) -> void:
 	_title(box, "CONTROLS")
+	var ps := Settings.pad_style() == "playstation"
+	var G: Dictionary = Settings.PLAYSTATION if ps else Settings.XBOX
+	_text(box, ("PlayStation" if ps else "Xbox / generic") + " controller layout" + ("  -  " + Input.get_joy_name(Input.get_connected_joypads()[0]) if not Input.get_connected_joypads().is_empty() else "  -  no controller detected"), 16, ACCENT)
 	var rows := [
-		["Accelerate / Brake-Reverse", "W / S", "RT / LT"], ["Steer", "A / D", "Left stick"], ["Handbrake", "Space", "A"],
-		["Nitrous", "Shift / N", "X or L3"], ["Burnout / donuts", "W + S while stopped", "RT + LT"], ["Camera", "C", "Y"],
-		["Look back / around", "B", "R3 / right stick"], ["Answer phone", "Tab", "D-pad down"], ["Start race / interact", "E / Enter", "D-pad up"],
-		["Reset to road", "R", "B (hold)"], ["Shift up / down (manual)", "X / Z", "RB / LB"], ["Headlights", "L", "D-pad right"],
-		["Horn", "H", "D-pad left"], ["Pause", "Esc", "Start"],
+		["Accelerate / Brake-Reverse", "W / S", G.throttle + " / " + G.brake], ["Steer", "A / D", "Left stick"], ["Handbrake", "Space", G.handbrake],
+		["Nitrous", "Shift / N", G.nitro + " or L3"], ["Burnout / donuts", "W + S while stopped", G.throttle + " + " + G.brake], ["Camera", "C", G.camera],
+		["Look back / around", "B", "R3 / right stick"], ["Answer phone", "Tab", G.phone], ["Start race / garage", "E / Enter", G.interact],
+		["Reset to road", "R", G.reset], ["Shift up / down (manual)", "X / Z", G.shift_up + " / " + G.shift_down], ["Headlights", "L", G.headlights],
+		["Pause", "Esc", G.pause], ["Menu select / back", "Enter / Esc", G.accept + " / " + G.back],
 	]
 	var grid := GridContainer.new()
 	grid.columns = 3
@@ -411,6 +470,7 @@ func _build_controls(box: VBoxContainer) -> void:
 			l.add_theme_color_override("font_color", Color(1, 1, 1, 0.65) if k == 0 else Color.WHITE)
 			grid.add_child(l)
 	box.add_child(grid)
+	_text(box, "Controller vibration: engine near redline, tyre slip, ABS pulse, rough ground, gear shifts, landings, impacts, nitrous and burnouts. Adjust strength, steering sensitivity, deadzone and response curve in Settings.", 15)
 	_button(box, "BACK", func(): back())
 
 func _build_credits(box: VBoxContainer) -> void:

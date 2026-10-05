@@ -42,14 +42,43 @@ var data := {
 	"quality": "", "fullscreen": true, "vsync": true, "render_scale": 0.0, "fov": 72.0,
 	"music": 0.5, "sfx": 0.85, "assists": true, "manual": false, "units": "kmh",
 	"show_fps": false, "traffic": 1.0, "camera": 0, "sensitivity": 1.0,
+	"vibration": 1.0, "steer_sens": 1.0, "deadzone": 0.08, "steer_curve": 1.3,
 }
+
+# ---------------------------------------------------------------- controller glyphs
+const XBOX := {"handbrake": "A", "nitro": "X", "camera": "Y", "reset": "B (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
+	"pause": "Menu", "map": "View", "throttle": "RT", "brake": "LT", "shift_up": "RB", "shift_down": "LB", "look_back": "R3",
+	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "A", "back": "B"}
+const PLAYSTATION := {"handbrake": "✕", "nitro": "□", "camera": "△", "reset": "○ (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
+	"pause": "Options", "map": "Create", "throttle": "R2", "brake": "L2", "shift_up": "R1", "shift_down": "L1", "look_back": "R3",
+	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "✕", "back": "○"}
+const KEYS := {"handbrake": "Space", "nitro": "Shift", "camera": "C", "reset": "R", "interact": "E", "phone": "Tab",
+	"pause": "Esc", "map": "M", "throttle": "W", "brake": "S", "shift_up": "X", "shift_down": "Z", "look_back": "B",
+	"headlights": "L", "horn": "H", "accept": "Enter", "back": "Esc"}
+
+var using_pad := false
+
+## "playstation", "xbox" (default for other pads) based on the connected controller.
+func pad_style() -> String:
+	for d in Input.get_connected_joypads():
+		var n := Input.get_joy_name(d).to_lower()
+		if n.contains("dualsense") or n.contains("ps5") or n.contains("ps4") or n.contains("dualshock") or n.contains("sony") or n.contains("playstation") or n == "wireless controller":
+			return "playstation"
+	return "xbox"
+
+## Button/key label for an action on the device the player is currently using.
+func glyph(action: String) -> String:
+	if not using_pad:
+		return KEYS.get(action, action)
+	return (PLAYSTATION if pad_style() == "playstation" else XBOX).get(action, action)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	setup_input()
 	load_settings()
 	if data.quality == "":
-		data.quality = detect_quality()
+		# Default to High; the player's chosen preset is always respected afterwards.
+		data.quality = "high"
 		save_settings()
 	apply_window()
 
@@ -180,6 +209,13 @@ func setup_input() -> void:
 			InputMap.add_action(action, 0.12)
 		for ev in map[action]:
 			InputMap.action_add_event(action, ev)
+	# Gamepad confirm/back in menus (A / Cross, B / Circle) and D-pad navigation.
+	InputMap.action_add_event("ui_accept", _btn(JOY_BUTTON_A))
+	InputMap.action_add_event("ui_cancel", _btn(JOY_BUTTON_B))
+	InputMap.action_add_event("ui_up", _btn(JOY_BUTTON_DPAD_UP))
+	InputMap.action_add_event("ui_down", _btn(JOY_BUTTON_DPAD_DOWN))
+	InputMap.action_add_event("ui_left", _btn(JOY_BUTTON_DPAD_LEFT))
+	InputMap.action_add_event("ui_right", _btn(JOY_BUTTON_DPAD_RIGHT))
 	# Menu navigation also follows the left stick.
 	InputMap.action_add_event("ui_up", _axis(JOY_AXIS_LEFT_Y, -1.0))
 	InputMap.action_add_event("ui_down", _axis(JOY_AXIS_LEFT_Y, 1.0))

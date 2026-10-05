@@ -31,6 +31,10 @@ var menu_t := 0.0
 var _player_car_id := ""
 var shots_spec := ""
 var autopilot := false
+var kick_strong := 0.0
+var kick_weak := 0.0
+var kick_time := 0.0
+var haptics_on := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -41,6 +45,8 @@ func _ready() -> void:
 			shots_spec = "AUTOTEST"
 		if a == "--aitest":
 			shots_spec = "AITEST"
+		if a == "--menutest":
+			shots_spec = "MENUTEST"
 	audio = AudioManager.new()
 	add_child(audio)
 	audio.setup()
@@ -97,6 +103,11 @@ func _ready() -> void:
 	hud.setup(self)
 	hud.visible = false
 	on_settings_changed()
+	if shots_spec == "MENUTEST":
+		_to_menu()
+		await _menutest()
+		get_tree().quit()
+		return
 	if shots_spec == "AITEST":
 		await _aitest()
 		get_tree().quit()
@@ -124,6 +135,16 @@ func _spawn_player() -> void:
 	cam.target = player
 	effects.attach(player)
 	player.impact.connect(_on_impact)
+	player.shifted.connect(func(_g): _rumble(0.45, 0.2, 0.07))
+	Input.joy_connection_changed.connect(func(dev, connected):
+		if connected:
+			using_pad = true
+			Settings.using_pad = true
+			hud.message("Controller connected: %s" % Input.get_joy_name(dev), 3.0)
+		else:
+			hud.message("Controller disconnected", 3.0))
+	using_pad = not Input.get_connected_joypads().is_empty()
+	Settings.using_pad = using_pad
 
 func _place_at_home() -> void:
 	var h: Vector2 = Career.LOC.home
@@ -161,6 +182,7 @@ func _build_player(id: String) -> void:
 			player.reset_to(xf)
 			effects.attach(player)
 			player.impact.connect(_on_impact)
+			player.shifted.connect(func(_g): _rumble(0.45, 0.2, 0.07))
 			cam.target = player
 	else:
 		player.stats = stats
@@ -291,10 +313,61 @@ func _on_traffic_hit(strength: float) -> void:
 	_on_impact(strength * 0.5 + 4.0)
 
 func _rumble(strong: float, weak: float, secs: float) -> void:
+	# One-shot haptic kick (impacts, landings, gear shifts); layered on top of the
+	# continuous haptics computed in _update_haptics.
 	if not using_pad:
 		return
+	kick_strong = maxf(kick_strong, strong)
+	kick_weak = maxf(kick_weak, weak)
+	kick_time = maxf(kick_time, secs)
+
+## Continuous controller haptics: engine near redline, tyre slip, ABS pulse,
+## rough surfaces, nitrous, burnouts, plus decaying one-shot kicks.
+func _update_haptics(delta: float) -> void:
+	if not using_pad or Input.get_connected_joypads().is_empty():
+		return
+	var gain := float(Settings.data.vibration)
+	var p := player
+	var weak := 0.0
+	var strong := 0.0
+	var rpm_n := clampf(p.rpm / float(p.stats.red), 0.0, 1.05)
+	weak += pow(rpm_n, 4.0) * 0.18 * float(p.input.throttle)
+	var slip := 0.0
+	for w in p.wheels:
+		slip = maxf(slip, float(w.skid))
+	weak += slip * 0.5
+	if p.surface == "terrain" and p.speed > 4.0:
+		strong += clampf(p.speed / 35.0, 0.0, 0.55) * (0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.05))
+	if float(p.input.brake) > 0.75 and p.speed > 12.0 and not p.reverse:
+		# ABS pulse
+		strong += 0.28 if int(Time.get_ticks_msec() / 60) % 2 == 0 else 0.05
+	if p.nitro_on:
+		strong += 0.18
+		weak += 0.25
+	if p.burnout:
+		strong += 0.3
+		weak += 0.55
+	if p.on_ground == false:
+		weak *= 0.2
+		strong *= 0.2
+	if kick_time > 0.0:
+		kick_time -= delta
+		strong = maxf(strong, kick_strong)
+		weak = maxf(weak, kick_weak)
+	else:
+		kick_strong = 0.0
+		kick_weak = 0.0
+	strong = clampf(strong * gain, 0.0, 1.0)
+	weak = clampf(weak * gain, 0.0, 1.0)
+	if strong + weak < 0.02:
+		if haptics_on:
+			for d in Input.get_connected_joypads():
+				Input.stop_joy_vibration(d)
+			haptics_on = false
+		return
+	haptics_on = true
 	for d in Input.get_connected_joypads():
-		Input.start_joy_vibration(d, clampf(weak, 0.0, 1.0), clampf(strong, 0.0, 1.0), secs)
+		Input.start_joy_vibration(d, weak, strong, 0.15)
 
 # ---------------------------------------------------------------- input
 func _input(event: InputEvent) -> void:
@@ -302,6 +375,7 @@ func _input(event: InputEvent) -> void:
 		using_pad = true
 	elif event is InputEventKey or event is InputEventMouseButton:
 		using_pad = false
+	Settings.using_pad = using_pad
 	if state != State.PLAY:
 		return
 	if event.is_action_pressed("pause"):
@@ -339,9 +413,10 @@ func _open_garage() -> void:
 func _read_driving_input(delta: float) -> void:
 	var raw_steer := Input.get_axis("steer_left", "steer_right")
 	if using_pad:
-		var dz := 0.08
+		var dz := float(Settings.data.deadzone)
 		var a := absf(raw_steer)
-		var s := 0.0 if a < dz else signf(raw_steer) * pow((a - dz) / (1.0 - dz), 1.3)
+		var s := 0.0 if a < dz else signf(raw_steer) * pow((a - dz) / (1.0 - dz), float(Settings.data.steer_curve))
+		s = clampf(s * float(Settings.data.steer_sens), -1.0, 1.0)
 		steer_kb = move_toward(steer_kb, s, delta * 12.0)
 	else:
 		var target := signf(raw_steer) if absf(raw_steer) > 0.5 else 0.0
@@ -462,13 +537,11 @@ func _process(delta: float) -> void:
 		for r in career.race.rivals:
 			ai_cars.append(r.car)
 	audio.update_ai(ai_cars, cam.global_position)
-	if using_pad:
-		var slip := clampf(absf(player.slip_angle) * 1.2 + player.wheelspin * 0.3, 0.0, 1.0)
-		var rough := clampf(player.speed / 30.0, 0.0, 0.6) if player.surface == "terrain" else 0.0
-		var strong := rough * 0.5 + (0.25 if player.nitro_on else 0.0)
-		var weak := slip * 0.45 + rough * 0.3 + (0.15 if player.rpm / float(player.stats.red) > 0.95 else 0.0)
-		if strong + weak > 0.05:
-			_rumble(strong, weak, 0.1)
+	_update_haptics(delta)
+	if player.landing_impact > 0.0:
+		_rumble(clampf(player.landing_impact / 8.0, 0.2, 1.0), 0.4, 0.18)
+		cam.shake = maxf(cam.shake, clampf(player.landing_impact / 15.0, 0.0, 0.8))
+		player.landing_impact = 0.0
 	save_timer += delta
 	if save_timer > 15.0:
 		save_timer = 0.0
@@ -508,7 +581,7 @@ func _update_drift(delta: float) -> void:
 func _update_prompt() -> void:
 	prompt_text = ""
 	var pp := Vector2(player.global_position.x, player.global_position.z)
-	var key := "D-pad ↑" if using_pad else "E"
+	var key := Settings.glyph("interact")
 	var rid := career.race_near(pp)
 	if rid != "" and not police.pursuit:
 		var r: Dictionary = Career.RACES[rid]
@@ -681,3 +754,84 @@ func _aitest() -> void:
 		if t % 60 == 0:
 			var pp := Vector2(c.global_position.x, c.global_position.z)
 			print("[ai] t=", t / 60, " kmh=", int(c.kmh), " vt=", int(ai.profile[ai.idx] * 3.6), " thr=", snappedf(c.input.throttle, 0.1), " brk=", snappedf(c.input.brake, 0.1), " st=", snappedf(c.input.steer, 0.1), " idx=", ai.idx, " off=", snappedf(r.path.at(ai.idx).distance_to(pp), 0.1), " y=", snappedf(c.global_position.y, 0.01), " gnd=", c.wheels_on_ground, " surf=", c.surface, " slip=", snappedf(c.slip_angle, 0.01), " stuck=", snappedf(ai.stuck, 0.1))
+
+# ---------------------------------------------------------------- UI test (mouse + gamepad)
+func _snap(name: String) -> void:
+	for i in 6:
+		await get_tree().process_frame
+	var dir := OS.get_environment("SHOT_DIR")
+	if dir != "":
+		get_viewport().get_texture().get_image().save_png(dir + "/" + name + ".png")
+	print("[ui] snap ", name, " screen=", menus.current, " state=", state, " focus=", _focus_text())
+
+func _focus_text() -> String:
+	var f := get_viewport().gui_get_focus_owner()
+	return f.text if f is Button else str(f)
+
+func _click_button(label: String) -> bool:
+	for b in menus.find_children("*", "Button", true, false):
+		var btn := b as Button
+		if btn.is_visible_in_tree() and btn.text.begins_with(label):
+			var pos := btn.get_global_rect().get_center()
+			var win_pos := get_viewport().get_final_transform() * pos
+			var mv := InputEventMouseMotion.new()
+			mv.position = win_pos
+			mv.global_position = win_pos
+			Input.parse_input_event(mv)
+			await get_tree().process_frame
+			for pressed in [true, false]:
+				var ev := InputEventMouseButton.new()
+				ev.button_index = MOUSE_BUTTON_LEFT
+				ev.pressed = pressed
+				ev.position = win_pos
+				ev.global_position = win_pos
+				Input.parse_input_event(ev)
+				await get_tree().process_frame
+			print("[ui] clicked ", label, " at ", pos)
+			return true
+	print("[ui] button not found: ", label)
+	return false
+
+func _pad(button: JoyButton) -> void:
+	for pressed in [true, false]:
+		var ev := InputEventJoypadButton.new()
+		ev.button_index = button
+		ev.pressed = pressed
+		ev.device = 0
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		await get_tree().process_frame
+
+func _menutest() -> void:
+	await _snap("01_main")
+	await _click_button("SETTINGS")
+	await _snap("02_settings_mouse")
+	await _pad(JOY_BUTTON_DPAD_DOWN)
+	await _pad(JOY_BUTTON_DPAD_DOWN)
+	await _snap("03_settings_pad_down")
+	await _pad(JOY_BUTTON_B)
+	await _snap("04_back_to_main")
+	await _click_button("CONTROLS")
+	await _snap("05_controls")
+	await _pad(JOY_BUTTON_B)
+	await _pad(JOY_BUTTON_A)
+	await _snap("06_pad_A_play")
+	await _pad(JOY_BUTTON_START)
+	await _snap("07_pause_start")
+	await _pad(JOY_BUTTON_DPAD_DOWN)
+	await _snap("08_pause_down")
+	await _click_button("SETTINGS")
+	await _snap("09_pause_settings")
+	await _pad(JOY_BUTTON_B)
+	await _pad(JOY_BUTTON_B)
+	await _snap("10_resumed")
+	# Drive home and open the garage with the pad.
+	_place_at_home()
+	await get_tree().physics_frame
+	await _pad(JOY_BUTTON_DPAD_UP)
+	await _snap("11_garage")
+	await _pad(JOY_BUTTON_DPAD_DOWN)
+	await _pad(JOY_BUTTON_A)
+	await _snap("12_garage_select")
+	await _pad(JOY_BUTTON_B)
+	await _snap("13_garage_closed")
