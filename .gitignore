@@ -1,1 +1,4 @@
+.godot/
 node_modules/
+/build/
+*.import.tmp

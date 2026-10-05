@@ -1,0 +1,63 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Velocity Heat"
+config/description="Open-world getaway driving: contracts, heists, police pursuits and street racing."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+config/project_settings_override="user://override.cfg"
+boot_splash/bg_color=Color(0.02, 0.025, 0.04, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+Settings="*res://scripts/settings.gd"
+Save="*res://scripts/save.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1600
+window/size/window_height_override=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[physics]
+
+common/physics_ticks_per_second=120
+common/max_physics_steps_per_frame=12
+common/physics_interpolation=true
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+rendering_device/fallback_to_opengl3=true
+textures/default_filters/anisotropic_filtering_level=4
+textures/vram_compression/import_etc2_astc=false
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/positional_shadow/atlas_size=4096
+occlusion_culling/use_occlusion_culling=true
+environment/defaults/default_clear_color=Color(0.02, 0.025, 0.04, 1)
+anti_aliasing/quality/use_debanding=true
+mesh_lod/lod_change/threshold_pixels=1.0
+
+[shader_globals]
+
+night={
+"type": "float",
+"value": 0.0
+}
+wetness={
+"type": "float",
+"value": 0.0
+}
+cam_pos={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
