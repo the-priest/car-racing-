@@ -17,6 +17,8 @@ var _yaw := 0.0
 var _pos := Vector3.ZERO
 var _look := Vector3.ZERO
 var _fov := 72.0
+var _pitch := 0.0
+var _boom := 1.0 # 0..1 fraction of chase distance allowed by buildings
 var _rng := RandomNumberGenerator.new()
 
 func cycle() -> void:
@@ -35,15 +37,20 @@ func _process(delta: float) -> void:
 	var vel_yaw := atan2(-vel.x, -vel.z) if spd > 4.0 else car_yaw
 	var reversing := target.forward_speed < -1.0
 	# In slides the chase camera swings toward the direction of travel.
-	var blend := clampf(spd / 25.0, 0.0, 1.0) * (0.0 if reversing else 0.5)
+	var blend := clampf(spd / 25.0, 0.0, 1.0) * (0.0 if reversing else 0.3)
 	var target_yaw := car_yaw + wrapf(vel_yaw - car_yaw, -PI, PI) * blend
 	if snap:
 		_yaw = target_yaw
-	_yaw += wrapf(target_yaw - _yaw, -PI, PI) * (1.0 - exp(-(30.0 if mode >= Mode.BUMPER else 6.5) * delta))
+	_yaw += wrapf(target_yaw - _yaw, -PI, PI) * (1.0 - exp(-(30.0 if mode >= Mode.BUMPER else 5.0) * delta))
 	var look_in := Input.get_action_strength("look_right") - Input.get_action_strength("look_left")
 	orbit = lerpf(orbit, look_in * 2.6, 1.0 - exp(-6.0 * delta))
 	var yaw := _yaw + orbit + (PI if look_back else 0.0)
-	var dir := Vector3(-sin(yaw), 0, -cos(yaw))
+	# Follow the car's pitch on hills (smoothed, partial) so the camera doesn't dig into slopes.
+	var tp := asin(clampf(fwd.y, -0.6, 0.6)) * 0.75 if not look_back else -asin(clampf(fwd.y, -0.6, 0.6)) * 0.75
+	if snap:
+		_pitch = tp
+	_pitch = lerpf(_pitch, tp, 1.0 - exp(-4.0 * delta))
+	var dir := Vector3(-sin(yaw) * cos(_pitch), sin(_pitch), -cos(yaw) * cos(_pitch))
 	var sp := clampf(spd / 80.0, 0.0, 1.0)
 	var desired: Vector3
 	var look_at_pt: Vector3
@@ -53,17 +60,24 @@ func _process(delta: float) -> void:
 			var far := mode == Mode.FAR
 			var dist := (8.6 if far else 6.2) + sp * (2.2 if far else 1.4)
 			var height := (3.2 if far else 2.05) - sp * 0.25
-			desired = origin - dir * dist + Vector3.UP * height
-			look_at_pt = origin + dir * 4.0 + Vector3.UP * 1.1
-			# Keep above terrain and out of buildings.
-			var space := get_world_3d().direct_space_state
 			var from := origin + Vector3.UP * 1.3
-			var q := PhysicsRayQueryParameters3D.create(from, desired, 1)
+			var full := origin - dir * dist + Vector3.UP * height
+			look_at_pt = origin + dir * 4.0 + Vector3.UP * 1.1
+			# Only buildings pull the camera in (not road edges, kerbs or terrain bumps).
+			var space := get_world_3d().direct_space_state
+			var q := PhysicsRayQueryParameters3D.create(from, full, 4)
+			q.exclude = [target.get_rid()]
 			var hit := space.intersect_ray(q)
+			var want := 1.0
 			if not hit.is_empty():
-				desired = (hit.position as Vector3) + ((from - desired).normalized() * 0.4)
+				want = clampf((from.distance_to(hit.position) - 0.5) / maxf(from.distance_to(full), 0.1), 0.15, 1.0)
+			if snap:
+				_boom = want
+			# Pull in fast, ease back out slowly: no popping.
+			_boom = lerpf(_boom, want, 1.0 - exp(-(25.0 if want < _boom else 2.5) * delta))
+			desired = from.lerp(full, _boom)
 			if world:
-				desired.y = maxf(desired.y, world.ground(desired.x, desired.z) + 0.6)
+				desired.y = maxf(desired.y, world.ground(desired.x, desired.z) + 1.0)
 		Mode.BUMPER:
 			var o := Vector3(0, 0.62, -2.35)
 			desired = xf * o

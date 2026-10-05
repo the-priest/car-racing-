@@ -15,6 +15,7 @@ const CONCRETE_SHADER := preload("res://shaders/concrete.gdshader")
 
 const CHUNK := 256.0
 const LAYER_WORLD := 1
+const LAYER_BUILDINGS := 4 # extra layer bit so the camera only collides with buildings
 
 var d: Dictionary
 var N := 769
@@ -470,7 +471,7 @@ func _build_buildings(root: Node3D) -> void:
 	rng.seed = 99
 	var body := StaticBody3D.new()
 	body.set_meta("surface", "building")
-	body.collision_layer = LAYER_WORLD
+	body.collision_layer = LAYER_WORLD | LAYER_BUILDINGS
 	root.add_child(body)
 	# Rooftop parapets / plant rooms
 	var props := SurfaceTool.new()

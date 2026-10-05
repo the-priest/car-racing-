@@ -46,11 +46,11 @@ var data := {
 }
 
 # ---------------------------------------------------------------- controller glyphs
-const XBOX := {"handbrake": "A", "nitro": "X", "camera": "Y", "reset": "B (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
+const XBOX := {"handbrake": "X", "nitro": "A", "camera": "Y", "reset": "B (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
 	"pause": "Menu", "map": "View", "throttle": "RT", "brake": "LT", "shift_up": "RB", "shift_down": "LB", "look_back": "R3",
 	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "A", "back": "B"}
-const PLAYSTATION := {"handbrake": "✕", "nitro": "□", "camera": "△", "reset": "○ (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
-	"pause": "Options", "map": "Create", "throttle": "R2", "brake": "L2", "shift_up": "R1", "shift_down": "L1", "look_back": "R3",
+const PLAYSTATION := {"handbrake": "□", "nitro": "✕", "camera": "△", "reset": "○ (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
+	"pause": "Options", "map": "Touchpad", "throttle": "R2", "brake": "L2", "shift_up": "R1", "shift_down": "L1", "look_back": "R3",
 	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "✕", "back": "○"}
 const KEYS := {"handbrake": "Space", "nitro": "Shift", "camera": "C", "reset": "R", "interact": "E", "phone": "Tab",
 	"pause": "Esc", "map": "M", "throttle": "W", "brake": "S", "shift_up": "X", "shift_down": "Z", "look_back": "B",
@@ -188,8 +188,8 @@ func setup_input() -> void:
 		"brake": [_key(KEY_S), _key(KEY_DOWN), _axis(JOY_AXIS_TRIGGER_LEFT, 1.0)],
 		"steer_left": [_key(KEY_A), _key(KEY_LEFT), _axis(JOY_AXIS_LEFT_X, -1.0)],
 		"steer_right": [_key(KEY_D), _key(KEY_RIGHT), _axis(JOY_AXIS_LEFT_X, 1.0)],
-		"handbrake": [_key(KEY_SPACE), _btn(JOY_BUTTON_A)],
-		"nitro": [_key(KEY_SHIFT), _key(KEY_N), _btn(JOY_BUTTON_X), _btn(JOY_BUTTON_LEFT_STICK)],
+		"handbrake": [_key(KEY_SPACE), _btn(JOY_BUTTON_X)],
+		"nitro": [_key(KEY_SHIFT), _key(KEY_N), _btn(JOY_BUTTON_A), _btn(JOY_BUTTON_LEFT_STICK)],
 		"camera": [_key(KEY_C), _btn(JOY_BUTTON_Y)],
 		"look_back": [_key(KEY_B), _btn(JOY_BUTTON_RIGHT_STICK)],
 		"look_left": [_axis(JOY_AXIS_RIGHT_X, -1.0)],
@@ -197,7 +197,7 @@ func setup_input() -> void:
 		"reset": [_key(KEY_R), _btn(JOY_BUTTON_B)],
 		"interact": [_key(KEY_E), _key(KEY_ENTER), _btn(JOY_BUTTON_DPAD_UP)],
 		"phone": [_key(KEY_TAB), _btn(JOY_BUTTON_DPAD_DOWN)],
-		"map": [_key(KEY_M), _btn(JOY_BUTTON_BACK)],
+		"map": [_key(KEY_M), _btn(JOY_BUTTON_BACK), _btn(JOY_BUTTON_TOUCHPAD)],
 		"pause": [_key(KEY_ESCAPE), _key(KEY_P), _btn(JOY_BUTTON_START)],
 		"shift_up": [_key(KEY_X), _btn(JOY_BUTTON_RIGHT_SHOULDER)],
 		"shift_down": [_key(KEY_Z), _btn(JOY_BUTTON_LEFT_SHOULDER)],

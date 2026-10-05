@@ -15,7 +15,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 ## Features
 
 - **6 × 6 km open world**: downtown grid with skyscrapers, coastal highway ring, mountain hairpin pass with snow peaks, valley road, airfield drag strip, ~100k trees, 1,800 street lights.
-- **Tyre-model physics**: raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, gearbox (auto/manual), traction/stability assists (toggleable), burnouts & donuts, wheelspin on powerful cars, easy-to-hold drifts.
+- **Tyre-model physics**: raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, gearbox (auto/manual), traction/stability control (toggleable): cars grip by default and only drift when you throw them in with the handbrake, burnouts & donuts, wheelspin on powerful cars.
 - **Cars**: modern Vanta builds (realistic scanned-quality model) and procedural classics (Stallion '69 muscle, Wedge '78, 900 hp Stallion restomod). **9 upgrade categories** up to 5 levels — fully built hypercars are tuned to reach roughly 500+ km/h (still being balanced).
 - **Career**: phone-call contracts from your fixer, bank heists, deliveries, escapes, races, plus repeatable random jobs, street-race events and speed traps.
 - **Police**: patrols, pursuits with 5 heat levels, reinforcements, cooldown/evasion, bounties. Only buildings can stop your car — everything else gets knocked aside.
@@ -45,11 +45,12 @@ World data and audio are pre-baked in `assets/`. To regenerate them: `node bake/
 |---|---|---|
 | Throttle / Brake-Reverse | W / S | RT / LT |
 | Steer | A / D | Left stick |
-| Handbrake | Space | A / Cross |
-| Nitrous | Shift | X / Square |
+| Handbrake (start a drift) | Space | X / Square |
+| Nitrous | Shift | A / Cross |
 | Burnout | W + S stopped | RT + LT |
 | Camera / Look back | C / B | Y / R3 |
 | Answer phone | Tab | D-pad ↓ |
+| Full map | M | View / Touchpad |
 | Start race / Garage | E | D-pad ↑ |
 | Reset to road | R | Hold B / Circle |
 | Pause | Esc | Start |

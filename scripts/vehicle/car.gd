@@ -45,6 +45,7 @@ var air_time := 0.0
 var landing_impact := 0.0
 var wheelspin := 0.0
 var slip_angle := 0.0 # body side-slip
+var drift_mode := false # true only once the driver deliberately kicks the car sideways
 var surface := "road"
 var power_mul := 1.0
 var gear_top: Array[float] = []
@@ -314,7 +315,8 @@ func reset_to(t: Transform3D) -> void:
 
 # ---------------------------------------------------------------- physics
 func _tire(alpha: float) -> float:
-	return sin(1.35 * atan(13.0 * alpha))
+	# Peak ~0.19 rad, stays near 92% grip past the peak so slides don't snap away.
+	return sin(1.25 * atan(16.0 * alpha))
 
 func _physics_process(dt: float) -> void:
 	var xf := global_transform
@@ -334,14 +336,29 @@ func _physics_process(dt: float) -> void:
 	last_vel = v
 	accel_local = accel_local.lerp(Vector3(acc.dot(right), acc.dot(up), acc.dot(fwd)), 1.0 - exp(-10.0 * dt))
 
-	# --- Steering with speed-sensitive lock and counter-steer assist
-	var lock := 0.6 / (1.0 + maxf(0.0, abs_u - 5.0) / 15.0)
-	var target := -float(input.steer) * lock
 	var beta := atan2(lateral_speed, maxf(abs_u, 0.5)) if speed > 3.0 else 0.0
 	slip_angle = beta
+	# --- Drift mode: only entered on purpose (handbrake, or brake-flick while
+	# steering on throttle). Without it the car grips and ESC keeps it straight.
+	var steer_in := absf(float(input.steer))
+	if speed > 11.0 and forward_speed > 0.0:
+		if float(input.handbrake) > 0.3 and steer_in > 0.2:
+			drift_mode = true
+		elif float(input.brake) > 0.4 and float(input.throttle) > 0.4 and steer_in > 0.5:
+			drift_mode = true
+	if drift_mode and (speed < 8.0 or forward_speed < 0.0 or (absf(beta) < 0.1 and float(input.handbrake) < 0.1) or (steer_in < 0.15 and float(input.handbrake) < 0.1) or (float(input.throttle) < 0.1 and absf(beta) < 0.25 and float(input.handbrake) < 0.1)):
+		drift_mode = false
+	if not assists:
+		drift_mode = absf(beta) > 0.15
+	# --- Steering: lock limited to what the front tyres can actually use at speed
+	var lock := 0.6 / (1.0 + maxf(0.0, abs_u - 5.0) / 15.0)
+	if not drift_mode and abs_u > 8.0:
+		lock = minf(lock, atan(wheelbase * mu_base * G / (abs_u * abs_u)) + 0.13)
+	var target := -float(input.steer) * lock
 	if assists and speed > 6.0 and forward_speed > 0.0:
-		target -= clampf(beta, -0.5, 0.5) * 0.55 * smoothstep(0.06, 0.3, absf(beta))
-	steer_angle = move_toward(steer_angle, clampf(target, -0.75, 0.75), dt * 5.0)
+		target -= clampf(beta, -0.5, 0.5) * 0.6 * smoothstep(0.04, 0.25, absf(beta))
+	var steer_rate := lerpf(5.0, 2.6, smoothstep(10.0, 50.0, abs_u)) * (1.6 if drift_mode else 1.0)
+	steer_angle = move_toward(steer_angle, clampf(target, -0.75, 0.75), dt * steer_rate)
 
 	# --- Engine & gearbox
 	var idle: float = stats.idle
@@ -465,8 +482,11 @@ func _physics_process(dt: float) -> void:
 		var mu := mu_base * grip_mul * (1.0 - 0.08 * (fz / total_load_static - 1.0))
 		if not w.front and hb > 0.0:
 			mu *= lerpf(1.0, 0.32, hb)
-		if not w.front and absf(slip_angle) > 0.22 and speed > 8.0:
-			mu *= 1.0 - 0.1 * float(stats.drift)
+		if not w.front:
+			if drift_mode and hb < 0.1:
+				mu *= 1.0 - 0.08 * float(stats.drift)
+			elif not drift_mode:
+				mu *= 1.12 # rear bias rear bias: stable, planted feel
 
 		# Longitudinal: drive split, brakes, rolling resistance
 		var fx := 0.0
@@ -488,10 +508,19 @@ func _physics_process(dt: float) -> void:
 			fx -= vx * mass * 0.25 # hold still
 		fx -= signf(vx) * fz * roll_res
 
-		# Traction limit (with traction control when assists are on)
-		var tcs_start := lerpf(0.22, 0.55, smoothstep(0.1, 0.5, absf(float(input.steer))))
-		var tcs := lerpf(0.95, 0.55, smoothstep(tcs_start, tcs_start + 0.35, absf(slip_angle))) if assists else 1.0
-		var maxf_ := maxf(mu * fz * tcs, 1.0)
+		# Lateral slip angle and the cornering force the tyre wants
+		var alpha := atan2(vy, maxf(absf(vx), 3.0))
+		var fy := -mu * fz * _tire(alpha)
+		var low := smoothstep(1.0, 4.0, absf(vx) + absf(vy))
+		fy = lerpf(-vy * mass * 0.25 * 4.0, fy, low)
+		# Traction limit. With assists and not drifting, traction control keeps the
+		# driven tyres from eating the grip needed for cornering (no power oversteer).
+		var maxf_ := maxf(mu * fz, 1.0)
+		if assists:
+			if drift_mode:
+				maxf_ *= 0.95
+			elif driven and fx > 0.0:
+				maxf_ = maxf(sqrt(maxf(0.0, pow(mu * fz, 2.0) - fy * fy)), mu * fz * 0.3) * 0.92
 		var spin := 0.0
 		if driven and absf(fx) > maxf_:
 			spin = minf(absf(fx) / maxf_ - 1.0, 3.0)
@@ -504,11 +533,6 @@ func _physics_process(dt: float) -> void:
 			fx = -signf(vx) * minf(mu * fz, absf(vx) * mass * 2.0)
 		spin_total = maxf(spin_total, spin)
 
-		# Lateral slip-angle force; viscous at very low speed for stability
-		var alpha := atan2(vy, maxf(absf(vx), 3.0))
-		var fy := -mu * fz * _tire(alpha)
-		var low := smoothstep(1.0, 4.0, absf(vx) + absf(vy))
-		fy = lerpf(-vy * mass * 0.25 * 4.0, fy, low)
 		var cap := sqrt(maxf(0.0, pow(mu * fz, 2.0) - fx * fx)) * (0.7 if spin > 0.0 else 1.0)
 		fy = clampf(fy, -cap, cap)
 		w.slip = alpha
@@ -544,13 +568,25 @@ func _physics_process(dt: float) -> void:
 	if boost > 0.0:
 		apply_central_force(fwd * boost)
 
-	# Stability assist: yaw correction once the slide gets too big to hold.
+	# Stability control. Grip mode: yaw rate follows the steering and side-slip is
+	# killed early. Drift mode: lets the slide hold but stops spin-outs.
 	if assists and on_ground and speed > 8.0 and forward_speed > 0.0:
-		var hold := lerpf(0.12, 0.5, smoothstep(0.1, 0.5, absf(float(input.steer))) * (1.0 if (throttle > 0.2 or hb > 0.0) else 0.5))
-		var excess := maxf(0.0, absf(beta) - hold)
 		var yaw_rate := angular_velocity.dot(up)
-		var corr := -signf(beta) * excess * 14.0 - yaw_rate * excess * 3.0
-		apply_torque(up * corr * inertia.y)
+		if drift_mode:
+			var hold := lerpf(0.2, 0.45, smoothstep(0.1, 0.6, steer_in))
+			var excess := maxf(0.0, absf(beta) - hold)
+			apply_torque(up * (-signf(beta) * excess * 22.0 - yaw_rate * minf(excess * 6.0, 2.0)) * inertia.y)
+		else:
+			var r_des := forward_speed * tan(steer_angle) / wheelbase
+			var r_max := mu_base * G / maxf(abs_u, 1.0)
+			r_des = clampf(r_des, -r_max, r_max)
+			var err := r_des - yaw_rate
+			# Strong against over-rotation, gentle help on turn-in.
+			var over := absf(yaw_rate) > absf(r_des) or signf(yaw_rate) != signf(r_des)
+			var gain := (6.0 if over else 1.5) * smoothstep(8.0, 16.0, speed)
+			apply_torque(up * err * gain * inertia.y)
+			var excess2 := maxf(0.0, absf(beta) - 0.06)
+			apply_torque(up * (-signf(beta) * excess2 * 10.0) * inertia.y)
 
 	if burnout and on_ground:
 		apply_torque(up * -float(input.steer) * inertia.y * 2.2)

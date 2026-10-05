@@ -381,6 +381,9 @@ func _input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		_pause()
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("map"):
+		hud.big_map.open()
+		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("camera"):
 		cam.cycle()
 		Settings.data.camera = cam.mode
@@ -636,6 +639,10 @@ func _run_shots(spec: String) -> void:
 	menus.close_all()
 	hud.visible = true
 	traffic.set_count(0) if OS.has_environment("NO_TRAFFIC") else null
+	if OS.has_environment("SHOT_MISSION"):
+		career.call_timer = 0.0
+		await _frames(3)
+		career.answer_phone()
 	for item in spec.split(";"):
 		var p := item.split(":")
 		# name:x:z:yaw:hour:cammode:rain:speed
@@ -663,8 +670,14 @@ func _run_shots(spec: String) -> void:
 				player.linear_velocity = -player.global_transform.basis.z * spd
 			player.input.throttle = 0.6 if spd > 0.0 else 0.0
 			await get_tree().process_frame
+		if OS.has_environment("SHOT_MAP"):
+			hud.big_map.open()
+			await get_tree().process_frame
+			await get_tree().process_frame
 		var img := get_viewport().get_texture().get_image()
 		img.save_png(OS.get_environment("SHOT_DIR") + "/" + p[0] + ".png")
+		if hud.big_map.visible:
+			hud.big_map.close()
 		print("shot ", p[0])
 
 # ---------------------------------------------------------------- automated playtest

@@ -35,6 +35,7 @@ var drift_m: Label
 var fps_l: Label
 var speedo: Speedo
 var minimap: Minimap
+var big_map: BigMap
 var vignette: ColorRect
 
 func setup(g: Node) -> void:
@@ -66,11 +67,13 @@ func setup(g: Node) -> void:
 
 	var tc := VBoxContainer.new()
 	tc.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	tc.position = Vector2(-300, 18)
-	tc.custom_minimum_size = Vector2(600, 0)
+	tc.position = Vector2(-450, 18)
+	tc.custom_minimum_size = Vector2(900, 0)
 	tc.alignment = BoxContainer.ALIGNMENT_BEGIN
 	root.add_child(tc)
-	obj_l = _label(22, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	obj_l = _label(24, Color(1, 0.88, 0.35), HORIZONTAL_ALIGNMENT_CENTER)
+	obj_l.add_theme_constant_override("outline_size", 6)
+	obj_l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	timer_l = _label(30, ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
 	tc.add_child(obj_l)
 	tc.add_child(timer_l)
@@ -161,10 +164,13 @@ func setup(g: Node) -> void:
 	root.add_child(speedo)
 	minimap = Minimap.new()
 	minimap.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	minimap.position = Vector2(26, -276)
-	minimap.size = Vector2(250, 250)
+	minimap.position = Vector2(24, -344)
+	minimap.size = Vector2(320, 320)
 	minimap.game = g
 	root.add_child(minimap)
+	big_map = BigMap.new()
+	big_map.game = g
+	root.add_child(big_map)
 	fps_l = _label(14, Color(0.6, 1, 0.9))
 	fps_l.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	fps_l.position = Vector2(-160, 2)
@@ -231,9 +237,20 @@ func _process(delta: float) -> void:
 		cooldown_bar.value = police.cooldown / 10.0
 		pursuit_l.modulate = Color(1, 0.3, 0.3) if int(Time.get_ticks_msec() / 300) % 2 == 0 else Color(0.4, 0.6, 1.0)
 	# Objective
+	var pp2 := Vector2(car.global_position.x, car.global_position.z)
 	if not career.active.is_empty() and career.race == null:
-		obj_l.text = career.active.title.to_upper() + "  ·  " + career.waypoint_label
+		var dtxt := ""
+		if career.waypoint != Vector2.INF:
+			var to := career.waypoint - pp2
+			var cf := -car.global_transform.basis.z
+			var rel := wrapf(atan2(to.x, -to.y) - atan2(cf.x, -cf.z), -PI, PI)
+			var arrows := ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
+			dtxt = "   %s %s" % [arrows[posmod(int(round(rel / (PI / 4.0))), 8)], dist_text(to.length())]
+		obj_l.text = "▶ " + career.active.title.to_upper() + "\n" + career.waypoint_label + dtxt
 		timer_l.text = _time(career.time_left) if career.time_left < INF else ""
+	elif career.race == null and not police.pursuit:
+		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
+		timer_l.text = ""
 	else:
 		obj_l.text = ""
 		timer_l.text = ""
@@ -265,7 +282,7 @@ func _process(delta: float) -> void:
 	speedo.car = car
 	speedo.units_mph = Settings.data.units == "mph"
 	speedo.queue_redraw()
-	minimap.queue_redraw()
+	minimap.refresh()
 	fps_l.visible = bool(Settings.data.show_fps)
 	if fps_l.visible:
 		fps_l.text = "%d FPS" % Engine.get_frames_per_second()
@@ -320,9 +337,69 @@ class Speedo extends Control:
 		var gear := "R" if car.reverse else ("N" if car.speed < 0.5 and float(car.input.throttle) < 0.05 else str(car.gear + 1))
 		draw_string(font, c + Vector2(-40, 86), gear, HORIZONTAL_ALIGNMENT_CENTER, 80, 32, Color(1, 0.15, 0.25) if rn > 0.92 else ACCENT)
 
+static func map_markers(game: Node, full: bool) -> Array:
+	## [world_pos, color, kind, label]; kinds: mission, home, race, cop, rival
+	var out: Array = []
+	var career: Career = game.career
+	var free: bool = career.active.is_empty() and career.race == null
+	if free or full:
+		out.append([career.LOC.home, Color(0.3, 1.0, 0.55), "home", "HOME"])
+		for m2 in career.race_markers:
+			out.append([m2.pos, Color(0.3, 0.75, 1.0), "race", str(Career.RACES[m2.id].name)])
+	if career.race:
+		for r in career.race.rivals:
+			out.append([Vector2(r.car.global_position.x, r.car.global_position.z), Color(1, 0.35, 0.45), "rival", ""])
+	var blink := int(Time.get_ticks_msec() / 250) % 2 == 0
+	for c in game.police.cars():
+		out.append([Vector2(c.global_position.x, c.global_position.z), Color(1, 0.15, 0.2) if blink else Color(0.25, 0.45, 1), "cop", ""])
+	if career.waypoint != Vector2.INF:
+		var lbl: String = career.waypoint_label if career.waypoint_label != "" else "OBJECTIVE"
+		out.append([career.waypoint, Color(1.0, 0.82, 0.1), "mission", lbl])
+	return out
+
+static func draw_marker(ci: CanvasItem, p: Vector2, col: Color, kind: String, sz: float) -> void:
+	var dark := Color(0, 0, 0, 0.9)
+	match kind:
+		"mission":
+			var pulse := 1.0 + 0.18 * sin(Time.get_ticks_msec() * 0.008)
+			var r := sz * 1.6 * pulse
+			var dia := PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0)])
+			var dia2 := PackedVector2Array([p + Vector2(0, -r - 3), p + Vector2(r + 3, 0), p + Vector2(0, r + 3), p + Vector2(-r - 3, 0)])
+			ci.draw_colored_polygon(dia2, dark)
+			ci.draw_colored_polygon(dia, col)
+			ci.draw_circle(p, r * 0.3, dark)
+		"home":
+			var r2 := sz * 1.2
+			ci.draw_rect(Rect2(p - Vector2(r2 + 2, r2 + 2), Vector2(r2 + 2, r2 + 2) * 2), dark)
+			ci.draw_rect(Rect2(p - Vector2(r2, r2), Vector2(r2, r2) * 2), col)
+			ci.draw_string(ThemeDB.fallback_font, p + Vector2(-r2, r2 * 0.6), "H", HORIZONTAL_ALIGNMENT_CENTER, r2 * 2, int(r2 * 1.7), dark)
+		"race":
+			ci.draw_circle(p, sz + 2.5, dark)
+			ci.draw_circle(p, sz, col)
+			ci.draw_circle(p, sz * 0.4, Color.WHITE)
+		_:
+			ci.draw_circle(p, sz * 0.8 + 2.0, dark)
+			ci.draw_circle(p, sz * 0.8, col)
+
+static func draw_player(ci: CanvasItem, c: Vector2, ang: float, sz: float) -> void:
+	var pts := [Vector2(0, -1.25), Vector2(0.85, 0.95), Vector2(0, 0.45), Vector2(-0.85, 0.95)]
+	var outer := PackedVector2Array()
+	var inner := PackedVector2Array()
+	for q in pts:
+		outer.append(c + (q * (sz + 4.0)).rotated(ang))
+		inner.append(c + (q * sz).rotated(ang))
+	ci.draw_circle(c, sz * 1.9, Color(0.1, 0.8, 1.0, 0.25))
+	ci.draw_colored_polygon(outer, Color(0, 0, 0, 0.95))
+	ci.draw_colored_polygon(inner, Color(0.15, 0.9, 1.0))
+
+static func dist_text(m: float) -> String:
+	return ("%.1f km" % (m / 1000.0)) if m >= 1000.0 else ("%d m" % int(m))
+
 class Minimap extends Control:
 	var game: Node
 	var map_rect: TextureRect
+	var overlay: Control
+	var font := ThemeDB.fallback_font
 	func _ready() -> void:
 		map_rect = TextureRect.new()
 		map_rect.texture = MAP_TEX
@@ -341,23 +418,31 @@ void fragment() {
 	vec2 rd = vec2(d.x * cos(rot) - d.y * sin(rot), d.x * sin(rot) + d.y * cos(rot));
 	vec4 c = texture(TEXTURE, center_uv + rd * span * 2.0);
 	float a = 1.0 - smoothstep(0.48, 0.5, r);
-	COLOR = vec4(c.rgb * 0.95, a * 0.92);
+	COLOR = vec4(c.rgb * 0.75, a * 0.9);
 }"""
 		var m := ShaderMaterial.new()
 		m.shader = sh
 		map_rect.material = m
 		add_child(map_rect)
-		show_behind_parent = false
-	func _draw() -> void:
+		# Markers are drawn on a child ABOVE the map texture (parent _draw would be covered).
+		overlay = Control.new()
+		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		overlay.draw.connect(_paint)
+		add_child(overlay)
+	func refresh() -> void:
+		overlay.queue_redraw()
+	func _paint() -> void:
 		if game == null or game.player == null:
 			return
+		var ci := overlay
 		var car: Car = game.player
 		var world: World = game.world
 		var S := size.x
 		var half := S * 0.5
 		var center := Vector2(half, half)
-		var zoom := 1.6 - clampf(car.speed / 80.0, 0.0, 1.0) * 0.7
-		var view_m := 900.0 / zoom # metres across the minimap
+		var zoom := 1.5 - clampf(car.speed / 80.0, 0.0, 1.0) * 0.6
+		var view_m := 800.0 / zoom # metres across the minimap
 		var fwd := -car.global_transform.basis.z
 		var yaw := atan2(fwd.x, -fwd.z)
 		var pos := Vector2(car.global_position.x, car.global_position.z)
@@ -366,37 +451,125 @@ void fragment() {
 		mat.set_shader_parameter("rot", yaw)
 		mat.set_shader_parameter("span", view_m / (world.HALF * 2.0) * 0.5)
 		var scale := S / view_m
+		var rim := half - 14.0
 		var to_map := func(w: Vector2) -> Vector2:
 			return center + (w - pos).rotated(-yaw) * scale
-		var inside := func(p: Vector2) -> bool:
-			return p.distance_to(center) < half - 4.0
+		# GPS route: dark casing + bright line
+		var route: PackedVector2Array = game.gps_route
+		var pts := PackedVector2Array()
+		for q in route:
+			pts.append(to_map.call(q))
+		for i in range(pts.size() - 1):
+			if pts[i].distance_to(center) < half + 60.0 or pts[i + 1].distance_to(center) < half + 60.0:
+				var a: Vector2 = pts[i]
+				var b: Vector2 = pts[i + 1]
+				if a.distance_to(center) > rim:
+					a = center + (a - center).limit_length(rim)
+				if b.distance_to(center) > rim:
+					b = center + (b - center).limit_length(rim)
+				ci.draw_line(a, b, Color(0, 0, 0, 0.85), 9.0, true)
+				ci.draw_line(a, b, Color(1.0, 0.78, 0.1), 5.0, true)
+		for mk in HUD.map_markers(game, false):
+			var p: Vector2 = to_map.call(mk[0])
+			var clamped := p.distance_to(center) > rim
+			if clamped:
+				p = center + (p - center).normalized() * rim
+			var sz := 9.0 if mk[2] == "mission" else (7.0 if mk[2] in ["home", "race"] else 6.0)
+			HUD.draw_marker(ci, p, mk[1], mk[2], sz)
+			if mk[2] == "mission":
+				var d: float = (mk[0] as Vector2).distance_to(pos)
+				var tp := center + (p - center) * (0.78 if clamped else 1.0) + Vector2(-50, 30 if p.y < center.y + 40 else -22)
+				ci.draw_string_outline(font, tp, HUD.dist_text(d), HORIZONTAL_ALIGNMENT_CENTER, 100, 17, 5, Color.BLACK)
+				ci.draw_string(font, tp, HUD.dist_text(d), HORIZONTAL_ALIGNMENT_CENTER, 100, 17, Color(1, 0.85, 0.2))
+		HUD.draw_player(ci, center, 0.0, 13.0)
+		ci.draw_arc(center, half - 1, 0, TAU, 96, Color(0, 0, 0, 0.8), 5.0, true)
+		ci.draw_arc(center, half - 3, 0, TAU, 96, Color(1, 1, 1, 0.55), 2.0, true)
+		var n := Vector2(0, -1).rotated(-yaw) * (half - 16)
+		ci.draw_circle(center + n, 11, Color(0, 0, 0, 0.85))
+		ci.draw_string(font, center + n + Vector2(-8, 6), "N", HORIZONTAL_ALIGNMENT_CENTER, 16, 16, ACCENT)
+
+class BigMap extends Control:
+	## Full-screen world map (pauses the game). Toggle with the Map button.
+	var game: Node
+	var font := ThemeDB.fallback_font
+	func _ready() -> void:
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		visible = false
+	func open() -> void:
+		visible = true
+		get_tree().paused = true
+		queue_redraw()
+	func close() -> void:
+		visible = false
+		get_tree().paused = false
+	func _input(event: InputEvent) -> void:
+		if not visible:
+			return
+		if event.is_action_pressed("map") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+			close()
+			get_viewport().set_input_as_handled()
+	func _process(_d: float) -> void:
+		if visible:
+			queue_redraw()
+	func _draw() -> void:
+		if game == null or game.player == null:
+			return
+		var world: World = game.world
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.01, 0.02, 0.04, 0.92))
+		var side := minf(size.x - 380.0, size.y - 80.0)
+		var origin := Vector2((size.x - 340.0 - side) * 0.5, (size.y - side) * 0.5)
+		var rect := Rect2(origin, Vector2(side, side))
+		draw_texture_rect(MAP_TEX, rect, false, Color(0.85, 0.85, 0.85))
+		draw_rect(rect.grow(2), Color(1, 1, 1, 0.4), false, 2.0)
+		var to_map := func(w: Vector2) -> Vector2:
+			return origin + (w + Vector2(world.HALF, world.HALF)) / (world.HALF * 2.0) * side
 		var route: PackedVector2Array = game.gps_route
 		for i in range(route.size() - 1):
-			var a: Vector2 = to_map.call(route[i])
-			var b: Vector2 = to_map.call(route[i + 1])
-			if inside.call(a) or inside.call(b):
-				draw_line(a, b, Color(1.0, 0.7, 0.15), 4.0, true)
-		var dots: Array = []
+			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), Color(0, 0, 0, 0.85), 8.0, true)
+		for i in range(route.size() - 1):
+			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), Color(1.0, 0.78, 0.1), 4.0, true)
+		var car: Car = game.player
+		var pos := Vector2(car.global_position.x, car.global_position.z)
+		for mk in HUD.map_markers(game, true):
+			var p: Vector2 = to_map.call(mk[0])
+			var sz := 11.0 if mk[2] == "mission" else (8.0 if mk[2] in ["home", "race"] else 6.0)
+			HUD.draw_marker(self, p, mk[1], mk[2], sz)
+			if mk[3] != "":
+				var txt: String = mk[3]
+				if mk[2] == "mission":
+					txt += "  (" + HUD.dist_text((mk[0] as Vector2).distance_to(pos)) + ")"
+				var fs := 20 if mk[2] == "mission" else 16
+				var tp := p + Vector2(sz + 8, 6)
+				draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color.BLACK)
+				draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, mk[1])
+		var fwd := -car.global_transform.basis.z
+		var pp: Vector2 = to_map.call(pos)
+		HUD.draw_player(self, pp, atan2(fwd.x, -fwd.z), 14.0)
+		draw_string_outline(font, pp + Vector2(20, -14), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color.BLACK)
+		draw_string(font, pp + Vector2(20, -14), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.15, 0.9, 1.0))
+		# Legend
+		var lx := size.x - 330.0
+		var ly := 90.0
+		draw_string(font, Vector2(lx, ly - 30), "MAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 36, Color.WHITE)
 		var career: Career = game.career
-		if career.waypoint != Vector2.INF:
-			dots.append([career.waypoint, Color(1.0, 0.75, 0.2), 7.0])
-		if career.active.is_empty() and career.race == null:
-			dots.append([career.LOC.home, Color(0.3, 1.0, 0.55), 7.0])
-			for m2 in career.race_markers:
-				dots.append([m2.pos, Color(0.3, 0.75, 1.0), 6.0])
-		var blink := int(Time.get_ticks_msec() / 250) % 2 == 0
-		for c in game.police.cars():
-			dots.append([Vector2(c.global_position.x, c.global_position.z), Color(1, 0.15, 0.2) if blink else Color(0.2, 0.4, 1), 5.0])
-		if career.race:
-			for r in career.race.rivals:
-				dots.append([Vector2(r.car.global_position.x, r.car.global_position.z), Color(1, 0.35, 0.45), 4.5])
-		for d in dots:
-			var p: Vector2 = to_map.call(d[0])
-			if not inside.call(p):
-				p = center + (p - center).normalized() * (half - 8.0) # clamp to the rim
-			draw_circle(p, d[2], d[1])
-		var arrow := PackedVector2Array([center + Vector2(0, -11), center + Vector2(8, 9), center + Vector2(0, 4), center + Vector2(-8, 9)])
-		draw_colored_polygon(arrow, Color.WHITE)
-		draw_arc(center, half - 1, 0, TAU, 64, Color(1, 1, 1, 0.35), 2.0, true)
-		var n := Vector2(0, -1).rotated(-yaw) * (half - 14)
-		draw_string(ThemeDB.fallback_font, center + n + Vector2(-5, 6), "N", HORIZONTAL_ALIGNMENT_CENTER, -1, 15, ACCENT)
+		var obj := "Free roam: wait for a phone call, or drive to a blue race marker."
+		if not career.active.is_empty():
+			obj = str(career.active.title) + ": " + career.waypoint_label
+		elif career.race:
+			obj = "Race in progress"
+		draw_multiline_string(font, Vector2(lx, ly + 10), obj, HORIZONTAL_ALIGNMENT_LEFT, 300, 18, -1, Color(1, 0.85, 0.3))
+		ly += 110.0
+		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"]]
+		for e in legend:
+			HUD.draw_marker(self, Vector2(lx + 12, ly), e[1], e[0], 8.0)
+			draw_string(font, Vector2(lx + 36, ly + 6), e[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+			ly += 34.0
+		HUD.draw_player(self, Vector2(lx + 12, ly), 0.0, 9.0)
+		draw_string(font, Vector2(lx + 36, ly + 6), "You", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+		ly += 34.0
+		draw_line(Vector2(lx + 2, ly), Vector2(lx + 24, ly), Color(1.0, 0.78, 0.1), 4.0)
+		draw_string(font, Vector2(lx + 36, ly + 6), "GPS route", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
+		ly += 60.0
+		draw_string(font, Vector2(lx, ly), "[%s] Close" % Settings.glyph("map"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.7))

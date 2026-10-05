@@ -50,7 +50,7 @@ func _tick() -> void:
 			if car.global_position.length() > 1700.0:
 				car.global_position = Vector3(0, car.global_position.y, 0)
 				car.reset_physics_interpolation()
-			if t > 30.0:
+			if t > 12.0:
 				print("0-100 %.2fs  0-200 %.2fs  v@30s %d km/h gear %d" % [t100, t200, kmh, car.gear + 1])
 				phase = 2; t = 0.0
 		2: # brake to stop
@@ -70,7 +70,7 @@ func _tick() -> void:
 			car.input.throttle = 0.5
 			max_lat = maxf(max_lat, absf(car.accel_local.x))
 			if t > 6.0:
-				print("max lateral %.2f g at %d km/h, slip %.2f, upright %.2f" % [max_lat / 9.81, kmh, car.slip_angle, car.global_transform.basis.y.y])
+				print("max lateral %.2f g at %d km/h, slip %.2f, upright %.2f yaw %.2f drift %s" % [max_lat / 9.81, kmh, car.slip_angle, car.global_transform.basis.y.y, car.angular_velocity.y, car.drift_mode])
 				car.input.steer = 0.0
 				phase = 5; t = 0.0
 		5: # straighten & get speed for drift
