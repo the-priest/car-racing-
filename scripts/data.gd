@@ -23,6 +23,12 @@ const DESC := {
 	"stallion_hc": "900 hp restomod muscle. Handle with respect.",
 	"vanta_z": "The hypercar. V12, AWD, no apologies.",
 }
+## Story chapters you must finish before a tier can be bought.
+const TIER_UNLOCK := {"D": 0, "C": 1, "B": 3, "A": 6, "S": 9}
+
+static func unlocked(id: String, chapters_done: int) -> bool:
+	return chapters_done >= int(TIER_UNLOCK.get(CARS[id].tier, 0))
+
 const CAR_ORDER := ["vanta", "stallion", "vanta_s", "wedge", "vanta_r", "vanta_x", "stallion_hc", "vanta_z"]
 
 const POLICE := {"name": "Interceptor", "tier": "-", "price": 0, "mass": 1500.0, "accel": 10.5, "top": 80.0, "grip": 15.5, "brake": 28.0, "nitro": 8.0, "awd": true, "drift": 0.9, "gears": 6, "cyl": 8, "idle": 800.0, "red": 7000.0, "paint": Color(0.03, 0.03, 0.035)}

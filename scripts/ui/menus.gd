@@ -378,6 +378,8 @@ func _build_garage(box: VBoxContainer) -> void:
 		var label := "[%s]  %s" % [c.tier, c.name]
 		if owned.has(id):
 			label += "   -  DRIVING" if Save.data.car == id else "   -  OWNED"
+		elif not Data.unlocked(id, int(Save.data.contract)):
+			label += "   -  LOCKED"
 		else:
 			label += "   -  $%s" % HUD._fmt(int(c.price))
 		var b := _button(box, label, func():
@@ -397,7 +399,10 @@ func _build_garage(box: VBoxContainer) -> void:
 			["HANDLING", st.grip, base.grip, 30.0, "%.2fg" % (st.grip / 9.81)],
 			["NITROUS", st.nitro * st.nitro_cap, base.nitro * base.nitro_cap, 160.0, "%.0fs" % st.nitro_cap]]:
 		box.add_child(_stat_bar(row[0], float(row[1]) / float(row[3]), float(row[2]) / float(row[3]), row[4]))
-	if not owned.has(garage_sel):
+	if not owned.has(garage_sel) and not Data.unlocked(garage_sel, int(Save.data.contract)):
+		var need := int(Data.TIER_UNLOCK.get(sel.tier, 0))
+		_text(box, "LOCKED - finish story chapter %d (%s) to unlock tier %s." % [need, Career.CONTRACTS[need - 1].title, sel.tier], 17, ACCENT)
+	elif not owned.has(garage_sel):
 		_button(box, "BUY  $%s" % HUD._fmt(int(sel.price)), func():
 			if int(Save.data.cash) >= int(sel.price):
 				Save.add_cash(-int(sel.price))

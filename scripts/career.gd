@@ -573,6 +573,9 @@ func _complete_contract(ok: bool, why := "") -> void:
 		Save.data.rep = int(Save.data.rep) + 1
 		if story_idx >= 0:
 			Save.data.contract = story_idx + 1
+			for tier in Data.TIER_UNLOCK:
+				if int(Data.TIER_UNLOCK[tier]) == story_idx + 1:
+					get_tree().create_timer(4.0, true).timeout.connect(func(): message.emit("NEW CARS UNLOCKED: tier %s - visit your garage" % tier, 4.0))
 			if not Save.data.contracts_done.has(c.title):
 				Save.data.contracts_done.append(c.title)
 		Save.save_game()
