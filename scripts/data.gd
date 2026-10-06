@@ -13,6 +13,7 @@ const CARS := {
 	"vanta_x": {"name": "Vanta X AWD", "tier": "A", "price": 120000, "mass": 1450.0, "accel": 12.8, "top": 92.0, "grip": 17.5, "brake": 30.0, "nitro": 10.0, "awd": true, "drift": 1.0, "gears": 7, "cyl": 10, "idle": 950.0, "red": 8700.0, "paint": Color(0.02, 0.02, 0.025)},
 	"kestrel": {"name": "Kestrel Rally '85", "tier": "B", "price": 48000, "body": "hatch", "mass": 1180.0, "accel": 11.5, "top": 76.0, "grip": 15.8, "brake": 27.0, "nitro": 8.5, "awd": true, "drift": 1.25, "gears": 5, "cyl": 4, "idle": 950.0, "red": 7800.0, "paint": Color(0.95, 0.95, 0.92), "turbo_stock": true},
 	"raiden": {"name": "Raiden GT '94", "tier": "A", "price": 105000, "body": "gt", "mass": 1480.0, "accel": 12.6, "top": 90.0, "grip": 16.6, "brake": 29.0, "nitro": 10.0, "awd": false, "drift": 1.3, "gears": 6, "cyl": 6, "idle": 900.0, "red": 8000.0, "paint": Color(0.08, 0.18, 0.55), "turbo_stock": true},
+	"rsr": {"name": "Vespera RSR", "tier": "S", "price": 320000, "unlock": 11, "body": "rsr", "mass": 1240.0, "accel": 15.8, "top": 109.0, "grip": 21.0, "brake": 35.0, "nitro": 12.0, "awd": false, "drift": 1.15, "gears": 7, "cyl": 6, "idle": 1100.0, "red": 9600.0, "paint": Color(0.92, 0.92, 0.9), "aero_base": 1.6},
 	"vanta_z": {"name": "Vanta Zero", "tier": "S", "price": 240000, "mass": 1380.0, "accel": 14.5, "top": 104.0, "grip": 19.0, "brake": 32.0, "nitro": 11.0, "awd": true, "drift": 1.05, "gears": 7, "cyl": 12, "idle": 1000.0, "red": 9200.0, "paint": Color(0.95, 0.42, 0.02)},
 }
 const DESC := {
@@ -26,14 +27,18 @@ const DESC := {
 	"vanta_z": "The hypercar. V12, AWD, no apologies.",
 	"kestrel": "Group-B legend for the road. Turbo four, AWD, loves gravel.",
 	"raiden": "Twin-turbo straight six grand tourer. Built for the long night run.",
+	"rsr": "Endurance racer with plates. Flat-six screaming to 9,600 rpm, wing that glues it down. The fastest, sharpest car in Solano Bay.",
 }
 ## Story chapters you must finish before a tier can be bought.
 const TIER_UNLOCK := {"D": 0, "C": 1, "B": 3, "A": 6, "S": 9}
 
 static func unlocked(id: String, chapters_done: int) -> bool:
-	return chapters_done >= int(TIER_UNLOCK.get(CARS[id].tier, 0))
+	return chapters_done >= unlock_chapter(id)
 
-const CAR_ORDER := ["vanta", "stallion", "vanta_s", "kestrel", "wedge", "vanta_r", "raiden", "vanta_x", "stallion_hc", "vanta_z"]
+static func unlock_chapter(id: String) -> int:
+	return int(CARS[id].get("unlock", TIER_UNLOCK.get(CARS[id].tier, 0)))
+
+const CAR_ORDER := ["vanta", "stallion", "vanta_s", "kestrel", "wedge", "vanta_r", "raiden", "vanta_x", "stallion_hc", "vanta_z", "rsr"]
 
 const POLICE := {"name": "Interceptor", "tier": "-", "price": 0, "mass": 1500.0, "accel": 10.5, "top": 80.0, "grip": 15.5, "brake": 28.0, "nitro": 8.0, "awd": true, "drift": 0.9, "gears": 6, "cyl": 8, "idle": 800.0, "red": 7000.0, "paint": Color(0.03, 0.03, 0.035)}
 
@@ -78,7 +83,7 @@ static func stats_for(id: String, up: Dictionary) -> Dictionary:
 	base.brake *= 1.0 + 0.1 * lv.call("brakes")
 	base.nitro *= 1.0 + 0.15 * lv.call("nitro")
 	base["nitro_cap"] = 4.0 + lv.call("nitro") * 1.3
-	base["downforce"] = 0.00011 * (1.0 + 0.45 * lv.call("aero"))
+	base["downforce"] = 0.00011 * float(base.get("aero_base", 1.0)) * (1.0 + 0.45 * lv.call("aero"))
 	base["shift_time"] = 0.15 - 0.03 * lv.call("transmission")
 	base["turbo"] = lv.call("turbo") > 0 or bool(base.get("turbo_stock", false))
 	base["aero_lvl"] = int(lv.call("aero"))

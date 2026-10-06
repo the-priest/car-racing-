@@ -64,6 +64,12 @@ var speedo: Speedo
 var minimap: Minimap
 var big_map: BigMap
 var map_hint: Label
+var tut_panel: PanelContainer
+var tut_head: Label
+var tut_title: Label
+var tut_text: Label
+var tut_bar: ProgressBar
+var tut_foot: Label
 var fade_rect: ColorRect
 var vignette: ColorRect
 var nitro_fx := 0.0
@@ -352,6 +358,7 @@ void fragment() {
 	minimap.size = Vector2(320, 320)
 	minimap.game = g
 	root.add_child(minimap)
+	_build_tutorial_card()
 	map_hint = _label(15, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
 	map_hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	map_hint.position = Vector2(24, -24)
@@ -407,6 +414,59 @@ func _show_big(text: String, secs: float) -> void:
 	big_l.modulate.a = 1.0
 	big_l.scale = Vector2(1.3, 1.3)
 	big_l.pivot_offset = big_l.custom_minimum_size * 0.5
+
+func _build_tutorial_card() -> void:
+	tut_panel = PanelContainer.new()
+	tut_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	tut_panel.position = Vector2(-360, 92)
+	tut_panel.custom_minimum_size = Vector2(720, 0)
+	tut_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.02, 0.03, 0.06, 0.86)
+	st.border_width_left = 5
+	st.border_color = ACCENT
+	st.set_corner_radius_all(4)
+	st.content_margin_left = 22
+	st.content_margin_right = 22
+	st.content_margin_top = 12
+	st.content_margin_bottom = 14
+	tut_panel.add_theme_stylebox_override("panel", st)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	tut_panel.add_child(v)
+	tut_head = _label(14, ACCENT)
+	tut_title = _label(30, Color.WHITE)
+	tut_text = _label(19, Color(1, 1, 1, 0.9))
+	tut_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tut_text.custom_minimum_size = Vector2(676, 0)
+	tut_bar = ProgressBar.new()
+	tut_bar.custom_minimum_size = Vector2(0, 8)
+	tut_bar.max_value = 1.0
+	tut_bar.show_percentage = false
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = ACCENT
+	tut_bar.add_theme_stylebox_override("fill", fill)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(1, 1, 1, 0.12)
+	tut_bar.add_theme_stylebox_override("background", bg)
+	tut_foot = _label(13, Color(1, 1, 1, 0.45))
+	for n in [tut_head, tut_title, tut_text, tut_bar, tut_foot]:
+		v.add_child(n)
+	tut_panel.visible = false
+	root.add_child(tut_panel)
+
+## Tutorial step card (total 0 hides it).
+func tutorial_card(i: int, total: int, title: String, text: String, progress: float, done: bool) -> void:
+	tut_panel.visible = total > 0
+	if total == 0:
+		return
+	tut_head.text = "TUTORIAL  ·  STEP %d OF %d" % [i, total]
+	tut_title.text = ("✓  " + title) if done else title
+	tut_title.add_theme_color_override("font_color", Color(0.5, 1.0, 0.62) if done else Color.WHITE)
+	tut_text.text = text
+	tut_bar.value = 1.0 if done else progress
+	var h: String = game.tutorial.hint() if game.tutorial else ""
+	tut_foot.text = (h + "   ·   " if h != "" else "") + "Pause menu: skip tutorial"
 
 ## Short toast under the banner. Repeats of the same message (or the same key)
 ## merge into one ("NEAR MISS  x3") instead of stacking up.
@@ -1142,7 +1202,7 @@ class BigMap extends Control:
 			game.custom_wp = Vector2.INF # selecting the pin again removes it
 		else:
 			game.custom_wp = world.node_pos[world.nearest_node(wp)]
-		game.gps_timer = 0.0
+		game.gps_reset()
 		game.audio.play_oneshot("beep", 1.7, -10.0)
 
 	func _fast_travel() -> void:

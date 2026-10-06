@@ -1,7 +1,7 @@
 extends Node3D
 ## Main game: owns the world and all systems, routes input and game state.
 
-enum State { LOADING, MENU, PLAY, PAUSED, GARAGE, RESULTS, PHOTO }
+enum State { LOADING, MENU, PLAY, PAUSED, GARAGE, RESULTS, PHOTO, INTRO }
 
 var state := State.LOADING
 var world: World
@@ -50,6 +50,8 @@ var session_id := 0 # bumped when leaving to the menu / new career; stale awaits
 var photo := {"yaw": 0.0, "pitch": 0.25, "dist": 7.0, "fov": 55.0}
 var photo_hint: Label
 var top_kmh := 0.0
+var intro: Intro = null
+var tutorial: Tutorial = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -108,6 +110,12 @@ func _ready() -> void:
 			shots_spec = "COPSTEST"
 		if a == "--storytest":
 			shots_spec = "STORYTEST"
+		if a == "--tutorialtest":
+			shots_spec = "TUTORIALTEST"
+		if a == "--gpstest":
+			shots_spec = "GPSTEST"
+		if a == "--introshots":
+			shots_spec = "INTROSHOTS"
 	audio = AudioManager.new()
 	add_child(audio)
 	audio.setup()
@@ -226,6 +234,18 @@ func _ready() -> void:
 		for i in 40:
 			await get_tree().process_frame
 		await _snap("garage_custom")
+		get_tree().quit()
+		return
+	if shots_spec == "INTROSHOTS":
+		await _introshots()
+		get_tree().quit()
+		return
+	if shots_spec == "GPSTEST":
+		await _gpstest()
+		get_tree().quit()
+		return
+	if shots_spec == "TUTORIALTEST":
+		await _tutorialtest()
 		get_tree().quit()
 		return
 	if shots_spec == "HUDTEST":
@@ -557,7 +577,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 		await _snap("pin_map")
 		bm.close()
-		gps_timer = 0.0
+		gps_reset()
 		await _frames(10)
 		print("[pin] custom=", custom_wp, " route points=", gps_route.size())
 		await _snap("pin_hud")
@@ -801,6 +821,7 @@ func reset_career() -> void:
 	police.clear()
 	apply_player_car()
 	_place_at_home()
+	gps_reset()
 
 func on_car_spawned(car: Car) -> void:
 	effects.attach(car)
@@ -887,7 +908,7 @@ func fast_travel(to: Vector2, place: String) -> void:
 	cam.snap = true
 	if custom_wp != Vector2.INF and custom_wp.distance_to(to) < 150.0:
 		custom_wp = Vector2.INF
-	gps_timer = 0.0
+	gps_reset()
 	await _frames(6)
 	var tw2 := create_tween()
 	tw2.tween_property(hud.fade_rect, "modulate:a", 0.0, 0.45)
@@ -908,9 +929,10 @@ func reset_to_road() -> void:
 		return
 	player.reset_to(world.respawn_at(player.global_position))
 	cam.snap = true
+	gps_reset()
 
 func persist() -> void:
-	if player == null:
+	if player == null or state == State.INTRO:
 		return
 	var p := player.global_position
 	var f := -player.global_transform.basis.z
@@ -956,12 +978,69 @@ func _on_play() -> void:
 	state = State.PLAY
 	hud.visible = true
 	cam.snap = true
-	if float(Save.data.playtime) >= 1.0 and not welcomed:
+	var first := float(Save.data.playtime) < 1.0
+	if not first and not Save.data.has("tutorial_done"):
+		Save.data.tutorial_done = true # careers from before the tutorial existed
+	if not first and not welcomed:
 		welcomed = true
 		hud.free_t = 0.0 # show the "NEXT" objective again
-	if float(Save.data.playtime) < 1.0:
-		hud.show_dialogue(Career.PROLOGUE)
-		career.call_timer = 24.0
+	if first and shots_spec == "":
+		_play_intro()
+	elif not bool(Save.data.get("tutorial_done", true)) and tutorial == null and shots_spec == "":
+		start_tutorial()
+
+## Opening cinematic for a new career, then straight into the tutorial.
+func _play_intro() -> void:
+	if tutorial:
+		tutorial.cancel()
+		tutorial = null
+		police.enabled = true
+	state = State.INTRO
+	hud.visible = false
+	daynight.hour = 17.7
+	daynight.rain = 0.0
+	rain_target = 0.0
+	intro = Intro.new()
+	add_child(intro)
+	intro.finished.connect(func():
+		intro = null
+		if state != State.INTRO:
+			return
+		state = State.PLAY
+		hud.visible = true
+		start_tutorial())
+	intro.start(self)
+
+func start_tutorial() -> void:
+	if tutorial:
+		return
+	Save.data.tutorial_done = false
+	tutorial = Tutorial.new()
+	add_child(tutorial)
+	police.enabled = false # no cops while learning
+	tutorial.finished.connect(_on_tutorial_done)
+	tutorial.start(self)
+
+func skip_tutorial() -> void:
+	if tutorial:
+		tutorial.skip()
+
+func _on_tutorial_done(skipped: bool) -> void:
+	tutorial = null
+	police.enabled = true
+	Save.data.tutorial_done = true
+	if not skipped:
+		# The tutorial covered these; don't repeat them as tips.
+		var seen: Array = Save.data.get("tips", [])
+		for k in ["ctl_drive", "ctl_drift", "ctl_map", "map"]:
+			if not seen.has(k):
+				seen.append(k)
+		Save.data.tips = seen
+		hud.big("TUTORIAL COMPLETE", 2.0)
+	elif career.idle() and career.pending_call < 0:
+		career.call_timer = minf(career.call_timer, 4.0) # Mara rings soon
+	hud.free_t = 0.0
+	persist()
 
 func _on_resume() -> void:
 	state = State.PLAY
@@ -1120,7 +1199,7 @@ func _check_achievements(delta: float) -> void:
 var onboard_t := 0.0
 
 func _update_onboarding(delta: float) -> void:
-	if shots_spec != "" or hud.sub_panel.visible:
+	if shots_spec != "" or hud.sub_panel.visible or tutorial:
 		return
 	onboard_t += delta
 	var seen: Array = Save.data.get("tips", [])
@@ -1130,7 +1209,7 @@ func _update_onboarding(delta: float) -> void:
 	if onboard_t > 2.0 and not seen.has("ctl_drive"):
 		tip("ctl_drive", "Drive: %s accelerate, %s brake / reverse, %s nitrous. Nitrous refills from near misses, drifts and big air." % [g.call("throttle"), g.call("brake"), g.call("nitro")])
 	elif onboard_t > 35.0 and not seen.has("ctl_drift"):
-		tip("ctl_drift", "Drift: while steering into a corner, lift off %s and press it again. Steer to hold the angle. %s (handbrake) is for tight hairpins." % [g.call("throttle"), g.call("handbrake")])
+		tip("ctl_drift", "Drift: while steering into a corner, lift off %s and press it again (or tap %s on the gas). Steer to hold the angle. %s (handbrake) is for tight hairpins." % [g.call("throttle"), g.call("brake"), g.call("handbrake")])
 	elif onboard_t > 70.0:
 		tip("ctl_map", "%s opens the map (pin your own waypoint there). %s resets your car to the road, %s changes camera, %s turns on the radio." % [g.call("map"), g.call("reset"), g.call("camera"), g.call("radio")])
 
@@ -1306,13 +1385,19 @@ func _input(event: InputEvent) -> void:
 		cam.cycle()
 		Settings.set_value("camera", cam.mode)
 	elif event.is_action_pressed("phone"):
+		if tutorial and not tutorial.allows_phone():
+			hud.message("Finish the tutorial first (or skip it from the pause menu)", 2.5, "tut")
+			return
 		var lines := career.answer_phone()
 		if not lines.is_empty():
 			audio.set_ringing(false)
 			hud.show_dialogue(lines)
 	elif event.is_action_pressed("interact"):
 		var rid := career.race_near(Vector2(player.global_position.x, player.global_position.z))
-		if rid != "" and not police.pursuit:
+		if tutorial:
+			if hud.sub_panel.visible:
+				hud.skip_line()
+		elif rid != "" and not police.pursuit:
 			career.start_race(rid)
 		elif player_at_home() and not police.pursuit and career.idle():
 			_open_garage()
@@ -1510,7 +1595,7 @@ func _soft_contacts(list: Array) -> void:
 func _music_mode() -> String:
 	if menus.rolling_credits():
 		return "credits"
-	if state == State.MENU or state == State.GARAGE:
+	if state == State.MENU or state == State.GARAGE or state == State.INTRO:
 		return "menu"
 	if police.pursuit:
 		return "chase"
@@ -1540,7 +1625,7 @@ func _process(delta: float) -> void:
 	Car.wet_grip = 1.0 - 0.12 * clampf(daynight.rain, 0.0, 1.0)
 	_update_radio_button(delta)
 	audio.update_music(_music_mode(), delta, 1.0 if menus.rolling_credits() else (0.45 if state == State.PAUSED else (0.65 if state == State.PHOTO or hud.big_map.visible else 1.0)))
-	audio.update_rain(daynight.rain if state == State.PLAY or state == State.MENU or state == State.GARAGE else 0.0)
+	audio.update_rain(daynight.rain if state in [State.PLAY, State.MENU, State.GARAGE, State.INTRO] else 0.0)
 	var lights := night > 0.25 or daynight.rain > 0.4
 	if lights_override >= 0:
 		lights = lights_override == 1
@@ -1552,6 +1637,9 @@ func _process(delta: float) -> void:
 		audio.set_horn(false)
 	if state == State.PHOTO:
 		_photo_camera(delta)
+		return
+	if state == State.INTRO:
+		audio.update_player(player, true, delta)
 		return
 	if state == State.MENU:
 		_menu_camera(delta)
@@ -1689,34 +1777,157 @@ func _update_prompt() -> void:
 	elif player_at_home() and career.active.is_empty():
 		prompt_text = "HOME\n[%s] Enter garage" % key if not police.pursuit else "Lose the cops before going home"
 
+## GPS: one route that sticks. It is trimmed as you drive along it and only
+## recalculated when the destination moves or you leave it (off the line for a
+## couple of seconds, or driving the wrong way), never just because a different
+## road node happens to be nearest. New routes prefer roads ahead of you.
+var gps_nodes := PackedInt32Array() # remaining route, next node first
+var gps_prev := Vector2.ZERO # where the current route leg starts
+var gps_goal := Vector2.INF
+var gps_goal_node := -1
+var gps_tree: Array = []
+var gps_off_t := 0.0
+var gps_wrong_t := 0.0
+var gps_tree_t := 0.0
+var gps_reroutes := 0
+
+## Forget the current route (teleports, new pins): the next GPS tick plans a fresh one.
+func gps_reset() -> void:
+	gps_goal = Vector2.INF
+	gps_timer = 0.0
+
 func _update_gps(delta: float) -> void:
 	gps_timer -= delta
+	gps_tree_t -= delta
 	if gps_timer > 0.0:
 		return
-	gps_timer = 1.0
+	var step := 0.25
+	gps_timer = step
 	var target: Vector2 = career.waypoint
-	var pp0 := Vector2(player.global_position.x, player.global_position.z)
-	if custom_wp != Vector2.INF and pp0.distance_to(custom_wp) < 30.0:
+	var pp := Vector2(player.global_position.x, player.global_position.z)
+	if custom_wp != Vector2.INF and pp.distance_to(custom_wp) < 30.0:
 		custom_wp = Vector2.INF
 		hud.message("Waypoint reached", 1.5)
 	if target == Vector2.INF and career.race == null:
 		target = custom_wp
 	if target == Vector2.INF and career.race:
 		gps_route = PackedVector2Array()
+		gps_goal = Vector2.INF
 		var r := career.race
 		for k in range(0, 160, 4):
 			gps_route.append(r.path.at(r.p_idx + k))
 		return
 	if target == Vector2.INF:
 		gps_route = PackedVector2Array()
+		gps_goal = Vector2.INF
+		gps_nodes = PackedInt32Array()
 		return
-	var a := world.nearest_node(Vector2(player.global_position.x, player.global_position.z))
-	var b := world.nearest_node(target)
-	var route := world.route(a, b)
-	gps_route = PackedVector2Array([Vector2(player.global_position.x, player.global_position.z)])
-	for id in route:
+	var v := Vector2(player.linear_velocity.x, player.linear_velocity.z)
+	var fwd := v.normalized() if v.length() > 3.0 else Vector2(-player.global_transform.basis.z.x, -player.global_transform.basis.z.z).normalized()
+	var goal_node := world.nearest_node(target)
+	if gps_goal == Vector2.INF or gps_tree.is_empty():
+		_gps_reroute(pp, fwd, target, goal_node, true)
+	elif goal_node != gps_goal_node:
+		# A new destination gets a fresh route; one that drifts (moving targets)
+		# keeps you heading the same way, at most once a second.
+		var jump := gps_goal.distance_to(target) > 150.0
+		if jump or gps_tree_t <= 0.0:
+			_gps_reroute(pp, fwd, target, goal_node, jump)
+	else:
+		gps_goal = target
+		_gps_follow(pp, v, step, fwd, target)
+	gps_route = PackedVector2Array([pp])
+	for id in gps_nodes:
 		gps_route.append(world.node_pos[id])
-	gps_route.append(target)
+	gps_route.append(gps_goal)
+
+## Advance along the route; reroute only when clearly off it.
+func _gps_follow(pp: Vector2, v: Vector2, step: float, fwd: Vector2, target: Vector2) -> void:
+	var pts := PackedVector2Array([gps_prev])
+	for k in mini(gps_nodes.size(), 8):
+		pts.append(world.node_pos[gps_nodes[k]])
+	if gps_nodes.size() <= 8:
+		pts.append(gps_goal)
+	var best := 0
+	var best_d := INF
+	for k in pts.size() - 1:
+		var q := Geometry2D.get_closest_point_to_segment(pp, pts[k], pts[k + 1])
+		var d := q.distance_to(pp)
+		if d < best_d + 0.5 and (d < 15.0 or d < best_d): # ties go to the leg further along
+			best_d = d
+			best = k
+	# Passed `best` nodes: drop them.
+	if best > 0:
+		gps_prev = world.node_pos[gps_nodes[mini(best, gps_nodes.size()) - 1]]
+		gps_nodes = gps_nodes.slice(mini(best, gps_nodes.size()))
+	var leg_to := world.node_pos[gps_nodes[0]] if not gps_nodes.is_empty() else gps_goal
+	var leg := (leg_to - gps_prev).normalized()
+	gps_off_t = gps_off_t + step if best_d > 40.0 else 0.0
+	gps_wrong_t = gps_wrong_t + step if v.length() > 8.0 and v.normalized().dot(leg) < -0.6 and best_d < 40.0 else 0.0
+	if gps_off_t > 1.5 or gps_wrong_t > 3.0:
+		_gps_reroute(pp, fwd, target, gps_goal_node, true)
+		hud.message("Rerouting", 1.2, "gps")
+
+func _gps_reroute(pp: Vector2, fwd: Vector2, target: Vector2, goal_node: int, choose_start: bool) -> void:
+	gps_reroutes += 1
+	if goal_node != gps_goal_node or gps_tree.is_empty():
+		gps_tree = world.route_tree(goal_node)
+		gps_goal_node = goal_node
+		gps_tree_t = 1.0
+	gps_goal = target
+	gps_off_t = 0.0
+	gps_wrong_t = 0.0
+	var dist: PackedFloat32Array = gps_tree[0]
+	var prev: PackedInt32Array = gps_tree[1]
+	var start := -1
+	if not choose_start and not gps_nodes.is_empty() and dist[gps_nodes[0]] < INF:
+		start = gps_nodes[0] # still on the old route: keep going the same way
+	else:
+		# Nearest few nodes; ones behind you cost a U-turn.
+		var n0 := world.nearest_node(pp)
+		var cands: Array = [n0]
+		for k in world.adj[n0]:
+			cands.append(k)
+			for k2 in world.adj[k]:
+				if not cands.has(k2):
+					cands.append(k2)
+		var best_c := INF
+		for c in cands:
+			var to: Vector2 = world.node_pos[c] - pp
+			var d0 := to.length()
+			if d0 > 160.0 or dist[c] == INF:
+				continue
+			var pen := 0.0
+			if d0 > 12.0 and to.normalized().dot(fwd) < -0.2:
+				pen = 250.0
+			var cost := d0 * 1.2 + pen + dist[c]
+			if cost < best_c:
+				best_c = cost
+				start = c
+		if start < 0:
+			start = n0
+	var nodes := PackedInt32Array()
+	var u := start
+	var guard := 0
+	while u != -1 and guard < 5000:
+		# Junctions are stored as several nodes on one spot: keep one.
+		if nodes.is_empty() or world.node_pos[nodes[nodes.size() - 1]].distance_squared_to(world.node_pos[u]) > 1.0:
+			nodes.append(u)
+		u = prev[u]
+		guard += 1
+	# Road joins can leave a short back-and-forth spike in the node chain: cut it.
+	var i := 1
+	while i < nodes.size() - 1:
+		var p0: Vector2 = world.node_pos[nodes[i - 1]]
+		var p1: Vector2 = world.node_pos[nodes[i]]
+		var p2: Vector2 = world.node_pos[nodes[i + 1]]
+		if (p1 - p0).dot(p2 - p1) < 0.0 and minf(p1.distance_to(p2), p0.distance_to(p1)) < 15.0:
+			nodes.remove_at(i)
+			i = maxi(1, i - 1)
+		else:
+			i += 1
+	gps_nodes = nodes
+	gps_prev = pp
 
 func _menu_camera(delta: float) -> void:
 	# Slow low orbit around your car under studio lights, framed right of the menu.
@@ -2081,7 +2292,7 @@ func _readme_shots() -> void:
 	career.ringing = 5.0
 	hud.show_dialogue(career.answer_phone())
 	await _frames(30)
-	gps_timer = 0.0
+	gps_reset()
 	await _frames(5)
 	hud.big_map.open()
 	await get_tree().process_frame
@@ -2265,6 +2476,181 @@ func _aitest() -> void:
 			print("[ai] t=", t / 60, " kmh=", int(c.kmh), " vt=", int(ai.profile[ai.idx] * 3.6), " thr=", snappedf(c.input.throttle, 0.1), " brk=", snappedf(c.input.brake, 0.1), " st=", snappedf(c.input.steer, 0.1), " idx=", ai.idx, " off=", snappedf(r.path.at(ai.idx).distance_to(pp), 0.1), " y=", snappedf(c.global_position.y, 0.01), " gnd=", c.wheels_on_ground, " surf=", c.surface, " slip=", snappedf(c.slip_angle, 0.01), " stuck=", snappedf(ai.stuck, 0.1))
 
 # ---------------------------------------------------------------- UI test (mouse + gamepad)
+## Follows GPS routes by teleporting along them and counts reroutes (should be none
+## while on the line), then leaves the route and turns around (one reroute each).
+func _gpstest() -> void:
+	_on_play()
+	traffic.set_count(0)
+	police.enabled = false
+	var trips := [[Vector2(-420, 365), Vector2(350, -2700)], [Vector2(0, 1330), Vector2(2300, 760)], [Vector2(60, -125), Vector2(-2520, 720)], [Vector2(-750, 1500), Vector2(-480, -480)]]
+	for trip in trips:
+		var a: Vector2 = trip[0]
+		player.reset_to(world.respawn_at(Vector3(a.x, 0, a.y)))
+		custom_wp = trip[1]
+		gps_reset()
+		_update_gps(0.0)
+		var r0 := gps_reroutes
+		var first: PackedInt32Array = gps_nodes.duplicate()
+		var t0 := Time.get_ticks_usec()
+		var travelled := 0.0
+		var ticks := 0
+		var max_jump := 0
+		# Drive the planned line at ~35 m/s (8.75 m per 0.25 s tick).
+		while custom_wp != Vector2.INF and ticks < 4000:
+			ticks += 1
+			var pp := Vector2(player.global_position.x, player.global_position.z)
+			var nxt: Vector2 = custom_wp
+			for k in range(1, gps_route.size()):
+				if pp.distance_to(gps_route[k]) > 3.0:
+					nxt = gps_route[k]
+					break
+			var dir := (nxt - pp).normalized()
+			var np := pp + dir * minf(8.75, pp.distance_to(nxt) + 0.01)
+			player.global_position = Vector3(np.x, world.drive_y(np.x, np.y) + 0.6, np.y)
+			player.linear_velocity = Vector3(dir.x, 0, dir.y) * 35.0
+			travelled += pp.distance_to(np)
+			var before := gps_nodes.size()
+			gps_timer = 0.0
+			_update_gps(0.0)
+			max_jump = maxi(max_jump, before - gps_nodes.size())
+			if OS.has_environment("GPS_DEBUG") and ticks % 100 == 0:
+				print("  t=", ticks, " pp=", np.round(), " nodes=", gps_nodes.size(), " route=", gps_route.slice(0, 5), " prev=", gps_prev)
+		print("[gps] trip ", a, " -> ", trip[1], " route nodes=", first.size(), " ticks=", ticks, " km=", snappedf(travelled / 1000.0, 0.01), " reroutes=", gps_reroutes - r0, " max_skip=", max_jump, " ms/route=", snappedf((Time.get_ticks_usec() - t0) / 1000.0 / maxi(ticks, 1), 0.01), " arrived=", custom_wp == Vector2.INF)
+	# Off-route and wrong-way detection.
+	player.reset_to(world.respawn_at(Vector3(-420, 0, 365)))
+	custom_wp = Vector2(350, -2700)
+	gps_reset()
+	_update_gps(0.0)
+	var r1 := gps_reroutes
+	for i in 12:
+		gps_timer = 0.0
+		_update_gps(0.25)
+	print("[gps] standing still reroutes=", gps_reroutes - r1)
+	var off := player.global_position + Vector3(300, 0, 0)
+	player.global_position = Vector3(off.x, world.ground(off.x, off.z) + 1.0, off.z)
+	for i in 10:
+		gps_timer = 0.0
+		_update_gps(0.25)
+	print("[gps] off-route reroutes=", gps_reroutes - r1)
+	# Drive back the way the route came from: one reroute after ~3 s.
+	var r2 := gps_reroutes
+	var back := (gps_prev - (world.node_pos[gps_nodes[0]] if not gps_nodes.is_empty() else gps_goal)).normalized()
+	for i in 20:
+		var pp := Vector2(player.global_position.x, player.global_position.z) + back * 6.0
+		player.global_position = Vector3(pp.x, world.drive_y(pp.x, pp.y) + 0.6, pp.y)
+		player.linear_velocity = Vector3(back.x, 0, back.y) * 24.0
+		gps_timer = 0.0
+		_update_gps(0.25)
+		if gps_reroutes > r2:
+			print("[gps] wrong-way reroute after ", (i + 1) * 0.25, "s, new route heads ", "forward" if (world.node_pos[gps_nodes[0]] - pp).dot(back) > -5.0 or (world.node_pos[gps_nodes[1]] - pp).dot(back) > 0.0 else "BACK")
+			break
+	var dt := Time.get_ticks_usec()
+	gps_tree = []
+	_gps_reroute(Vector2(off.x, off.z), Vector2.RIGHT, custom_wp, world.nearest_node(custom_wp), true)
+	print("[gps] full reroute ms=", (Time.get_ticks_usec() - dt) / 1000.0)
+
+func _introshots() -> void:
+	Save.wipe()
+	reset_career()
+	Settings.data.time_mode = "dynamic"
+	_on_play()
+	_play_intro()
+	var marks := [[0, 3.0], [0, 7.0], [1, 2.0], [1, 6.0], [2, 3.0], [2, 5.5], [3, 1.5], [3, 4.5], [3, 5.9]]
+	for m in marks:
+		while intro and (intro.shot < int(m[0]) or (intro.shot == int(m[0]) and intro.t < float(m[1]))):
+			await get_tree().process_frame
+		if intro == null:
+			break
+		await _snap("intro_%d_%d" % [int(m[0]), int(float(m[1]) * 10.0)])
+		print("[intro] shot=", intro.shot if intro else -1, " car=", player.global_position.snapped(Vector3.ONE), " kmh=", int(player.kmh))
+	while intro:
+		await get_tree().process_frame
+	await _frames(30)
+	print("[intro] done state=", state, " tutorial=", tutorial != null, " pos=", player.global_position.snapped(Vector3.ONE))
+	await _snap("intro_after")
+
+## Plays the tutorial with simulated inputs on the airfield runway.
+func _tutorialtest() -> void:
+	Save.wipe()
+	Save.data.playtime = 0.0
+	_on_play()
+	traffic.set_count(0)
+	start_tutorial()
+	var rw: Array = []
+	for r in world.d.roads:
+		if str(r.name) == "Airfield Runway":
+			rw = r.pts
+	var a := Vector3(float(rw[0]), 0, float(rw[2]))
+	var b := Vector3(float(rw[60]), 0, float(rw[62]))
+	var dir := (b - a).normalized()
+	player.reset_to(Transform3D(Basis.looking_at(dir, Vector3.UP), Vector3(a.x, world.drive_y(a.x, a.z) + 0.7, a.z)))
+	cam.snap = true
+	var t0 := Time.get_ticks_msec()
+	var last := -1
+	var frames := 0
+	var acts := ["throttle", "brake", "steer_left", "steer_right", "nitro", "handbrake"]
+	while tutorial and frames < 60 * 120:
+		frames += 1
+		var st: int = tutorial.step
+		if st != last:
+			print("[tut] step ", st, " ", tutorial._steps()[st][0] if st < 8 else "", " at ", frames / 60.0, "s kmh=", int(player.kmh))
+			last = st
+			for k in acts:
+				Input.action_release(k)
+		var name: String = tutorial._steps()[st][0] if st < 8 else ""
+		var ft := float(frames % 600) / 60.0
+		match name:
+			"ACCELERATE":
+				Input.action_press("throttle")
+			"BRAKE":
+				Input.action_release("throttle")
+				Input.action_press("brake")
+			"STEER":
+				Input.action_release("brake")
+				Input.action_press("throttle", 0.5)
+				var left := int(frames / 50) % 2 == 0
+				Input.action_press("steer_left") if left else Input.action_release("steer_left")
+				Input.action_press("steer_right") if not left else Input.action_release("steer_right")
+			"NITROUS":
+				Input.action_release("steer_left")
+				Input.action_release("steer_right")
+				Input.action_press("throttle")
+				Input.action_press("nitro")
+			"DRIFT":
+				Input.action_release("nitro")
+				# Build speed, then steer in and stab the gas.
+				var c := fmod(ft, 3.0)
+				if c < 1.6:
+					Input.action_press("throttle") if player.kmh < 90.0 else Input.action_release("throttle")
+					Input.action_release("steer_right")
+				elif c < 1.85:
+					Input.action_press("steer_right")
+					Input.action_release("throttle")
+				else:
+					Input.action_press("steer_right")
+					Input.action_press("throttle")
+			"HANDBRAKE":
+				Input.action_press("throttle", 0.6)
+				Input.action_press("steer_left")
+				Input.action_press("handbrake") if int(frames / 30) % 2 == 0 else Input.action_release("handbrake")
+			"MAP":
+				for k in acts:
+					Input.action_release(k)
+				if not hud.big_map.visible and not tutorial.map_opened:
+					hud.big_map.open()
+				elif hud.big_map.visible and frames % 60 == 0:
+					hud.big_map.close()
+			"PHONE":
+				for k in acts:
+					Input.action_release(k)
+				if career.pending_call >= 0:
+					var lines := career.answer_phone()
+					hud.show_dialogue(lines)
+		await get_tree().physics_frame
+	for k in acts:
+		Input.action_release(k)
+	print("[tut] finished=", tutorial == null, " after ", frames / 60.0, "s  done=", Save.data.get("tutorial_done"), " police=", police.enabled, " contract_active=", not career.active.is_empty(), " ms=", Time.get_ticks_msec() - t0)
+
 func _snap(name: String) -> void:
 	for i in 6:
 		await get_tree().process_frame

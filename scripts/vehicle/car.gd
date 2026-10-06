@@ -49,6 +49,8 @@ var drift_mode := false # true only once the driver deliberately kicks the car s
 ## Gas-tap drift (player only): lift off and stab the throttle again while steering.
 var tap_drift := false
 var _tap_armed := 0.0
+var _prev_brk := 0.0
+var _brk_t := 0.0
 var _prev_thr := 0.0
 var _drift_lift_t := 0.0
 var _drift_low_t := 0.0
@@ -435,7 +437,7 @@ func set_kit(aero_lvl: int) -> void:
 		remove_child(old)
 		old.queue_free()
 	var body_id: String = stats.get("body", "concept")
-	if aero_lvl < 2 or is_police or body_id == "wedge" or body_id == "van" or body_id == "delivery":
+	if aero_lvl < 2 or is_police or body_id in ["wedge", "van", "delivery", "rsr"]:
 		return
 	var tall := aero_lvl >= 3
 	var base := Vector3(0, 0.98, 2.02) if body_id == "concept" else Vector3(0, 0.93, 2.2)
@@ -498,6 +500,8 @@ func reset_to(t: Transform3D) -> void:
 	drift_mode = false
 	_hb_t = 0.0
 	_tap_armed = 0.0
+	_prev_brk = 0.0
+	_brk_t = 0.0
 	for w in wheels:
 		w.comp = SAG
 		w.prev_comp = SAG
@@ -548,12 +552,20 @@ func _physics_step(dt: float) -> void:
 		_hb_t = maxf(0.0, _hb_t - dt)
 	# --- Drift mode: only entered on purpose, NFS-style: while steering, lift off
 	# the throttle and stab it again. The handbrake is for tight turns, not drifts.
+	# A quick brake tap while steering on the gas does the same (NFS "brake to drift").
 	var steer_in := absf(float(input.steer))
 	var thr_in := float(input.throttle)
+	var brk_in := float(input.brake)
 	_tap_armed = maxf(0.0, _tap_armed - dt)
 	if _prev_thr >= 0.45 and thr_in < 0.25:
-		_tap_armed = 0.55
-	if tap_drift and not drift_mode and _tap_armed > 0.0 and _prev_thr < 0.65 and thr_in >= 0.7 \
+		_tap_armed = 0.8
+	var gas_tap := _tap_armed > 0.0 and _prev_thr < 0.65 and thr_in >= 0.7
+	_brk_t = _brk_t + dt if brk_in > 0.4 else _brk_t
+	var brake_tap := _prev_brk > 0.4 and brk_in <= 0.4 and _brk_t < 0.6 and thr_in >= 0.7
+	if brk_in <= 0.4:
+		_brk_t = 0.0
+	_prev_brk = brk_in
+	if tap_drift and not drift_mode and (gas_tap or brake_tap) \
 			and speed > 12.0 and forward_speed > 0.0 and steer_in > 0.3 and wheels_on_ground >= 3:
 		drift_mode = true
 		_tap_armed = 0.0

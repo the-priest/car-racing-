@@ -10,10 +10,26 @@ uniform sampler2D noise_a : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D noise_b : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D noise_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float water_level = 0.0;
+// Surface texture arrays (see tools/textures/gen_textures.py for the slice order).
+// Stored sRGB but sampled raw and decoded with srgb() below: texture arrays are not
+// sRGB-decoded on every renderer, this way all of them agree.
+uniform sampler2DArray surf_albedo : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2DArray surf_nrh : filter_linear_mipmap_anisotropic, repeat_enable;
+const float L_GRASS = 1.0;
+const float L_DIRT = 2.0;
+const float L_ROCK = 3.0;
+const float L_SAND = 4.0;
+const float L_GRAVEL = 5.0;
+const float L_CONCRETE = 6.0;
+const float L_SNOW = 7.0;
 
 global uniform float wetness;
 
 varying vec3 wpos;
+
+vec3 srgb(vec3 c) {
+	return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
+}
 
 vec2 hm_uv(vec2 xz) {
 	return (xz + half_size) / (2.0 * half_size) * ((tex_size - 1.0) / tex_size) + 0.5 / tex_size;
@@ -47,6 +63,39 @@ vec3 tri_sample(sampler2D t, vec3 p, vec3 n, float s) {
 	return texture(t, p.zy * s).rgb * w.x + texture(t, p.xz * s).rgb * w.y + texture(t, p.xy * s).rgb * w.z;
 }
 
+// A ground layer seen from above: two samples at unrelated scales/rotations,
+// mixed by a noise mask, so the tile never repeats visibly. Returns albedo and
+// the world-space normal offset (xyz) + roughness (w).
+void ground_layer(float layer, vec2 xz, float scale, float mixer, out vec3 alb, out vec4 nr) {
+	vec2 uv1 = xz / scale;
+	vec2 uv2 = mat2(vec2(0.8, 0.6), vec2(-0.6, 0.8)) * xz / (scale * 2.37) + 0.37;
+	vec3 a1 = srgb(texture(surf_albedo, vec3(uv1, layer)).rgb);
+	vec3 a2 = srgb(texture(surf_albedo, vec3(uv2, layer)).rgb);
+	vec3 n1 = texture(surf_nrh, vec3(uv1, layer)).rgb;
+	vec3 n2 = texture(surf_nrh, vec3(uv2, layer)).rgb;
+	alb = mix(a1, a2, mixer);
+	vec3 t = mix(n1, n2, mixer);
+	vec2 d = t.rg * 2.0 - 1.0;
+	// UV2 is rotated: rotate its slope back so the light still comes from the right side.
+	vec2 d2 = n2.rg * 2.0 - 1.0;
+	d2 = mat2(vec2(0.8, -0.6), vec2(0.6, 0.8)) * d2;
+	d = mix(n1.rg * 2.0 - 1.0, d2, mixer);
+	nr = vec4(d.x, 0.0, -d.y, t.b);
+}
+
+// Cliff rock: triplanar, strata run horizontally on the side projections.
+void rock_layer(vec3 p, vec3 n, float scale, out vec3 alb, out vec4 nr) {
+	vec3 w = pow(abs(n), vec3(4.0));
+	w /= (w.x + w.y + w.z);
+	vec2 ux = vec2(p.z, -p.y) / scale, uy = p.xz / scale, uz = vec2(p.x, -p.y) / scale;
+	vec3 ax = srgb(texture(surf_albedo, vec3(ux, L_ROCK)).rgb), ay = srgb(texture(surf_albedo, vec3(uy, L_ROCK)).rgb), az = srgb(texture(surf_albedo, vec3(uz, L_ROCK)).rgb);
+	vec3 tx = texture(surf_nrh, vec3(ux, L_ROCK)).rgb, ty = texture(surf_nrh, vec3(uy, L_ROCK)).rgb, tz = texture(surf_nrh, vec3(uz, L_ROCK)).rgb;
+	alb = ax * w.x + ay * w.y + az * w.z;
+	vec2 dx = tx.rg * 2.0 - 1.0, dy = ty.rg * 2.0 - 1.0, dz = tz.rg * 2.0 - 1.0;
+	vec3 off = vec3(0.0, dx.y, dx.x * sign(n.x)) * w.x + vec3(dy.x, 0.0, -dy.y) * w.y + vec3(dz.x * sign(n.z), dz.y, 0.0) * w.z;
+	nr = vec4(off, tx.b * w.x + ty.b * w.y + tz.b * w.z);
+}
+
 void fragment() {
 	// Per-pixel normal from the heightmap for smooth large-scale lighting.
 	float e = 4.0;
@@ -56,48 +105,66 @@ void fragment() {
 	vec4 mk = texture(maskmap, hm_uv(wpos.xz));
 	float dist = length(wpos - CAMERA_POSITION_WORLD);
 
-	// Multi-scale noise breaks up tiling.
+	// Multi-scale noise drives where each material shows and breaks up tiling.
 	float macro = texture(noise_a, wpos.xz * 0.0011).r;
 	float mid = texture(noise_b, wpos.xz * 0.013).r;
 	float fine = texture(noise_a, wpos.xz * 0.21).r;
-	float micro = texture(noise_b, wpos.xz * 1.3).r;
+	float mixer = smoothstep(0.35, 0.65, texture(noise_b, wpos.xz * 0.02).r);
+	float rn = texture(noise_b, wpos.xz * 0.06).r;
 
-	vec3 grass_dry = vec3(0.17, 0.17, 0.06);
-	vec3 grass_lush = vec3(0.045, 0.11, 0.02);
-	vec3 grass = mix(grass_lush, grass_dry, smoothstep(0.55, 0.95, macro * 0.7 + mid * 0.5));
-	grass *= 0.7 + fine * 0.4 + micro * 0.2;
-	vec3 dirt = vec3(0.13, 0.10, 0.07) * (0.7 + fine * 0.5);
-	float rn = tri_sample(noise_b, wpos, n, 0.06).r;
-	vec3 rock = mix(vec3(0.13, 0.12, 0.11), vec3(0.3, 0.28, 0.26), rn) * (0.8 + tri_sample(noise_a, wpos, n, 0.35).r * 0.35);
-	vec3 sand = vec3(0.45, 0.39, 0.27) * (0.85 + fine * 0.25);
-	vec3 snow = vec3(0.86, 0.89, 0.93) * (0.92 + micro * 0.08);
-	vec3 gravel = vec3(0.17, 0.16, 0.14) * (0.7 + micro * 0.5 + fine * 0.2);
-	vec3 concrete = vec3(0.30, 0.30, 0.31) * (0.85 + fine * 0.2);
-
-	vec3 col = grass;
-	col = mix(col, dirt, smoothstep(0.7, 0.95, mid * 0.6 + macro * 0.5) * 0.5);
+	// Material weights (painter's order: later layers cover earlier ones).
+	float dirtw = smoothstep(0.7, 0.95, mid * 0.6 + macro * 0.5) * 0.6;
 	float rockw = smoothstep(0.22, 0.42, slope + (rn - 0.5) * 0.15);
-	col = mix(col, rock, rockw);
 	float snoww = smoothstep(300.0, 360.0, wpos.y + macro * 60.0) * (1.0 - smoothstep(0.35, 0.6, slope));
-	col = mix(col, snow, snoww);
 	float sandw = (1.0 - smoothstep(water_level + 1.0, water_level + 6.0 + mid * 3.0, wpos.y)) * smoothstep(1650.0, 1850.0, wpos.z);
-	col = mix(col, sand, sandw);
-	col = mix(col, gravel, smoothstep(0.65, 0.95, mk.r + (micro - 0.5) * 0.2));
-	col = mix(col, concrete, mk.g);
+	float gravw = smoothstep(0.65, 0.95, mk.r + (fine - 0.5) * 0.25);
+	float concw = mk.g;
+
+	vec3 alb; vec4 nr;
+	ground_layer(L_GRASS, wpos.xz, 3.0, mixer, alb, nr);
+	// Dry / lush variation across the hills.
+	float dry = smoothstep(0.5, 0.95, macro * 0.7 + mid * 0.5);
+	vec3 col = alb * mix(vec3(1.2, 1.35, 1.05), vec3(1.7, 1.4, 0.85), dry);
+	vec4 det = nr;
+	vec3 a2; vec4 n2;
+	if (dirtw > 0.01) {
+		ground_layer(L_DIRT, wpos.xz, 4.0, mixer, a2, n2);
+		col = mix(col, a2, dirtw); det = mix(det, n2, dirtw);
+	}
+	if (rockw > 0.01) {
+		rock_layer(wpos, n, 9.0, a2, n2);
+		col = mix(col, a2 * mix(vec3(1.0), vec3(0.85, 0.9, 1.0), macro), rockw); det = mix(det, n2, rockw);
+	}
+	if (snoww > 0.01) {
+		ground_layer(L_SNOW, wpos.xz, 6.0, mixer, a2, n2);
+		col = mix(col, a2, snoww); det = mix(det, n2, snoww);
+	}
+	if (sandw > 0.01) {
+		ground_layer(L_SAND, wpos.xz, 4.0, mixer, a2, n2);
+		col = mix(col, a2, sandw); det = mix(det, n2, sandw);
+	}
+	if (gravw > 0.01) {
+		ground_layer(L_GRAVEL, wpos.xz, 2.5, mixer, a2, n2);
+		col = mix(col, a2, gravw); det = mix(det, n2, gravw);
+	}
+	if (concw > 0.01) {
+		ground_layer(L_CONCRETE, wpos.xz, 3.0, mixer, a2, n2);
+		col = mix(col, a2 * 0.9, concw); det = mix(det, n2, concw);
+	}
+	// Large-scale tone variation so distant hills aren't flat.
+	col *= 0.82 + macro * 0.3 + mid * 0.12;
 
 	// Wet sand near the waterline darkens.
 	col *= 1.0 - 0.35 * (1.0 - smoothstep(water_level, water_level + 1.2, wpos.y)) * smoothstep(1650.0, 1850.0, wpos.z);
 
 	ALBEDO = col;
-	float rough = mix(0.92, 0.75, rockw) ;
-	rough = mix(rough, 0.55, snoww);
+	float rough = det.w;
 	rough = mix(rough, 0.35, wetness * (1.0 - rockw) * 0.6);
 	ROUGHNESS = rough;
 	SPECULAR = 0.35;
 
-	vec3 vn = (VIEW_MATRIX * vec4(n, 0.0)).xyz;
-	NORMAL = normalize(vn);
-	vec3 nm = texture(noise_n, wpos.xz * mix(0.25, 0.06, rockw)).rgb;
-	NORMAL_MAP = mix(vec3(0.5, 0.5, 1.0), nm, (1.0 - smoothstep(60.0, 250.0, dist)) * 0.9);
-	NORMAL_MAP_DEPTH = 1.2;
+	// Detail normals fade out with distance (mip-averaged anyway), keeping far hills smooth.
+	float near = 1.0 - smoothstep(80.0, 400.0, dist);
+	vec3 wn = normalize(n + det.xyz * mix(0.25, 0.9, near));
+	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
 }

@@ -12,6 +12,9 @@ const FOLIAGE_SHADER := preload("res://shaders/foliage.gdshader")
 const GRASS_SHADER := preload("res://shaders/grass.gdshader")
 const EMISSIVE_SHADER := preload("res://shaders/emissive.gdshader")
 const CONCRETE_SHADER := preload("res://shaders/concrete.gdshader")
+## Surface texture arrays: asphalt, grass, dirt, rock, sand, gravel, concrete, snow.
+const SURF_ALBEDO := preload("res://assets/textures/surfaces_albedo.jpg")
+const SURF_NRH := preload("res://assets/textures/surfaces_nrh.jpg")
 
 const CHUNK := 256.0
 const LAYER_WORLD := 1
@@ -374,6 +377,8 @@ func _build_terrain() -> void:
 	mat.set_shader_parameter("noise_a", noise_a)
 	mat.set_shader_parameter("noise_b", noise_b)
 	mat.set_shader_parameter("noise_n", noise_n)
+	mat.set_shader_parameter("surf_albedo", SURF_ALBEDO)
+	mat.set_shader_parameter("surf_nrh", SURF_NRH)
 	var near_mesh := _grid_mesh(32)
 	var far_mesh := _grid_mesh(8)
 	var lod_dist: float = 700.0 if q.draw < 2500.0 else 1100.0
@@ -447,6 +452,8 @@ func _road_material(width: float, lanes: int, style: int) -> ShaderMaterial:
 	m.set_shader_parameter("noise_a", noise_a)
 	m.set_shader_parameter("noise_b", noise_b)
 	m.set_shader_parameter("noise_n", noise_n)
+	m.set_shader_parameter("surf_albedo", SURF_ALBEDO)
+	m.set_shader_parameter("surf_nrh", SURF_NRH)
 	road_mats.append(m)
 	return m
 
@@ -614,6 +621,8 @@ func _build_city() -> void:
 	walk_mat.set_shader_parameter("noise_a", noise_a)
 	walk_mat.set_shader_parameter("noise_b", noise_b)
 	walk_mat.set_shader_parameter("noise_n", noise_n)
+	walk_mat.set_shader_parameter("surf_albedo", SURF_ALBEDO)
+	walk_mat.set_shader_parameter("surf_nrh", SURF_NRH)
 	var park_mat := StandardMaterial3D.new()
 	park_mat.albedo_color = Color(0.2, 0.32, 0.1)
 	park_mat.albedo_texture = noise_a
@@ -1212,6 +1221,71 @@ func route(a: int, b: int, allowed: Array = []) -> PackedInt32Array:
 	if path.is_empty() or path[0] != a:
 		return PackedInt32Array([a, b])
 	return path
+
+## Full Dijkstra from one node: [dist, prev]. Following prev from any node walks
+## the shortest way back to `b`, so one tree answers every start point (GPS).
+func route_tree(b: int) -> Array:
+	var n := node_pos.size()
+	var dist := PackedFloat32Array()
+	dist.resize(n)
+	dist.fill(INF)
+	var prev := PackedInt32Array()
+	prev.resize(n)
+	prev.fill(-1)
+	var done := PackedByteArray()
+	done.resize(n)
+	dist[b] = 0.0
+	var hk := PackedFloat32Array([0.0])
+	var hv := PackedInt32Array([b])
+	while not hv.is_empty():
+		var u := hv[0]
+		var last := hv.size() - 1
+		hk[0] = hk[last]
+		hv[0] = hv[last]
+		hk.resize(last)
+		hv.resize(last)
+		var i := 0
+		while true:
+			var l := i * 2 + 1
+			if l >= hv.size():
+				break
+			var m := l
+			if l + 1 < hv.size() and hk[l + 1] < hk[l]:
+				m = l + 1
+			if hk[m] >= hk[i]:
+				break
+			var tk := hk[i]
+			hk[i] = hk[m]
+			hk[m] = tk
+			var tv := hv[i]
+			hv[i] = hv[m]
+			hv[m] = tv
+			i = m
+		if done[u]:
+			continue
+		done[u] = 1
+		for v in adj[u]:
+			if done[v]:
+				continue
+			var nd := dist[u] + node_pos[u].distance_to(node_pos[v])
+			if nd < dist[v]:
+				dist[v] = nd
+				prev[v] = u
+				hk.append(nd)
+				hv.append(v)
+				var j := hv.size() - 1
+				while j > 0:
+					var pj := (j - 1) / 2
+					if hk[pj] <= hk[j]:
+						break
+					var tk2 := hk[pj]
+					hk[pj] = hk[j]
+					hk[j] = tk2
+					var tv2 := hv[pj]
+					hv[pj] = hv[j]
+					hv[j] = tv2
+					j = pj
+	return [dist, prev]
 
 ## A safe point on the nearest road, facing along it.
 func respawn_at(p: Vector3) -> Transform3D:

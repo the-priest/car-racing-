@@ -442,6 +442,11 @@ func _build_pause(box: VBoxContainer) -> void:
 	var career: Career = game.career
 	var chasing: bool = game.police.pursuit
 	_button(box, "RESUME", func(): back())
+	if game.tutorial:
+		_button(box, "SKIP TUTORIAL", func():
+			close_all()
+			game._on_resume()
+			game.skip_tutorial())
 	_button(box, "MAP", func():
 		close_all()
 		game._on_resume()
@@ -511,8 +516,8 @@ func _build_garage(box: VBoxContainer) -> void:
 			["NITROUS", st.nitro * st.nitro_cap, base.nitro * base.nitro_cap, 160.0, "%.0fs" % st.nitro_cap]]:
 		box.add_child(_stat_bar(row[0], float(row[1]) / float(row[3]), float(row[2]) / float(row[3]), row[4]))
 	if not owned.has(garage_sel) and not Data.unlocked(garage_sel, int(Save.data.contract)):
-		var need := int(Data.TIER_UNLOCK.get(sel.tier, 0))
-		_text(box, "LOCKED - finish story chapter %d (%s) to unlock tier %s." % [need, Career.CONTRACTS[need - 1].title, sel.tier], 17, ACCENT)
+		var need := Data.unlock_chapter(garage_sel)
+		_text(box, "LOCKED - finish story chapter %d (%s) to unlock it." % [need, Career.CONTRACTS[need - 1].title], 17, ACCENT)
 	elif not owned.has(garage_sel):
 		_button(box, "BUY  $%s" % HUD._fmt(int(sel.price)), func():
 			if int(Save.data.cash) >= int(sel.price):
@@ -702,6 +707,17 @@ func _build_settings(box: VBoxContainer) -> void:
 				cycle.call(1)
 				b.accept_event())
 	match settings_tab:
+		0:
+			if game.tutorial == null and (game.state == game.State.PAUSED or game.state == game.State.MENU):
+				var queued: bool = game.state == game.State.MENU and not bool(Save.data.get("tutorial_done", true))
+				_button(box, "REPLAY TUTORIAL" + ("  ·  starts when you drive" if queued else ""), func():
+					if game.state == game.State.PAUSED:
+						close_all()
+						game._on_resume()
+						game.start_tutorial()
+					else:
+						Save.data.tutorial_done = false
+						show_screen("settings", false))
 		1:
 			_text(box, "Low uses the lightweight OpenGL renderer for older laptops. Ultra adds real-time global illumination, reflections, volumetric fog, 8K shadows and dense grass.", 14)
 		2:

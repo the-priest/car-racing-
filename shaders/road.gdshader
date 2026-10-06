@@ -10,10 +10,18 @@ uniform sampler2D noise_a : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D noise_b : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D noise_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 asphalt_tint : source_color = vec3(0.075, 0.075, 0.08);
+// Stored sRGB but sampled raw and decoded with srgb() below: texture arrays are not
+// sRGB-decoded on every renderer, this way all of them agree.
+uniform sampler2DArray surf_albedo : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2DArray surf_nrh : filter_linear_mipmap_anisotropic, repeat_enable;
 
 global uniform float wetness;
 
 varying vec3 wpos;
+
+vec3 srgb(vec3 c) {
+	return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
+}
 
 void vertex() {
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -29,7 +37,15 @@ void fragment() {
 	float n1 = texture(noise_a, wpos.xz * 0.35).r;
 	float n2 = texture(noise_b, wpos.xz * 0.045).r;
 	float n3 = texture(noise_a, wpos.xz * 2.7).r;
-	vec3 col = asphalt_tint * (0.75 + n1 * 0.35 + n3 * 0.25) * (0.85 + n2 * 0.3);
+	// Real asphalt texture in road space (runs along the road), two scales mixed.
+	vec2 ruv = vec2(x, y) / 2.6;
+	vec2 ruv2 = vec2(y, -x) / 6.1 + 0.41;
+	float mixer = smoothstep(0.3, 0.7, texture(noise_b, wpos.xz * 0.02).r);
+	vec3 tex = mix(srgb(texture(surf_albedo, vec3(ruv, 0.0)).rgb), srgb(texture(surf_albedo, vec3(ruv2, 0.0)).rgb), mixer);
+	vec3 trh1 = texture(surf_nrh, vec3(ruv, 0.0)).rgb;
+	vec3 trh = mix(trh1, texture(surf_nrh, vec3(ruv2, 0.0)).rgb, mixer);
+	// The texture is authored around a 0.07 grey; per-road tints shift it.
+	vec3 col = tex * (asphalt_tint / 0.075) * (0.85 + n2 * 0.3);
 	// Patches and tar seams
 	float patch = smoothstep(0.62, 0.66, texture(noise_b, wpos.xz * 0.012 + 7.0).r);
 	col = mix(col, col * 0.7, patch * 0.6);
@@ -86,8 +102,8 @@ void fragment() {
 	float wet = clamp(wetness * 0.8 + puddle, 0.0, 1.0);
 	col *= mix(1.0, 0.55, wet * (1.0 - paint * 0.5));
 	ALBEDO = col;
-	ROUGHNESS = mix(mix(0.82, 0.55, paint), 0.05, wet * mix(0.75, 1.0, puddle));
+	ROUGHNESS = mix(mix(trh.b, 0.55, paint), 0.05, wet * mix(0.75, 1.0, puddle));
 	SPECULAR = 0.5;
-	NORMAL_MAP = mix(texture(noise_n, wpos.xz * 0.6).rgb, vec3(0.5, 0.5, 1.0), max(paint * 0.6, puddle));
-	NORMAL_MAP_DEPTH = 0.6;
+	NORMAL_MAP = mix(vec3(trh1.rg, 1.0), vec3(0.5, 0.5, 1.0), max(paint * 0.7, puddle));
+	NORMAL_MAP_DEPTH = 0.7;
 }

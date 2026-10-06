@@ -65,6 +65,21 @@ const BODIES := {
 		],
 		"n_body": 4.5, "n_cabin": 3.2, "scoop": false, "round_lights": false, "chrome": false, "wing": true,
 	},
+	# Rear-engined endurance racer for the road (911 RSR spirit): low sloping
+	# nose with frog-eye lamps, teardrop roof, wide rear hips, swan-neck wing.
+	"rsr": {
+		"wheel_r": 0.35, "wheel_front": -1.2, "wheel_rear": 1.27, "track": 0.84,
+		"body": [
+			[-2.24, 0.8, 0.3, 0.5], [-2.08, 0.92, 0.25, 0.6], [-1.7, 0.96, 0.24, 0.68], [-1.15, 0.96, 0.24, 0.76],
+			[-0.55, 0.94, 0.24, 0.82], [0.25, 0.95, 0.24, 0.86], [0.8, 1.04, 0.24, 0.9], [1.55, 1.06, 0.26, 0.9],
+			[2.05, 1.02, 0.28, 0.86], [2.36, 0.94, 0.3, 0.78],
+		],
+		"cabin": [
+			[-0.72, 0.78, 0.84], [-0.22, 0.7, 1.22], [0.22, 0.67, 1.26], [0.85, 0.64, 1.12], [1.6, 0.66, 0.9],
+		],
+		"n_body": 4.0, "n_cabin": 3.0, "scoop": false, "round_lights": true, "chrome": false, "wing": true,
+		"lamp_z": -1.72, "wing_y": 1.16, "wing_w": 1.86, "splitter": true,
+	},
 	# Plain delivery van for traffic.
 	"delivery": {
 		"wheel_r": 0.38, "wheel_front": -1.65, "wheel_rear": 1.55, "track": 0.84,
@@ -233,7 +248,31 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 	brake.resource_name = "Brakelight"
 	var lamp_y := _interp(keys, zf + 0.15, 3) - 0.18
 	for sx in [-1.0, 1.0]:
-		if def.round_lights:
+		if def.has("lamp_z"):
+			# Frog-eye lamps up on the front wings, tilted with the bonnet.
+			var lz: float = def.lamp_z
+			var bez := CylinderMesh.new()
+			bez.top_radius = 0.135
+			bez.bottom_radius = 0.135
+			bez.height = 0.05
+			var rim := MeshInstance3D.new()
+			rim.mesh = bez
+			rim.material_override = dark
+			rim.rotation_degrees = Vector3(62, 0, 0)
+			rim.position = Vector3(sx * _interp(keys, lz, 1) * 0.66, _interp(keys, lz, 3) - 0.03, lz - 0.02)
+			root.add_child(rim)
+			var cyl2 := CylinderMesh.new()
+			cyl2.top_radius = 0.11
+			cyl2.bottom_radius = 0.11
+			cyl2.height = 0.06
+			var l2 := MeshInstance3D.new()
+			l2.name = "Headlamp"
+			l2.mesh = cyl2
+			l2.material_override = head
+			l2.rotation_degrees = Vector3(62, 0, 0)
+			l2.position = rim.position + Vector3(0, 0.01, -0.01)
+			root.add_child(l2)
+		elif def.round_lights:
 			var cyl := CylinderMesh.new()
 			cyl.top_radius = 0.11
 			cyl.bottom_radius = 0.11
@@ -279,9 +318,21 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 		amber.emission_energy_multiplier = 3.0
 		_box(root, Vector3(0, 2.46, -0.7), Vector3(0.5, 0.12, 0.25), amber)
 	if def.get("wing", false):
-		_box(root, Vector3(0, 1.08, zr - 0.25), Vector3(1.7, 0.05, 0.4), paint)
+		var wy: float = def.get("wing_y", 1.08)
+		var ww: float = def.get("wing_w", 1.7)
+		var top_y := _interp(keys, zr - 0.2, 3)
+		_box(root, Vector3(0, wy, zr - 0.25), Vector3(ww, 0.05, 0.4), paint)
+		var thin := def.has("wing_y") # race wing: slim swan-neck uprights
 		for sx in [-0.6, 0.6]:
-			_box(root, Vector3(sx, 0.98, zr - 0.2), Vector3(0.06, 0.2, 0.25), dark)
+			_box(root, Vector3(sx * (0.75 if thin else 1.0), (wy + top_y) * 0.5, zr - 0.2), Vector3(0.03 if thin else 0.06, wy - top_y + 0.02, 0.12 if thin else 0.25), dark)
+		if def.has("wing_y"):
+			for sx in [-1.0, 1.0]: # end plates
+				_box(root, Vector3(sx * ww * 0.5, wy - 0.02, zr - 0.25), Vector3(0.02, 0.2, 0.48), dark)
+	if def.get("splitter", false):
+		_box(root, Vector3(0, 0.27, zf + 0.06), Vector3(hwf * 2.1, 0.03, 0.3), dark)
+		for sx in [-1.0, 1.0]: # side skirts and a rear diffuser
+			_box(root, Vector3(sx * (_interp(keys, 0.0, 1) + 0.01), 0.3, 0.0), Vector3(0.05, 0.08, 2.0), dark)
+		_box(root, Vector3(0, 0.3, zr - 0.05), Vector3(1.4, 0.06, 0.3), dark)
 	# Wheels: realistic tyres from the merged wheel mesh, chrome or dark rims.
 	var wr: float = def.wheel_r
 	var wscale := wr / 0.38
