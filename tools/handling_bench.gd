@@ -8,11 +8,14 @@ var scenario := 0
 var log_data := {}
 var cars: Array = []
 var car_idx := 0
-const HZ := 120.0
+var HZ := 120.0
 
 const SCENARIOS := ["step_steer", "step_fast", "slow_turn", "lane_change", "gas_tap_drift", "drift_counter", "handbrake_turn", "lift_exit"]
 
 func _initialize() -> void:
+	if OS.has_environment("PHYS_HZ"):
+		Engine.physics_ticks_per_second = int(OS.get_environment("PHYS_HZ"))
+	HZ = float(Engine.physics_ticks_per_second)
 	var ground := StaticBody3D.new()
 	ground.set_meta("surface", "road")
 	var cs := CollisionShape3D.new()

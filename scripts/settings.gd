@@ -24,7 +24,7 @@ const PRESETS := {
 	"high": {
 		"renderer": "forward_plus", "scale": 1.0, "msaa": 0, "taa": true, "fxaa": false,
 		"shadow_size": 4096, "shadow_dist": 400.0, "shadow_splits": 4, "soft_shadows": 2,
-		"ssao": true, "ssr": true, "ssil": false, "sdfgi": false, "vfog": true, "glow": true,
+		"ssao": true, "ssr": true, "ssil": false, "sdfgi": false, "vfog": false, "glow": true,
 		"draw": 3500.0, "trees": 1.0, "tree_dist": 1100.0, "grass": 1, "lamp_lights": 24,
 		"lamp_shadows": false, "head_shadows": true, "lod_bias": 1.0, "traffic": 22,
 	},

@@ -537,7 +537,7 @@ func _ready() -> void:
 		bot.idx = career.race.p_idx
 		var n := 0
 		for t in 120 * 40:
-			bot.update(1.0 / 120.0, [player], career.race.countdown > 0.0)
+			bot.update(1.0 / Engine.physics_ticks_per_second, [player], career.race.countdown > 0.0)
 			await get_tree().physics_frame
 			if slip_t > 0.0:
 				n += 1
@@ -602,9 +602,9 @@ func _ready() -> void:
 			bot.idx = 2
 			var t := 0.0
 			while t < 600.0:
-				bot.update(1.0 / 120.0, [player], false)
+				bot.update(1.0 / Engine.physics_ticks_per_second, [player], false)
 				await get_tree().physics_frame
-				t += 1.0 / 120.0
+				t += 1.0 / Engine.physics_ticks_per_second
 				if bot.idx >= path.n - 4:
 					break
 			print("[balance] %s -> %s: %.0f m, %.0f s (limit %d)" % [leg[0], leg[1], path.length, t, leg[2]])
