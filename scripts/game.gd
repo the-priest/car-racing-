@@ -40,6 +40,7 @@ var profiling := false
 var showroom: Node3D
 var custom_wp := Vector2.INF # waypoint pinned on the full map
 var welcomed := false
+var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -52,6 +53,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--sliptest":
+			shots_spec = "SLIPTEST"
 		if a == "--pintest":
 			shots_spec = "PINTEST"
 		if a == "--billboardtest":
@@ -155,6 +158,23 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "SLIPTEST":
+		_on_play()
+		traffic.set_count(0)
+		police.enabled = false
+		career.start_race("ring")
+		autopilot = true
+		var bot := AIDriver.new(player, career.race.path, 0.9, 0.0)
+		bot.idx = career.race.p_idx
+		var n := 0
+		for t in 120 * 40:
+			bot.update(1.0 / 120.0, [player], career.race.countdown > 0.0)
+			await get_tree().physics_frame
+			if slip_t > 0.0:
+				n += 1
+		print("[slip] frames slipstreaming: ", n, " of ", 120 * 40)
 		get_tree().quit()
 		return
 	if shots_spec == "PINTEST":
@@ -750,7 +770,34 @@ func _physics_process(delta: float) -> void:
 	traffic.collide(player)
 	for o in others:
 		traffic.collide(o, false)
+	_slipstream(delta, others)
 	_pt("contacts", t0)
+
+## Slipstream: tucked in behind another car at speed cuts drag and refills nitrous.
+func _slipstream(delta: float, others: Array) -> void:
+	slip_t = maxf(0.0, slip_t - delta)
+	if player.speed < 25.0 or not player.on_ground:
+		return
+	var fwd := -player.global_transform.basis.z
+	var pos := player.global_position
+	var found := [false] # array so the lambda can write to it (captures are by value)
+	var check := func(p: Vector3) -> void:
+		var dv := p - pos
+		var ahead := dv.dot(fwd)
+		if ahead > 4.0 and ahead < 24.0 and absf(dv.dot(player.global_transform.basis.x)) < 1.8:
+			found[0] = true
+	for o in others:
+		if is_instance_valid(o):
+			check.call((o as Node3D).global_position)
+	for i in traffic.active_count:
+		var c: Dictionary = traffic.cars[i]
+		if c.active:
+			check.call(c.pos)
+	if found[0]:
+		# Remove ~35% of aero drag while tucked in.
+		player.apply_central_force(fwd * player.cd * player.speed * player.speed * player.mass * 0.35)
+		player.nitro = minf(1.0, player.nitro + delta * 0.05)
+		slip_t = 0.3
 
 func _pt(k: String, t0: int) -> int:
 	var t := Time.get_ticks_usec()

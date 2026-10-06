@@ -43,6 +43,7 @@ var sub_lines: Array = []
 var sub_t := 0.0
 var drift_l: Label
 var drift_m: Label
+var slip_l: Label
 var fps_l: Label
 var speedo: Speedo
 var minimap: Minimap
@@ -201,6 +202,10 @@ void fragment() {
 	db.custom_minimum_size = Vector2(400, 0)
 	db.add_child(drift_l)
 	db.add_child(drift_m)
+	slip_l = _label(18, CYAN, HORIZONTAL_ALIGNMENT_CENTER)
+	slip_l.text = "»  SLIPSTREAM  «"
+	slip_l.visible = false
+	db.add_child(slip_l)
 	root.add_child(db)
 
 	prompt_l = _label(22, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
@@ -506,6 +511,9 @@ func _update(delta: float) -> void:
 		phone_l.text = "%s INCOMING CALL\n%s  ·  %s\n[%s] Answer" % ["☎" if blink else "  ", career._caller(career.pending_call).to_upper(), career.call_title(career.pending_call), Settings.glyph("phone")]
 	var d: Dictionary = game.drift
 	drift_l.text = _fmt(int(d.chain)) if d.chain > 0 else ""
+	slip_l.visible = game.slip_t > 0.0
+	if slip_l.visible:
+		slip_l.modulate.a = 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.015)
 	drift_m.text = ("DRIFT x%d" % d.mult) if d.chain > 0 else ""
 	var vm2 := vignette.material as ShaderMaterial
 	nitro_fx = move_toward(nitro_fx, 1.0 if car.nitro_on else 0.0, delta * 3.0)
