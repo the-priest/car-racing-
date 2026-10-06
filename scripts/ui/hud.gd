@@ -63,6 +63,8 @@ var fps_l: Label
 var speedo: Speedo
 var minimap: Minimap
 var big_map: BigMap
+var map_hint: Label
+var fade_rect: ColorRect
 var vignette: ColorRect
 var nitro_fx := 0.0
 var last_beep := -1
@@ -350,9 +352,20 @@ void fragment() {
 	minimap.size = Vector2(320, 320)
 	minimap.game = g
 	root.add_child(minimap)
+	map_hint = _label(15, Color(1, 1, 1, 0.55), HORIZONTAL_ALIGNMENT_CENTER)
+	map_hint.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	map_hint.position = Vector2(24, -24)
+	map_hint.custom_minimum_size = Vector2(320, 0)
+	root.add_child(map_hint)
 	big_map = BigMap.new()
 	big_map.game = g
 	root.add_child(big_map)
+	fade_rect = ColorRect.new()
+	fade_rect.color = Color.BLACK
+	fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fade_rect.modulate.a = 0.0
+	root.add_child(fade_rect)
 	fps_l = _label(14, Color(0.6, 1, 0.9))
 	fps_l.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	fps_l.position = Vector2(-160, 2)
@@ -631,6 +644,7 @@ func _update(delta: float) -> void:
 	var police: Police = game.police
 	var career: Career = game.career
 	_update_cash(delta)
+	map_hint.text = "[%s] Map" % Settings.glyph("map")
 	if police.pursuit or police.heat > 0:
 		heat_l.text = "HEAT " + "★".repeat(police.heat) + "☆".repeat(5 - police.heat)
 	else:
@@ -1023,71 +1037,222 @@ void fragment() {
 
 class BigMap extends Control:
 	## Full-screen world map (pauses the game). Toggle with the Map button.
+	## Left stick / mouse: cursor (snaps to places). Triggers / wheel: zoom.
+	## Right stick / right-drag: pan. A / click: waypoint. X / F: fast travel.
 	var game: Node
 	var font := ThemeDB.fallback_font
+	var map_origin := Vector2.ZERO
+	var map_side := 1.0
+	var zoom := 1.0
+	var view_c := Vector2.ZERO # world position at the centre of the map view
+	var cursor_w := Vector2.INF # cursor in world space (INF = hidden)
+	var snap_i := -1 # index into _targets the cursor is snapped to
+	var _targets: Array = [] # [world_pos, name, kind]
+	var _drag := false
+	const MAX_ZOOM := 6.0
+
 	func _ready() -> void:
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		visible = false
-	var map_origin := Vector2.ZERO
-	var map_side := 1.0
-	var cursor := Vector2(-1, -1)
+
 	func open() -> void:
 		visible = true
 		get_tree().paused = true
-		cursor = Vector2(-1, -1)
+		var car: Car = game.player
+		cursor_w = Vector2(car.global_position.x, car.global_position.z)
+		view_c = cursor_w
+		zoom = 1.0
+		_build_targets()
 		queue_redraw()
-	func _to_world(sp: Vector2) -> Vector2:
-		var world: World = game.world
-		return (sp - map_origin) / map_side * (world.HALF * 2.0) - Vector2(world.HALF, world.HALF)
-	func _set_pin() -> void:
-		if cursor.x < 0.0:
-			return
-		var wp := _to_world(cursor)
-		var world: World = game.world
-		if absf(wp.x) > world.HALF or absf(wp.y) > world.HALF:
-			return
-		if game.custom_wp != Vector2.INF and game.custom_wp.distance_to(wp) < 120.0:
-			game.custom_wp = Vector2.INF # clicking the pin again removes it
-		else:
-			game.custom_wp = world.node_pos[world.nearest_node(wp)]
-		game.gps_timer = 0.0
-		game.audio.play_oneshot("beep", 1.7, -10.0)
+
 	func close() -> void:
 		visible = false
 		if game.is_playing():
 			get_tree().paused = false
+
+	func _half() -> float:
+		return game.world.HALF
+
+	func _view_size() -> float:
+		return _half() * 2.0 / zoom
+
+	func _clamp_view() -> void:
+		var h := _half()
+		var vs := _view_size()
+		var lim := maxf(h - vs * 0.5, 0.0)
+		view_c = view_c.clamp(Vector2(-lim, -lim), Vector2(lim, lim))
+
+	func _to_map(w: Vector2) -> Vector2:
+		var vs := _view_size()
+		return map_origin + (w - (view_c - Vector2(vs, vs) * 0.5)) / vs * map_side
+
+	func _to_world(sp: Vector2) -> Vector2:
+		var vs := _view_size()
+		return (sp - map_origin) / map_side * vs + view_c - Vector2(vs, vs) * 0.5
+
+	## Places you can fast travel to: your garage, races, drift zones, speed traps
+	## and named locations.
+	func _build_targets() -> void:
+		_targets.clear()
+		var career: Career = game.career
+		_targets.append([Career.LOC.home, "Home garage", "home"])
+		for m in career.race_markers:
+			_targets.append([m.pos, str(Career.RACES[m.id].name), "race"])
+		for dm in career.drift_markers:
+			_targets.append([dm.a, "Drift zone: " + str(Career.DRIFT_ZONES[dm.i].name), "drift"])
+		for i in Career.SPEED_TRAPS.size():
+			_targets.append([Career.SPEED_TRAPS[i], "Speed trap", "trap"])
+		for k in Career.LOC:
+			if k != "home" and k != "depot" and k != "west_gate":
+				_targets.append([Career.LOC[k], str(Career.LOC_NAMES[k]).capitalize(), "place"])
+
+	func _update_snap() -> void:
+		snap_i = -1
+		if cursor_w == Vector2.INF:
+			return
+		var cp := _to_map(cursor_w)
+		var best := 26.0
+		for i in _targets.size():
+			var d := _to_map(_targets[i][0]).distance_to(cp)
+			if d < best:
+				best = d
+				snap_i = i
+
+	## Why fast travel is unavailable right now ("" = allowed).
+	func _travel_block() -> String:
+		var career: Career = game.career
+		if game.police.pursuit:
+			return "Lose the cops first"
+		if career.race != null:
+			return "Not during a race"
+		if not career.active.is_empty():
+			return "Not during a job"
+		return ""
+
+	func _set_pin() -> void:
+		if cursor_w == Vector2.INF:
+			return
+		var world: World = game.world
+		var wp: Vector2 = _targets[snap_i][0] if snap_i >= 0 else cursor_w
+		if absf(wp.x) > world.HALF or absf(wp.y) > world.HALF:
+			return
+		if game.custom_wp != Vector2.INF and game.custom_wp.distance_to(wp) < 120.0:
+			game.custom_wp = Vector2.INF # selecting the pin again removes it
+		else:
+			game.custom_wp = world.node_pos[world.nearest_node(wp)]
+		game.gps_timer = 0.0
+		game.audio.play_oneshot("beep", 1.7, -10.0)
+
+	func _fast_travel() -> void:
+		if snap_i < 0:
+			return
+		var why := _travel_block()
+		if why != "":
+			game.audio.play_oneshot("beep", 0.8, -8.0)
+			return
+		var t: Array = _targets[snap_i]
+		close()
+		game.fast_travel(t[0], t[1])
+
+	func _zoom_by(f: float, anchor_w: Vector2) -> void:
+		var old_vs := _view_size()
+		zoom = clampf(zoom * f, 1.0, MAX_ZOOM)
+		var rel := (anchor_w - view_c) / old_vs
+		view_c = anchor_w - rel * _view_size()
+		_clamp_view()
+
 	func _input(event: InputEvent) -> void:
 		if not visible:
 			return
+		var handled := true
 		if event.is_action_pressed("map") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
 			close()
-			get_viewport().set_input_as_handled()
 		elif event is InputEventMouseMotion:
-			cursor = get_local_mouse_position()
-		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			cursor = get_local_mouse_position()
-			_set_pin()
-			get_viewport().set_input_as_handled()
+			if _drag:
+				view_c -= (event as InputEventMouseMotion).relative / map_side * _view_size()
+				_clamp_view()
+			cursor_w = _to_world(get_local_mouse_position())
+			handled = false
+		elif event is InputEventMouseButton and event.pressed:
+			var mb := event as InputEventMouseButton
+			cursor_w = _to_world(get_local_mouse_position())
+			_update_snap()
+			match mb.button_index:
+				MOUSE_BUTTON_LEFT:
+					_set_pin()
+				MOUSE_BUTTON_WHEEL_UP:
+					_zoom_by(1.25, cursor_w)
+				MOUSE_BUTTON_WHEEL_DOWN:
+					_zoom_by(0.8, cursor_w)
+				MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE:
+					_drag = true
+		elif event is InputEventMouseButton and not event.pressed:
+			_drag = false
 		elif event.is_action_pressed("ui_accept"):
 			_set_pin()
+		elif event.is_action_pressed("handbrake") or (event is InputEventKey and event.pressed and (event as InputEventKey).physical_keycode == KEY_F):
+			_fast_travel()
+		elif event is InputEventKey and event.pressed and (event as InputEventKey).physical_keycode in [KEY_EQUAL, KEY_KP_ADD]:
+			_zoom_by(1.5, cursor_w)
+		elif event is InputEventKey and event.pressed and (event as InputEventKey).physical_keycode in [KEY_MINUS, KEY_KP_SUBTRACT]:
+			_zoom_by(1.0 / 1.5, cursor_w)
+		else:
+			handled = false
+		if handled:
 			get_viewport().set_input_as_handled()
+
 	func _process(d: float) -> void:
 		if not visible:
 			return
-		# Left stick / D-pad moves the waypoint cursor.
+		# Left stick / D-pad / arrows move the cursor; it pushes the view along at the edges.
 		var v := Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
 		if v.length() < 0.2:
 			v = Vector2.ZERO
-		v += Vector2(Input.get_axis("ui_left", "ui_right"), Input.get_axis("ui_up", "ui_down")) if v == Vector2.ZERO else Vector2.ZERO
+		if v == Vector2.ZERO:
+			v = Vector2(Input.get_axis("ui_left", "ui_right"), Input.get_axis("ui_up", "ui_down"))
+		var vs := _view_size()
 		if v != Vector2.ZERO:
-			if cursor.x < 0.0:
-				var car: Car = game.player
-				cursor = map_origin + (Vector2(car.global_position.x, car.global_position.z) + Vector2(game.world.HALF, game.world.HALF)) / (game.world.HALF * 2.0) * map_side
-			cursor += v.limit_length(1.0) * 520.0 * d
-			cursor = cursor.clamp(map_origin, map_origin + Vector2(map_side, map_side))
+			if cursor_w == Vector2.INF:
+				cursor_w = view_c
+			cursor_w += v.limit_length(1.0) * vs * 0.5 * d
+			cursor_w = cursor_w.clamp(Vector2(-_half(), -_half()), Vector2(_half(), _half()))
+			var rel := (cursor_w - view_c) / vs
+			var edge := 0.42
+			if absf(rel.x) > edge:
+				view_c.x += (rel.x - signf(rel.x) * edge) * vs
+			if absf(rel.y) > edge:
+				view_c.y += (rel.y - signf(rel.y) * edge) * vs
+			_clamp_view()
+		# Right stick pans; triggers zoom around the cursor.
+		var pan := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
+		if pan.length() > 0.2:
+			view_c += pan.limit_length(1.0) * vs * 0.6 * d
+			_clamp_view()
+		var zt := Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) - Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT)
+		if absf(zt) > 0.1:
+			_zoom_by(exp(zt * 1.8 * d), cursor_w if cursor_w != Vector2.INF else view_c)
+		_update_snap()
 		queue_redraw()
+
+	## Label beside a map marker: flips left at the map's right edge and is skipped
+	## if it would overlap a label already drawn.
+	func _map_label(p: Vector2, txt: String, fs: int, col: Color, sz: float, rect: Rect2, placed: Array[Rect2]) -> void:
+		var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var tp := p + Vector2(sz + 8, fs * 0.35)
+		if tp.x + w > rect.end.x - 4:
+			tp.x = p.x - sz - 8 - w
+		var box := Rect2(tp + Vector2(-2, -fs), Vector2(w + 4, fs + 6))
+		if not rect.encloses(box):
+			return
+		for o in placed:
+			if o.intersects(box):
+				return
+		placed.append(box)
+		draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color.BLACK)
+		draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+
 	func _draw() -> void:
 		if game == null or game.player == null:
 			return
@@ -1098,40 +1263,78 @@ class BigMap extends Control:
 		map_origin = origin
 		map_side = side
 		var rect := Rect2(origin, Vector2(side, side))
-		draw_texture_rect(MAP_TEX, rect, false, Color(0.85, 0.85, 0.85))
+		var vs := _view_size()
+		var tex_size := Vector2(MAP_TEX.get_width(), MAP_TEX.get_height())
+		var src_pos := (view_c - Vector2(vs, vs) * 0.5 + Vector2(world.HALF, world.HALF)) / (world.HALF * 2.0) * tex_size
+		var src := Rect2(src_pos, tex_size / zoom)
+		draw_texture_rect_region(MAP_TEX, rect, src, Color(0.85, 0.85, 0.85))
 		draw_rect(rect.grow(2), Color(1, 1, 1, 0.4), false, 2.0)
-		var to_map := func(w: Vector2) -> Vector2:
-			return origin + (w + Vector2(world.HALF, world.HALF)) / (world.HALF * 2.0) * side
+		var inside := func(p: Vector2) -> bool: return rect.grow(-2).has_point(p)
 		var pol: Police = game.police
 		if pol.pursuit and pol.cooldown > 0.0 and pol.last_seen != Vector2.INF:
-			var zc: Vector2 = to_map.call(pol.last_seen)
-			var zr := Police.SEARCH_RADIUS / (world.HALF * 2.0) * side
-			draw_circle(zc, zr, Color(1, 0.1, 0.15, 0.18))
-			draw_arc(zc, zr, 0, TAU, 48, Color(1, 0.2, 0.25, 0.8), 2.0, true)
+			var zc := _to_map(pol.last_seen)
+			var zr := Police.SEARCH_RADIUS / vs * side
+			if inside.call(zc):
+				draw_circle(zc, zr, Color(1, 0.1, 0.15, 0.18))
+				draw_arc(zc, zr, 0, TAU, 48, Color(1, 0.2, 0.25, 0.8), 2.0, true)
 		var route: PackedVector2Array = game.gps_route
-		for i in range(route.size() - 1):
-			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), Color(0, 0, 0, 0.85), 8.0, true)
-		for i in range(route.size() - 1):
-			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), ROUTE_COL, 4.0, true)
+		for pass_i in 2:
+			for i in range(route.size() - 1):
+				var a := _to_map(route[i])
+				var b := _to_map(route[i + 1])
+				if inside.call(a) or inside.call(b):
+					draw_line(a, b, Color(0, 0, 0, 0.85) if pass_i == 0 else ROUTE_COL, 8.0 if pass_i == 0 else 4.0, true)
 		var car: Car = game.player
 		var pos := Vector2(car.global_position.x, car.global_position.z)
+		var placed: Array[Rect2] = []
 		for mk in HUD.map_markers(game, true):
-			var p: Vector2 = to_map.call(mk[0])
+			var p := _to_map(mk[0])
+			if not inside.call(p):
+				continue
 			var sz := 11.0 if mk[2] == "mission" else (8.0 if mk[2] in ["home", "race"] else 6.0)
 			HUD.draw_marker(self, p, mk[1], mk[2], sz)
-			if mk[3] != "":
+			if mk[3] != "" and (zoom >= 1.6 or mk[2] in ["mission", "home", "pin"]):
 				var txt: String = mk[3]
 				if mk[2] == "mission":
 					txt += "  (" + HUD.dist_text((mk[0] as Vector2).distance_to(pos)) + ")"
-				var fs := 20 if mk[2] == "mission" else 16
-				var tp := p + Vector2(sz + 8, -12 if mk[2] == "mission" else 6)
-				draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color.BLACK)
-				draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, mk[1])
+				_map_label(p, txt, 20 if mk[2] == "mission" else 16, mk[1], sz, rect, placed)
+		# Named places appear once you zoom in (after markers, so markers win any overlap).
+		if zoom >= 2.0:
+			for t in _targets:
+				if t[2] != "place":
+					continue
+				var pp2 := _to_map(t[0])
+				if inside.call(pp2):
+					draw_circle(pp2, 4.0, Color(1, 1, 1, 0.8))
+					_map_label(pp2, t[1], 15, Color(1, 1, 1, 0.85), 4.0, rect, placed)
 		var fwd := -car.global_transform.basis.z
-		var pp: Vector2 = to_map.call(pos)
-		HUD.draw_player(self, pp, atan2(fwd.x, -fwd.z), 14.0)
-		draw_string_outline(font, pp + Vector2(-20, 36), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color.BLACK)
-		draw_string(font, pp + Vector2(-20, 36), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.15, 0.9, 1.0))
+		var pp := _to_map(pos)
+		if inside.call(pp):
+			HUD.draw_player(self, pp, atan2(fwd.x, -fwd.z), 14.0)
+			draw_string_outline(font, pp + Vector2(-20, 36), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color.BLACK)
+			draw_string(font, pp + Vector2(-20, 36), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.15, 0.9, 1.0))
+		# Cursor + tooltip
+		if cursor_w != Vector2.INF:
+			var cp := _to_map(cursor_w) if snap_i < 0 else _to_map(_targets[snap_i][0])
+			var col := Color.WHITE if snap_i < 0 else ACCENT
+			draw_line(cp + Vector2(-16, 0), cp + Vector2(-6, 0), col, 2.0)
+			draw_line(cp + Vector2(6, 0), cp + Vector2(16, 0), col, 2.0)
+			draw_line(cp + Vector2(0, -16), cp + Vector2(0, -6), col, 2.0)
+			draw_line(cp + Vector2(0, 6), cp + Vector2(0, 16), col, 2.0)
+			draw_arc(cp, 11.0 if snap_i < 0 else 15.0, 0, TAU, 32, col, 2.0, true)
+			if snap_i >= 0:
+				var t: Array = _targets[snap_i]
+				var why := _travel_block()
+				var l1: String = t[1] + "   " + HUD.dist_text((t[0] as Vector2).distance_to(pos))
+				var l2 := "[%s] Waypoint    " % Settings.glyph("accept") + ("[%s] Fast travel" % (Settings.glyph("handbrake") if Settings.using_pad else "F") if why == "" else "Fast travel: " + why.to_lower())
+				var bw := maxf(font.get_string_size(l1, HORIZONTAL_ALIGNMENT_LEFT, -1, 19).x, font.get_string_size(l2, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x) + 28.0
+				var bp := cp + Vector2(22, -64)
+				bp.x = minf(bp.x, rect.end.x - bw)
+				bp.y = maxf(bp.y, rect.position.y + 4)
+				draw_rect(Rect2(bp, Vector2(bw, 56)), Color(0.02, 0.03, 0.06, 0.9))
+				draw_rect(Rect2(bp, Vector2(4, 56)), ACCENT)
+				draw_string(font, bp + Vector2(14, 24), l1, HORIZONTAL_ALIGNMENT_LEFT, -1, 19, Color.WHITE)
+				draw_string(font, bp + Vector2(14, 46), l2, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(1, 1, 1, 0.7) if why == "" else Color(1, 0.5, 0.45))
 		# Legend
 		var lx := size.x - 330.0
 		var ly := 90.0
@@ -1154,10 +1357,16 @@ class BigMap extends Control:
 		ly += 34.0
 		draw_line(Vector2(lx + 2, ly), Vector2(lx + 24, ly), ROUTE_COL, 4.0)
 		draw_string(font, Vector2(lx + 36, ly + 6), "GPS route", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
-		ly += 60.0
-		draw_string(font, Vector2(lx, ly), "[%s] Close" % Settings.glyph("map"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.7))
-		draw_string(font, Vector2(lx, ly + 28), "[%s / click] Set or clear waypoint" % ("✕" if Settings.pad_style() == "playstation" else "A") if Settings.using_pad else "[Click] Set or clear waypoint", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.6))
-		if cursor.x >= 0.0:
-			draw_line(cursor + Vector2(-14, 0), cursor + Vector2(14, 0), Color.WHITE, 2.0)
-			draw_line(cursor + Vector2(0, -14), cursor + Vector2(0, 14), Color.WHITE, 2.0)
-			draw_arc(cursor, 9.0, 0, TAU, 24, Color(1, 1, 1, 0.8), 2.0)
+		ly += 56.0
+		var pad: bool = Settings.using_pad
+		var helps := [
+			"[%s] Move cursor" % ("Left stick" if pad else "Mouse"),
+			"[%s] Zoom" % ("LT / RT" if pad else "Wheel  /  + -"),
+			"[%s] Pan" % ("Right stick" if pad else "Right-drag"),
+			"[%s] Set / clear waypoint" % (Settings.glyph("accept") if pad else "Click"),
+			"[%s] Fast travel (snap to a place)" % (Settings.glyph("handbrake") if pad else "F"),
+			"[%s] Close" % Settings.glyph("map"),
+		]
+		for h in helps:
+			draw_string(font, Vector2(lx, ly), h, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.65))
+			ly += 26.0

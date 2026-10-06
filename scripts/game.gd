@@ -70,6 +70,8 @@ func _ready() -> void:
 			shots_spec = "HUDTEST"
 		if a == "--phototest":
 			shots_spec = "PHOTOTEST"
+		if a == "--traveltest":
+			shots_spec = "TRAVELTEST"
 		if a == "--radiotest":
 			shots_spec = "RADIOTEST"
 		if a == "--probe":
@@ -251,6 +253,40 @@ func _ready() -> void:
 		drift.mult = 3
 		await _frames(40)
 		await _snap("hud_elements")
+		get_tree().quit()
+		return
+	if shots_spec == "TRAVELTEST":
+		_on_play()
+		traffic.set_count(0)
+		await _frames(30)
+		hud.big_map.open()
+		await get_tree().process_frame
+		var bm = hud.big_map
+		var target: Array = []
+		for t in bm._targets:
+			if t[2] == "race":
+				target = t
+				break
+		bm.cursor_w = (target[0] as Vector2) + Vector2(12, 8)
+		bm._zoom_by(3.0, bm.cursor_w)
+		await get_tree().process_frame
+		bm._update_snap()
+		await get_tree().process_frame
+		print("[travel] targets=", bm._targets.size(), " snapped=", bm._targets[bm.snap_i][1] if bm.snap_i >= 0 else "none", " zoom=", bm.zoom)
+		await _snap("map_zoom")
+		bm._fast_travel()
+		await _frames(60)
+		var pp := Vector2(player.global_position.x, player.global_position.z)
+		print("[travel] at=", pp, " target=", target[0], " dist=", pp.distance_to(target[0]), " y=", player.global_position.y, " map=", hud.big_map.visible, " fade=", hud.fade_rect.modulate.a)
+		await _frames(60)
+		await _snap("after_travel")
+		police.start_pursuit("TEST", 1)
+		await _frames(5)
+		hud.big_map.open()
+		await get_tree().process_frame
+		bm.cursor_w = Career.LOC.home
+		bm._update_snap()
+		print("[travel] in pursuit block=", bm._travel_block())
 		get_tree().quit()
 		return
 	if shots_spec == "RADIOTEST":
@@ -476,7 +512,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		var bm = hud.big_map
-		bm.cursor = bm.map_origin + Vector2(bm.map_side * 0.8, bm.map_side * 0.3)
+		bm.cursor_w = bm._to_world(bm.map_origin + Vector2(bm.map_side * 0.8, bm.map_side * 0.3))
+		bm._update_snap()
 		bm._set_pin()
 		await get_tree().process_frame
 		await _snap("pin_map")
@@ -795,6 +832,28 @@ func player_at_home() -> bool:
 func skip_time() -> void:
 	daynight.hour = 10.0 if daynight.night > 0.5 else 22.0
 	persist()
+
+## Fast travel from the map: fade out, drop the car on the nearest road, fade in.
+var travelling := false
+
+func fast_travel(to: Vector2, place: String) -> void:
+	if travelling or not career.idle() or police.pursuit or state != State.PLAY:
+		return
+	travelling = true
+	var tw := create_tween()
+	tw.tween_property(hud.fade_rect, "modulate:a", 1.0, 0.25)
+	await tw.finished
+	player.reset_to(world.respawn_at(Vector3(to.x, 0.0, to.y)))
+	player.linear_velocity = Vector3.ZERO
+	cam.snap = true
+	if custom_wp != Vector2.INF and custom_wp.distance_to(to) < 150.0:
+		custom_wp = Vector2.INF
+	gps_timer = 0.0
+	await _frames(6)
+	var tw2 := create_tween()
+	tw2.tween_property(hud.fade_rect, "modulate:a", 0.0, 0.45)
+	hud.message("Fast travel  ·  " + place, 2.5)
+	travelling = false
 
 func reset_to_road() -> void:
 	if career.race and career.race.countdown <= 0.0:
