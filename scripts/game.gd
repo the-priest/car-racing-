@@ -984,9 +984,9 @@ func _on_play() -> void:
 	if not first and not welcomed:
 		welcomed = true
 		hud.free_t = 0.0 # show the "NEXT" objective again
-	if intro_due and shots_spec == "":
+	if intro_due and shots_spec == "" and career.idle():
 		_play_intro()
-	elif not bool(Save.data.get("tutorial_done", false)) and tutorial == null and shots_spec == "":
+	elif not bool(Save.data.get("tutorial_done", false)) and tutorial == null and shots_spec == "" and career.idle():
 		start_tutorial()
 
 ## Opening cinematic for a new career, then straight into the tutorial.
@@ -1640,7 +1640,8 @@ func _process(delta: float) -> void:
 		_photo_camera(delta)
 		return
 	if state == State.INTRO:
-		audio.update_player(player, true, delta)
+		# Engine only while the car is on screen (coast run and the final shot).
+		audio.update_player(player, intro != null and (intro.bot != null or intro.shot >= 3), delta)
 		return
 	if state == State.MENU:
 		_menu_camera(delta)
@@ -2150,7 +2151,14 @@ func _fuzz() -> void:
 	autopilot = true
 	var counts := {}
 	for step in (int(OS.get_environment("FUZZ_STEPS")) if OS.has_environment("FUZZ_STEPS") else 600):
-		var act := randi() % 26
+		if state == State.INTRO:
+			# Let the intro play a little, or skip it like a player would.
+			if randf() < 0.5 and intro:
+				intro._skip()
+			for f in 40:
+				await get_tree().process_frame
+			continue
+		var act := randi() % 29
 		counts[act] = counts.get(act, 0) + 1
 		match act:
 			0: hud.big_map.open()
@@ -2234,6 +2242,13 @@ func _fuzz() -> void:
 					credits_pending = true
 					_on_resume()
 			25: menus.credits_done.emit()
+			26:
+				if state == State.PLAY and tutorial == null:
+					start_tutorial()
+			27: skip_tutorial()
+			28:
+				if state == State.PLAY and intro == null and randf() < 0.3:
+					_play_intro()
 		for f in 20:
 			player.input.throttle = randf() if randf() < 0.8 else 0.0
 			player.input.brake = randf() if randf() < 0.2 else 0.0
