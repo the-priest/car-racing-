@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--drifttest":
+			shots_spec = "DRIFTTEST"
 		if a == "--fuzz":
 			shots_spec = "FUZZ"
 		if a == "--raceshot":
@@ -142,6 +144,24 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "DRIFTTEST":
+		_on_play()
+		traffic.set_count(0)
+		await _frames(60)
+		for dm in career.drift_markers:
+			var cash0 := int(Save.data.cash)
+			player.reset_to(Transform3D(Basis(), career.pos3(dm.a) + Vector3(0, 0.8, 0)))
+			for f in 10:
+				player.linear_velocity = Vector3(8, player.linear_velocity.y, 0)
+				await get_tree().physics_frame
+			print("[drift] zone ", dm.i, " active=", career.drift_zone, " label=", career.waypoint_label, " d=", Vector2(player.global_position.x, player.global_position.z).distance_to(dm.a), " v=", player.speed, " idle=", career.idle(), " pursuit=", police.pursuit, " y=", player.global_position.y)
+			drift.total += 12345.0
+			player.reset_to(Transform3D(Basis(), career.pos3(dm.b) + Vector3(0, 0.8, 0)))
+			await _frames(10)
+			print("[drift]   after end: active=", career.drift_zone, " cash+", int(Save.data.cash) - cash0, " best=", Save.data.best.get("drift%d" % dm.i, 0))
+			await _frames(30)
 		get_tree().quit()
 		return
 	if shots_spec == "FUZZ":
