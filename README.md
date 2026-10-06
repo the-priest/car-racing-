@@ -87,7 +87,8 @@ World data and audio are pre-baked in `assets/`. To regenerate them: `node bake/
 | Camera / Look back | C / B | Y / R3 |
 | Answer / make a call | Tab | D-pad ↓ |
 | Full map | M | View / Touchpad |
-| Start race / Garage | E | D-pad ↑ |
+| Start race / Garage / next dialogue line | E | D-pad ↑ |
+| Horn | H | D-pad ← |
 | Reset to road | R | Hold B / Circle |
 | Pause | Esc | Start |
 
