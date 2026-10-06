@@ -143,7 +143,7 @@ func _tick() -> void:
 			sm.global_position = (w.hit_pos as Vector3) + Vector3(0, 0.25, 0)
 			du.global_position = sm.global_position
 			# Tyre smoke when sliding; a fine spray off wet roads at speed.
-			var spray := wet > 0.35 and car.speed > 14.0 and w.contact
+			var spray: bool = wet > 0.35 and car.speed > 14.0 and w.contact
 			sm.emitting = road and (skid > 0.3 or spray)
 			sm.amount_ratio = clampf(maxf(skid, wet * clampf(car.speed / 60.0, 0.0, 0.6)), 0.15, 1.0)
 			du.emitting = w.contact and not road and car.speed > 6.0

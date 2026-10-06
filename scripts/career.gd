@@ -182,6 +182,13 @@ const RACES := {
 		"pts": [[0, 0], [600, 0], [1600, 0], [800, -1420], [350, -2700], [-750, -1450], [-1620, 450], [-2680, 300], [-1600, -350], [-600, 0]], "circuit": false},
 }
 
+## Drift zones: drive from start to end scoring drift points within the time limit.
+const DRIFT_ZONES := [
+	{"name": "Summit Switchbacks", "a": Vector2(620, -1950), "b": Vector2(350, -2700), "roads": ["pass"], "time": 120.0},
+	{"name": "Midtown Slide", "a": Vector2(480, 480), "b": Vector2(-480, -120), "roads": ["city"], "time": 90.0},
+	{"name": "Valley Sweepers", "a": Vector2(-2050, 420), "b": Vector2(-2680, 300), "roads": ["country"], "time": 100.0},
+]
+
 const SPEED_TRAPS := [Vector2(1580, 400), Vector2(-1350, 1150), Vector2(0, -1050), Vector2(2300, 0), Vector2(750, 1450), Vector2(-1600, -350)]
 
 var game: Node
@@ -207,6 +214,10 @@ var last_failed: Dictionary = {}
 var kane_pending := 0.0
 var alarm_sent := false
 var wait_left := -1.0
+var drift_markers: Array = [] # {i, a, b, node}
+var drift_zone := -1 # active zone index
+var drift_zone_t := 0.0
+var drift_zone_base := 0.0
 
 func setup(g: Node, w: World) -> void:
 	game = g
@@ -226,6 +237,14 @@ func setup(g: Node, w: World) -> void:
 		m.position = pos3(world.node_pos[nid])
 		add_child(m)
 		race_markers.append({"id": id, "node": m, "pos": world.node_pos[nid]})
+	for i in DRIFT_ZONES.size():
+		var z: Dictionary = DRIFT_ZONES[i]
+		var a2: Vector2 = world.node_pos[world.nearest_node(z.a, z.roads)]
+		var b2: Vector2 = world.node_pos[world.nearest_node(z.b, z.roads)]
+		var dm := _beam(Color(1.0, 0.55, 0.1), 2.6)
+		dm.position = pos3(a2)
+		add_child(dm)
+		drift_markers.append({"i": i, "a": a2, "b": b2, "node": dm})
 	# Speed camera poles at each trap.
 	var pole_m := StandardMaterial3D.new()
 	pole_m.albedo_color = Color(0.25, 0.26, 0.28)
@@ -308,6 +327,9 @@ func update(dt: float) -> void:
 	home_marker.visible = idle()
 	for m in race_markers:
 		m.node.visible = idle()
+	for dm in drift_markers:
+		dm.node.visible = idle() and drift_zone < 0
+	_update_drift_zone(dt, pp)
 	# Incoming calls when idle (not mid-pursuit: the fixer waits until you're clean).
 	if idle() and pending_call < 0 and not game.police.pursuit:
 		call_timer -= dt
@@ -352,6 +374,53 @@ func update(dt: float) -> void:
 	beacon.visible = waypoint != Vector2.INF and target == null
 	if beacon.visible:
 		beacon.position = pos3(waypoint)
+
+func drift_zone_score() -> int:
+	return int(game.drift.total + game.drift.chain - drift_zone_base)
+
+func _update_drift_zone(dt: float, pp: Vector2) -> void:
+	if drift_zone < 0:
+		if not idle() or game.police.pursuit:
+			return
+		for dm in drift_markers:
+			if pp.distance_to(dm.a) < 14.0 and game.player.speed > 5.0:
+				drift_zone = dm.i
+				drift_zone_t = float(DRIFT_ZONES[dm.i].time)
+				drift_zone_base = game.drift.total + game.drift.chain
+				waypoint = dm.b
+				waypoint_label = "Drift to the end of " + str(DRIFT_ZONES[dm.i].name)
+				big.emit("DRIFT ZONE", 1.5)
+				message.emit("%s - drift all the way to the end" % DRIFT_ZONES[dm.i].name, 3.0)
+				game.audio.play_oneshot("beep", 1.5)
+				return
+		return
+	var dmk: Dictionary = drift_markers[drift_zone]
+	drift_zone_t -= dt
+	if not idle() or game.police.pursuit:
+		message.emit("Drift zone cancelled", 2.0)
+		_end_drift_zone()
+		return
+	if drift_zone_t <= 0.0:
+		message.emit("Drift zone: out of time", 2.5)
+		_end_drift_zone()
+		return
+	if pp.distance_to(dmk.b) < 16.0:
+		var score := drift_zone_score()
+		var key := "drift%d" % drift_zone
+		var best: int = int(Save.data.best.get(key, 0))
+		var cash := score / 15
+		Save.add_cash(cash)
+		big.emit("DRIFT ZONE  %s" % HUD._fmt(score), 2.5)
+		message.emit(("NEW BEST! " if score > best else "Best %s  ·  " % HUD._fmt(best)) + "+$%s" % HUD._fmt(cash), 3.5)
+		if score > best:
+			Save.data.best[key] = score
+		Save.save_game()
+		game.audio.play_oneshot("reward")
+		_end_drift_zone()
+
+func _end_drift_zone() -> void:
+	drift_zone = -1
+	waypoint = Vector2.INF
 
 func _caller(idx: int) -> String:
 	if idx >= 100:

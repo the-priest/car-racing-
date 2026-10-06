@@ -396,6 +396,9 @@ func _update(delta: float) -> void:
 		timer_l.text = _time(career.time_left) if career.time_left < INF else ""
 		if career.wait_left >= 0.0:
 			timer_l.text = "%d" % int(ceil(career.wait_left))
+	elif career.drift_zone >= 0:
+		obj_l.text = "▶ DRIFT ZONE  ·  %s\n%s pts   %s" % [Career.DRIFT_ZONES[career.drift_zone].name.to_upper(), _fmt(career.drift_zone_score()), dist_text(career.waypoint.distance_to(pp2))]
+		timer_l.text = _time(career.drift_zone_t)
 	elif career.race == null and not police.pursuit:
 		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
 		timer_l.text = ""
@@ -518,6 +521,8 @@ static func map_markers(game: Node, full: bool) -> Array:
 		for m2 in career.race_markers:
 			out.append([m2.pos, Color(0.3, 0.75, 1.0), "race", str(Career.RACES[m2.id].name)])
 	if free or full:
+		for dm in career.drift_markers:
+			out.append([dm.a, Color(1.0, 0.55, 0.1), "drift", str(Career.DRIFT_ZONES[dm.i].name) if full else ""])
 		for tp in Career.SPEED_TRAPS:
 			out.append([tp, Color(0.95, 0.95, 0.95), "trap", "Speed trap" if full else ""])
 	if career.race:
@@ -743,7 +748,7 @@ class BigMap extends Control:
 			obj = "Race in progress"
 		draw_multiline_string(font, Vector2(lx, ly + 10), obj, HORIZONTAL_ALIGNMENT_LEFT, 300, 18, -1, Color(1, 0.85, 0.3))
 		ly += 110.0
-		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.95, 0.95, 0.95), "Speed trap"]]
+		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.95, 0.95, 0.95), "Speed trap"], ["drift", Color(1.0, 0.55, 0.1), "Drift zone"]]
 		for e in legend:
 			HUD.draw_marker(self, Vector2(lx + 12, ly), e[1], e[0], 8.0)
 			draw_string(font, Vector2(lx + 36, ly + 6), e[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
