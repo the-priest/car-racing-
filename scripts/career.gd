@@ -216,6 +216,8 @@ var kane_pending := 0.0
 var alarm_sent := false
 var wait_left := -1.0
 var drift_markers: Array = [] # {i, a, b, node}
+var billboards: Array = [] # {i, pos: Vector3, node}
+const BILLBOARD_COUNT := 20
 var drift_zone := -1 # active zone index
 var drift_zone_t := 0.0
 var drift_zone_base := 0.0
@@ -246,6 +248,7 @@ func setup(g: Node, w: World) -> void:
 		dm.position = pos3(a2)
 		add_child(dm)
 		drift_markers.append({"i": i, "a": a2, "b": b2, "node": dm})
+	_build_billboards()
 	# Speed camera poles at each trap.
 	var pole_m := StandardMaterial3D.new()
 	pole_m.albedo_color = Color(0.25, 0.26, 0.28)
@@ -331,6 +334,7 @@ func update(dt: float) -> void:
 	for dm in drift_markers:
 		dm.node.visible = idle() and drift_zone < 0
 	_update_drift_zone(dt, pp)
+	_update_billboards()
 	# Incoming calls when idle (not mid-pursuit: the fixer waits until you're clean).
 	if idle() and pending_call < 0 and not game.police.pursuit:
 		call_timer -= dt
@@ -375,6 +379,79 @@ func update(dt: float) -> void:
 	beacon.visible = waypoint != Vector2.INF and target == null
 	if beacon.visible:
 		beacon.position = pos3(waypoint)
+
+## Hidden smashable billboards beside roads across the map (same layout every game).
+func _build_billboards() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2024
+	var frame_m := StandardMaterial3D.new()
+	frame_m.albedo_color = Color(0.2, 0.21, 0.23)
+	frame_m.metallic = 0.5
+	var colors := [Color(1.0, 0.45, 0.1), Color(0.1, 0.8, 1.0), Color(1.0, 0.2, 0.6), Color(0.6, 1.0, 0.2)]
+	var found: Array = Save.data.get("billboards", []).map(func(x): return int(x))
+	var placed := 0
+	var tries := 0
+	while placed < BILLBOARD_COUNT and tries < 2000:
+		tries += 1
+		var id := rng.randi() % world.node_pos.size()
+		var np := world.node_pos[id]
+		var t := world.node_type_name(id)
+		if t == "runway" or world.adj[id].is_empty():
+			continue
+		var too_close := false
+		for b in billboards:
+			if Vector2(b.pos.x, b.pos.z).distance_to(np) < 450.0:
+				too_close = true
+		if too_close:
+			continue
+		var nb := world.node_pos[world.adj[id][0]]
+		var dir := (nb - np).normalized()
+		var side := Vector2(-dir.y, dir.x) * (11.0 if t == "city" else 13.0)
+		var p2 := np + side
+		var base := pos3(p2)
+		var root := Node3D.new()
+		root.position = base
+		root.rotation.y = atan2(-dir.x, -dir.y)
+		add_child(root)
+		var panel_m := StandardMaterial3D.new()
+		var col: Color = colors[placed % colors.size()]
+		panel_m.albedo_color = col.darkened(0.3)
+		panel_m.emission_enabled = true
+		panel_m.emission = col
+		panel_m.emission_energy_multiplier = 1.4
+		for spec in [[Vector3(-1.6, 2.2, 0), Vector3(0.18, 4.4, 0.18), frame_m], [Vector3(1.6, 2.2, 0), Vector3(0.18, 4.4, 0.18), frame_m],
+				[Vector3(0, 4.6, 0), Vector3(4.6, 2.2, 0.2), panel_m], [Vector3(0, 4.6, 0.12), Vector3(3.6, 0.35, 0.05), frame_m]]:
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = spec[1]
+			mi.mesh = bm
+			mi.material_override = spec[2]
+			mi.position = spec[0]
+			root.add_child(mi)
+		root.visible = not found.has(placed)
+		billboards.append({"i": placed, "pos": base, "node": root})
+		placed += 1
+
+func _update_billboards() -> void:
+	var p: Car = game.player
+	if p.speed < 12.0:
+		return
+	for b in billboards:
+		if not b.node.visible:
+			continue
+		if p.global_position.distance_to(b.pos + Vector3(0, 1.0, 0)) < 5.0:
+			b.node.visible = false
+			var found: Array = Save.data.get("billboards", []).map(func(x): return int(x))
+			if not found.has(b.i):
+				found.append(b.i)
+				Save.data.billboards = found
+			Save.add_cash(2000)
+			Save.save_game()
+			game.audio.play_oneshot("impact", 1.3)
+			game.audio.play_oneshot("reward")
+			game.cam.shake = maxf(game.cam.shake, 0.4)
+			big.emit("BILLBOARD  %d / %d" % [found.size(), BILLBOARD_COUNT], 1.8)
+			message.emit("+$2,000", 2.0)
 
 func drift_zone_score() -> int:
 	return int(game.drift.total + game.drift.chain - drift_zone_base)

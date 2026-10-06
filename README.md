@@ -30,7 +30,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - running down a traitor
   - a final heist on the Federal Reserve
 
-  Between and after story jobs: side jobs, 7 street races, 6 speed traps and 3 drift zones (each tracks your best).
+  Between and after story jobs: side jobs, 7 street races, 6 speed traps, 3 drift zones (each tracks your best) and 20 hidden billboards to smash.
 - **Legendary police pursuits** with 5 heat levels:
   - patrols and dispatch radio chatter that names where you are and which way you're heading
   - reinforcements that cut you off from ahead, PIT rams, and roadblocks you can smash through

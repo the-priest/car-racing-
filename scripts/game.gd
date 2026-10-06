@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--billboardtest":
+			shots_spec = "BILLBOARDS"
 		if a == "--balancetest":
 			shots_spec = "BALANCE"
 		if a == "--remaptest":
@@ -149,6 +151,21 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "BILLBOARDS":
+		Save.data.billboards = []
+		_on_play()
+		traffic.set_count(0)
+		police.enabled = false
+		await _frames(60)
+		print("[bb] placed ", career.billboards.size())
+		for b in career.billboards:
+			player.reset_to(Transform3D(Basis(), b.pos + Vector3(0, 0.8, 4.0)))
+			for f in 6:
+				player.linear_velocity = Vector3(0, 0, -20)
+				await get_tree().physics_frame
+		print("[bb] found ", Save.data.billboards.size(), " cash ", Save.data.cash)
 		get_tree().quit()
 		return
 	if shots_spec == "BALANCE":

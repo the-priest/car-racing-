@@ -769,6 +769,7 @@ func _build_records(box: VBoxContainer) -> void:
 	for i in Career.SPEED_TRAPS.size():
 		var k := int(best.get("trap%d" % i, 0))
 		row.call("Speed trap %d" % (i + 1), ("%d km/h" % k) if k > 0 else "-", ACCENT if k > 0 else Color(1, 1, 1, 0.35))
+	row.call("Billboards smashed", "%d / %d" % [Save.data.get("billboards", []).size(), Career.BILLBOARD_COUNT])
 	row.call("Races won", str(int(Save.data.races_won)))
 	row.call("Police escapes", str(int(Save.data.heat_escapes)))
 	row.call("Time played", HUD._time(float(Save.data.playtime)).split(".")[0])
