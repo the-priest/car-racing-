@@ -281,7 +281,7 @@ func setup(g: Node, w: World) -> void:
 		add_child(box)
 
 func pos3(p: Vector2) -> Vector3:
-	var y := 0.05 if world.in_city(p.x, p.y) else world.ground(p.x, p.y)
+	var y := world.drive_y(p.x, p.y)
 	return Vector3(p.x, y, p.y)
 
 func _beam(c: Color, radius: float) -> MeshInstance3D:
@@ -511,7 +511,7 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 				waypoint = dm.b
 				waypoint_label = "Drift to the end of " + str(DRIFT_ZONES[dm.i].name)
 				big.emit("DRIFT ZONE", 1.5)
-				game.tip("drift", "Drift zone: score drift points before you reach the end gate. Tap the handbrake while steering to start a slide.")
+				game.tip("drift", "Drift zone: score drift points before you reach the end gate. While steering, lift off the throttle and stab it again to start a drift.")
 				message.emit("%s - drift all the way to the end" % DRIFT_ZONES[dm.i].name, 3.0)
 				game.audio.play_oneshot("beep", 1.5)
 				return

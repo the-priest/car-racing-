@@ -100,11 +100,200 @@ func _load_data() -> void:
 	streets = d.streets
 	var hb := FileAccess.get_file_as_bytes("res://assets/world/height.bin")
 	heights = hb.to_float32_array()
+	_fix_road_joins()
+	_fit_terrain_to_roads()
+	hb = heights.to_byte_array()
 	var himg := Image.create_from_data(N, N, false, Image.FORMAT_RF, hb)
 	height_tex = ImageTexture.create_from_image(himg)
 	var mb := FileAccess.get_file_as_bytes("res://assets/world/mask.bin")
 	var mimg := Image.create_from_data(N, N, false, Image.FORMAT_RG8, mb)
 	mask_tex = ImageTexture.create_from_image(mimg)
+
+# ---------------------------------------------------------------- road/terrain fit
+## Per-vertex change made by _fit_terrain_to_roads (lamps and trees follow it).
+var height_delta: PackedFloat32Array
+const JOIN_RAMP := 180.0
+
+## Surface a road end joins at (x, z): [h, grad] where h is the deck height (the
+## ribbon sits 0.07 above) and grad its slope per metre (Vector2 in x/z), from the
+## city street plane or another road's deck within reach metres of its edge.
+## Empty if none.
+func _join_surface(ri: int, x: float, z: float, reach: float) -> Array:
+	var ce: float = d.cityEdge
+	if absf(x) <= ce + 0.5 and absf(z) <= ce + 0.5:
+		return [-0.04, Vector2.ZERO]
+	var roads: Array = d.roads
+	var best := []
+	var best_d := INF
+	for rj in roads.size():
+		if rj == ri:
+			continue
+		var r: Dictionary = roads[rj]
+		var pts: Array = r.pts
+		var hw: float = r.hw
+		var n := pts.size() / 3
+		var last := n if r.closed else n - 1
+		var m := hw + reach
+		for i in last:
+			var j := (i + 1) % n
+			var ax: float = pts[i * 3]
+			var az: float = pts[i * 3 + 2]
+			var bx: float = pts[j * 3]
+			var bz: float = pts[j * 3 + 2]
+			if minf(ax, bx) - m > x or maxf(ax, bx) + m < x or minf(az, bz) - m > z or maxf(az, bz) + m < z:
+				continue
+			var tx := bx - ax
+			var tz := bz - az
+			var l2 := tx * tx + tz * tz
+			if l2 < 1e-6:
+				continue
+			var t := clampf(((x - ax) * tx + (z - az) * tz) / l2, 0.0, 1.0)
+			var dd := Vector2(x - (ax + tx * t), z - (az + tz * t)).length()
+			# Nearest deck segment wins: on a steep road a segment a few metres
+			# along is already a different height.
+			if dd <= m and dd < best_d:
+				var ha: float = pts[i * 3 + 1]
+				var hb: float = pts[j * 3 + 1]
+				var len := sqrt(l2)
+				best_d = dd
+				best = [lerpf(ha, hb, t), Vector2(tx, tz) / len * ((hb - ha) / len)]
+	return best
+
+## Road ends must meet the surface they join at the same height (some ended in
+## metre-high ledges, which cars drove under and got stuck). Points on or just
+## short of the joined deck are snapped onto it and banked to its slope, then the
+## height difference and bank ramp out along the road.
+var road_bank := {} # road index -> PackedFloat32Array, cross-slope per metre (left is +)
+const JOIN_REACH := 10.0
+const BANK_RAMP := 50.0
+
+func _fix_road_joins() -> void:
+	var roads: Array = d.roads
+	for ri in roads.size():
+		var r: Dictionary = roads[ri]
+		var pts: Array = r.pts
+		var n := pts.size() / 3
+		var bank := PackedFloat32Array()
+		bank.resize(n)
+		road_bank[ri] = bank
+		if r.closed:
+			continue
+		for from_end in [false, true]:
+			var order := []
+			for k in n:
+				order.append(n - 1 - k if from_end else k)
+			var last_in := -1
+			var delta := 0.0
+			var last_bank := 0.0
+			for k in order.size():
+				var i: int = order[k]
+				var hit := _join_surface(ri, pts[i * 3], pts[i * 3 + 2], JOIN_REACH)
+				if hit.is_empty():
+					break
+				var target: float = hit[0]
+				delta = target - float(pts[i * 3 + 1])
+				pts[i * 3 + 1] = target
+				# Cross-slope of the deck along this road's left direction.
+				var a := clampi(i - 1, 0, n - 1)
+				var b := clampi(i + 1, 0, n - 1)
+				var dir := Vector2(float(pts[b * 3]) - float(pts[a * 3]), float(pts[b * 3 + 2]) - float(pts[a * 3 + 2])).normalized()
+				last_bank = (hit[1] as Vector2).dot(Vector2(-dir.y, dir.x))
+				bank[i] = last_bank
+				last_in = k
+			if last_in < 0:
+				continue
+			var dist := 0.0
+			for k in range(last_in + 1, order.size()):
+				var i: int = order[k]
+				var pi: int = order[k - 1]
+				dist += Vector2(float(pts[i * 3]) - float(pts[pi * 3]), float(pts[i * 3 + 2]) - float(pts[pi * 3 + 2])).length()
+				if dist >= JOIN_RAMP:
+					break
+				pts[i * 3 + 1] = float(pts[i * 3 + 1]) + delta * (1.0 - smoothstep(0.0, JOIN_RAMP, dist))
+				bank[i] = last_bank * (1.0 - smoothstep(0.0, BANK_RAMP, dist))
+
+## Flatten the terrain under and beside every road to the road's own height, and
+## never let it rise above the deck anywhere a road triangle could reach. The
+## terrain collision used to poke up to a metre through road edges and junctions
+## (hidden by the road mesh: the "invisible" snags).
+func _fit_terrain_to_roads() -> void:
+	var count := N * N
+	var best_e := PackedFloat32Array()
+	best_e.resize(count)
+	best_e.fill(INF)
+	var best_h := PackedFloat32Array()
+	best_h.resize(count)
+	var cap := PackedFloat32Array()
+	cap.resize(count)
+	cap.fill(INF)
+	const REACH := 16.0
+	const CAP_REACH := 12.0 # > one heightmap cell diagonal (8 m * sqrt 2)
+	for ri in d.roads.size():
+		var r: Dictionary = d.roads[ri]
+		var pts: Array = r.pts
+		var hw: float = r.hw
+		var bank: PackedFloat32Array = road_bank[ri]
+		var n := pts.size() / 3
+		var last := n if r.closed else n - 1
+		for i in last:
+			var j := (i + 1) % n
+			var a := Vector3(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2])
+			var b := Vector3(pts[j * 3], pts[j * 3 + 1], pts[j * 3 + 2])
+			var m := hw + REACH
+			var i0 := maxi(0, floori((minf(a.x, b.x) - m + HALF) / CELL))
+			var i1 := mini(N - 1, ceili((maxf(a.x, b.x) + m + HALF) / CELL))
+			var j0 := maxi(0, floori((minf(a.z, b.z) - m + HALF) / CELL))
+			var j1 := mini(N - 1, ceili((maxf(a.z, b.z) + m + HALF) / CELL))
+			var tx := b.x - a.x
+			var tz := b.z - a.z
+			var l2 := maxf(tx * tx + tz * tz, 1e-6)
+			for gj in range(j0, j1 + 1):
+				var z := -HALF + gj * CELL
+				for gi in range(i0, i1 + 1):
+					var x := -HALF + gi * CELL
+					var t := clampf(((x - a.x) * tx + (z - a.z) * tz) / l2, 0.0, 1.0)
+					var dd := Vector2(x - (a.x + tx * t), z - (a.z + tz * t)).length()
+					var e := dd - hw
+					if e > REACH:
+						continue
+					# Deck height here, including any bank (clamped to the deck width).
+					var sl := (x - (a.x + tx * t)) * -tz + (z - (a.z + tz * t)) * tx
+					var rh := lerpf(a.y, b.y, t) + lerpf(bank[i], bank[j], t) * clampf(sl / sqrt(l2), -hw, hw)
+					var v := gj * N + gi
+					if e < best_e[v]:
+						best_e[v] = e
+						best_h[v] = rh
+					if e <= CAP_REACH and rh < cap[v]:
+						cap[v] = rh
+	height_delta = PackedFloat32Array()
+	height_delta.resize(count)
+	for v in count:
+		if best_e[v] == INF:
+			continue
+		var city := absf(-HALF + (v % N) * CELL) < 612.0 and absf(-HALF + (v / N) * CELL) < 612.0
+		if city:
+			continue
+		var orig := heights[v]
+		var h := lerpf(best_h[v], orig, smoothstep(3.0, REACH, best_e[v]))
+		h = minf(h, cap[v])
+		heights[v] = h
+		height_delta[v] = h - orig
+
+## How much the terrain at (x, z) moved in _fit_terrain_to_roads.
+func ground_delta(x: float, z: float) -> float:
+	var gx := clampf((x + HALF) / CELL, 0.0, N - 1.001)
+	var gz := clampf((z + HALF) / CELL, 0.0, N - 1.001)
+	var i := int(gx)
+	var j := int(gz)
+	var a := height_delta[j * N + i]
+	var b := height_delta[j * N + i + 1]
+	var c := height_delta[(j + 1) * N + i]
+	var e := height_delta[(j + 1) * N + i + 1]
+	if a == 0.0 and b == 0.0 and c == 0.0 and e == 0.0:
+		return 0.0
+	var fx := gx - i
+	var fz := gz - j
+	return lerpf(lerpf(a, b, fx), lerpf(c, e, fx), fz)
 
 ## Terrain height at a world position (matches the GPU displacement).
 func ground(x: float, z: float) -> float:
@@ -119,6 +308,13 @@ func ground(x: float, z: float) -> float:
 	var c := heights[(j + 1) * N + i]
 	var e := heights[(j + 1) * N + i + 1]
 	return lerpf(lerpf(a, b, fx), lerpf(c, e, fx), fz)
+
+## Height of the drivable surface for kinematic traffic: the street plane inside
+## the grid, otherwise the terrain (which is fitted to the roads).
+func drive_y(x: float, z: float) -> float:
+	if absf(x) < 612.0 and absf(z) < 612.0:
+		return 0.0
+	return maxf(ground(x, z) + 0.07, 0.0 if in_city(x, z) else -INF)
 
 func in_city(x: float, z: float) -> bool:
 	return absf(x) < 680.0 and absf(z) < 680.0
@@ -247,7 +443,8 @@ func _build_roads() -> void:
 	root.name = "Roads"
 	add_child(root)
 	var mats := {}
-	for r in d.roads:
+	for ri in d.roads.size():
+		var r: Dictionary = d.roads[ri]
 		var hw: float = r.hw
 		var key := "%s_%d" % [r.type, int(hw * 10)]
 		if not mats.has(key):
@@ -256,9 +453,9 @@ func _build_roads() -> void:
 				"link": mats[key] = _road_material(hw * 2, 2, 0)
 				"runway": mats[key] = _road_material(hw * 2, 1, 2)
 				_: mats[key] = _road_material(hw * 2, 1, 1)
-		_build_ribbon(root, r.pts, hw, r.closed, mats[key], r.type)
+		_build_ribbon(root, r.pts, hw, r.closed, mats[key], r.type, road_bank[ri])
 
-func _build_ribbon(root: Node3D, flat: Array, hw: float, closed: bool, mat: Material, type: String) -> void:
+func _build_ribbon(root: Node3D, flat: Array, hw: float, closed: bool, mat: Material, type: String, bank: PackedFloat32Array) -> void:
 	var pts := PackedVector3Array()
 	for i in range(0, flat.size(), 3):
 		pts.append(Vector3(flat[i], flat[i + 1] + 0.07, flat[i + 2]))
@@ -273,7 +470,8 @@ func _build_ribbon(root: Node3D, flat: Array, hw: float, closed: bool, mat: Mate
 		var t := pn - pp
 		t.y = 0.0
 		t = t.normalized()
-		var left := Vector3(-t.z, 0, t.x)
+		# Banked only where a road joins a sloping deck (see _fix_road_joins).
+		var left := Vector3(-t.z, bank[i % n], t.x)
 		if i > 0:
 			dist += p.distance_to(pts[(i - 1) % n])
 		var tan3 := (pn - pp).normalized()
@@ -672,6 +870,7 @@ func _build_lamps() -> void:
 	bulbs.instance_count = count
 	for i in count:
 		var p := Vector3(L[i * 5], L[i * 5 + 1], L[i * 5 + 2])
+		p.y += ground_delta(p.x, p.z)
 		var dir := Vector3(L[i * 5 + 3], 0, L[i * 5 + 4])
 		var bas := Basis(Vector3.UP, atan2(dir.x, dir.z))
 		var t := Transform3D(bas, p)
@@ -783,6 +982,7 @@ func _build_trees() -> void:
 			for j in idxs.size():
 				var i: int = idxs[j]
 				var p := Vector3(T[i * 6], T[i * 6 + 1], T[i * 6 + 2])
+				p.y += ground_delta(p.x, p.z)
 				center += p
 				var s: float = T[i * 6 + 3]
 				var t := Transform3D(Basis(Vector3.UP, T[i * 6 + 5]).scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s)), p)
@@ -1016,9 +1216,7 @@ func respawn_at(p: Vector3) -> Transform3D:
 	var dir := (best - n).normalized()
 	var right := Vector2(-dir.y, dir.x)
 	var pos2 := n + right * 3.5
-	var y := ground(pos2.x, pos2.y)
-	if in_city(pos2.x, pos2.y):
-		y = 0.03
+	var y := drive_y(pos2.x, pos2.y)
 	var fwd := Vector3(dir.x, 0, dir.y)
 	var basis := Basis.looking_at(fwd, Vector3.UP)
 	return Transform3D(basis, Vector3(pos2.x, y + 1.0, pos2.y))

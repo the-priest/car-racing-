@@ -91,7 +91,7 @@ func _place(c: Dictionary, snap: bool) -> void:
 	var lane := (5.0 if tp == "city" or tp == "link" else (8.0 if tp == "hwy" else 3.0)) + float(c.get("pull", 0.0)) * 2.6
 	var right := Vector2(-u.y, u.x)
 	var p := A + dv * float(c.t) + right * lane
-	var y := 0.0 if world.in_city(p.x, p.y) else world.ground(p.x, p.y) + 0.07
+	var y := world.drive_y(p.x, p.y)
 	c.pos = Vector3(p.x, y, p.y)
 	var yaw := atan2(-u.x, -u.y)
 	c.yaw = yaw if snap else lerp_angle(c.yaw, yaw, 0.15)
@@ -110,7 +110,7 @@ func update(delta: float, player: Car, others: Array) -> void:
 			c.vel *= exp(-1.4 * delta)
 			c.yaw += c.spin * delta
 			c.spin *= exp(-2.0 * delta)
-			var gy := 0.0 if world.in_city(c.pos.x, c.pos.z) else world.ground(c.pos.x, c.pos.z) + 0.07
+			var gy := world.drive_y(c.pos.x, c.pos.z)
 			c.pos.y = gy
 			if c.knock <= 0.0:
 				if (c.pos as Vector3).distance_to(pp) < 70.0:

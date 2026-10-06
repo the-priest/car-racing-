@@ -105,7 +105,7 @@ func _ahead_spot(min_d: float, max_d: float) -> Transform3D:
 		return Transform3D()
 	var np2 := world.node_pos[best]
 	var dir := Vector3(p2.x - np2.x, 0, p2.y - np2.y).normalized()
-	var y := 0.1 if world.in_city(np2.x, np2.y) else world.ground(np2.x, np2.y) + 0.6
+	var y := world.drive_y(np2.x, np2.y) + 0.6
 	return Transform3D(Basis.looking_at(dir, Vector3.UP), Vector3(np2.x, y + 0.5, np2.y))
 
 ## Lt. Kane's personal interceptor: faster, named, needs three hard rams.
@@ -210,7 +210,7 @@ func spawn_near(min_d: float, max_d: float, mode: String) -> void:
 			if dd < bestd:
 				bestd = dd
 				nb = world.node_pos[k]
-		var y := 0.1 if world.in_city(np.x, np.y) else world.ground(np.x, np.y) + 0.6
+		var y := world.drive_y(np.x, np.y) + 0.6
 		var dir := Vector3(nb.x - np.x, 0, nb.y - np.y).normalized()
 		var elite := mode == "chase" and heat >= 4 and randf() < 0.6
 		var c := _make_cop(Transform3D(Basis.looking_at(dir, Vector3.UP), Vector3(np.x, y + 0.5, np.y)), mode, elite)
@@ -427,7 +427,7 @@ func _try_roadblock() -> void:
 	for i in n:
 		var off := (float(i) - (n - 1) * 0.5) * 4.6
 		var q := np + right * off
-		var y := 0.1 if world.in_city(q.x, q.y) else world.ground(q.x, q.y) + 0.6
+		var y := world.drive_y(q.x, q.y) + 0.6
 		# Parked across the road, nose angled.
 		var face := Vector3(right.x, 0, right.y).rotated(Vector3.UP, 0.35 * (1.0 if i % 2 == 0 else -1.0))
 		var c := _make_cop(Transform3D(Basis.looking_at(face, Vector3.UP), Vector3(q.x, y + 0.4, q.y)), "block")

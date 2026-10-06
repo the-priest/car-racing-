@@ -77,7 +77,7 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		var dd := path.dir(pi)
 		var right := Vector2(-dd.y, dd.x)
 		var p := c + right * col * 3.0
-		var y := (0.05 if world.in_city(p.x, p.y) else world.ground(p.x, p.y) + 0.1) + 0.4
+		var y := world.drive_y(p.x, p.y) + 0.48
 		return Transform3D(Basis.looking_at(Vector3(dd.x, 0, dd.y), Vector3.UP), Vector3(p.x, y, p.y))
 	player.reset_to(slot.call(2))
 	player.nitro = 1.0
@@ -154,7 +154,7 @@ func _place_gate(gate: Node3D, i: int) -> void:
 	var right := Vector2(-dd.y, dd.x)
 	var hw := 12.0
 	var y := path.heights[path.idx(i)] if not path.heights.is_empty() else 0.0
-	if world.in_city(c.x, c.y):
+	if absf(c.x) < 612.0 and absf(c.y) < 612.0:
 		y = 0.0
 		hw = 11.0
 	gate.global_transform = Transform3D(Basis.looking_at(Vector3(dd.x, 0, dd.y), Vector3.UP), Vector3(c.x, y, c.y))

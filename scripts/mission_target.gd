@@ -49,7 +49,7 @@ func start(g: Node, w: World, kind: String, from: Vector2, to: Vector2, need_hit
 	var si := mini(2, route.size() - 2)
 	var p0 := world.node_pos[route[si]]
 	var p1 := world.node_pos[route[si + 1]]
-	var y := 0.6 if world.in_city(p0.x, p0.y) else world.ground(p0.x, p0.y) + 0.8
+	var y := world.drive_y(p0.x, p0.y) + 0.8
 	var dir := Vector3(p1.x - p0.x, 0, p1.y - p0.y).normalized()
 	car.reset_to(Transform3D(Basis.looking_at(dir, Vector3.UP), Vector3(p0.x, y, p0.y)))
 	car.linear_velocity = dir * 12.0
@@ -144,7 +144,7 @@ func _drive(dt: float, d_player: float) -> void:
 	if stuck > 3.0:
 		stuck = 0.0
 		var nb := world.node_pos[route[mini(ri + 1, route.size() - 1)]]
-		var y := 0.6 if world.in_city(n.x, n.y) else world.ground(n.x, n.y) + 0.8
+		var y := world.drive_y(n.x, n.y) + 0.8
 		var dir := Vector3(nb.x - n.x, 0, nb.y - n.y).normalized()
 		if dir.length() < 0.5:
 			dir = Vector3.FORWARD
