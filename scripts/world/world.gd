@@ -472,25 +472,17 @@ func _build_buildings(root: Node3D) -> void:
 	box.size = Vector3.ONE
 	box.material = mat
 	var list: Array = d.buildings
-	var total := 0
-	for bld in list:
-		total += 1 + bld.t.size()
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	mm.mesh = box
-	mm.instance_count = total
+	# Buildings are split into tiles so off-screen blocks are culled (and skipped
+	# by shadow cascades) instead of drawing the whole city every time.
+	const TILE := 340.0
+	var tiles := {} # Vector2i -> {"xf": [], "cd": [], "props": SurfaceTool}
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 99
 	var body := StaticBody3D.new()
 	body.set_meta("surface", "building")
 	body.collision_layer = LAYER_WORLD | LAYER_BUILDINGS
 	root.add_child(body)
-	# Rooftop parapets / plant rooms
-	var props := SurfaceTool.new()
-	props.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var signs: Array = []
-	var k := 0
 	for bld in list:
 		var b: Array = bld.b
 		var x0: float = b[0]
@@ -504,9 +496,15 @@ func _build_buildings(root: Node3D) -> void:
 		var cz := (z0 + z1) * 0.5
 		var style := int(bld.s)
 		var custom := Color(style / 3.0, float(bld.c) / 8.0, rng.randf(), 0)
-		mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3(w, h, dd)), Vector3(cx, h * 0.5, cz)))
-		mm.set_instance_custom_data(k, custom)
-		k += 1
+		var tk := Vector2i(floori(cx / TILE), floori(cz / TILE))
+		if not tiles.has(tk):
+			var tst := SurfaceTool.new()
+			tst.begin(Mesh.PRIMITIVE_TRIANGLES)
+			tiles[tk] = {"xf": [], "cd": [], "props": tst}
+		var tile: Dictionary = tiles[tk]
+		var props: SurfaceTool = tile.props
+		tile.xf.append(Transform3D(Basis.from_scale(Vector3(w, h, dd)), Vector3(cx, h * 0.5, cz)))
+		tile.cd.append(custom)
 		var top := h
 		var tw := w
 		var td := dd
@@ -515,9 +513,8 @@ func _build_buildings(root: Node3D) -> void:
 			var td2: float = t[1]
 			var base: float = t[2]
 			var add: float = t[3]
-			mm.set_instance_transform(k, Transform3D(Basis.from_scale(Vector3(tw2, add, td2)), Vector3(cx, base + add * 0.5, cz)))
-			mm.set_instance_custom_data(k, Color(custom.r, custom.g, rng.randf(), 0))
-			k += 1
+			tile.xf.append(Transform3D(Basis.from_scale(Vector3(tw2, add, td2)), Vector3(cx, base + add * 0.5, cz)))
+			tile.cd.append(Color(custom.r, custom.g, rng.randf(), 0))
 			top = base + add
 			tw = tw2
 			td = td2
@@ -557,21 +554,33 @@ func _build_buildings(root: Node3D) -> void:
 				2: pos = Vector3(cx + rng.randf_range(-0.3, 0.3) * w, sy, z0 - 0.35); size = Vector3(rng.randf_range(1.2, 2.4), sh, 0.3)
 				_: pos = Vector3(cx + rng.randf_range(-0.3, 0.3) * w, sy, z1 + 0.35); size = Vector3(rng.randf_range(1.2, 2.4), sh, 0.3)
 			signs.append([pos, size, neon])
-	var mmi := MultiMeshInstance3D.new()
-	mmi.multimesh = mm
-	mmi.name = "Buildings"
-	root.add_child(mmi)
-	props.generate_normals()
-	var pm := ArrayMesh.new()
-	props.commit(pm)
 	var pmat := StandardMaterial3D.new()
 	pmat.vertex_color_use_as_albedo = true
 	pmat.albedo_texture = noise_a
 	pmat.roughness = 0.85
-	var pmi := MeshInstance3D.new()
-	pmi.mesh = pm
-	pmi.material_override = pmat
-	root.add_child(pmi)
+	for tk in tiles:
+		var tile: Dictionary = tiles[tk]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_custom_data = true
+		mm.mesh = box
+		mm.instance_count = tile.xf.size()
+		for i in tile.xf.size():
+			mm.set_instance_transform(i, tile.xf[i])
+			mm.set_instance_custom_data(i, tile.cd[i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.name = "Buildings_%d_%d" % [tk.x, tk.y]
+		root.add_child(mmi)
+		var props: SurfaceTool = tile.props
+		props.generate_normals()
+		var pm := ArrayMesh.new()
+		props.commit(pm)
+		var pmi := MeshInstance3D.new()
+		pmi.mesh = pm
+		pmi.material_override = pmat
+		pmi.visibility_range_end = 1600.0 # rooftop clutter isn't visible from far away
+		root.add_child(pmi)
 	_emissive_boxes(root, signs, 6.0)
 
 func _emissive_boxes(root: Node3D, items: Array, strength: float) -> void:
