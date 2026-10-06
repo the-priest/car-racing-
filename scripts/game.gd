@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--fuzz":
+			shots_spec = "FUZZ"
 		if a == "--raceshot":
 			shots_spec = "RACESHOT"
 		if a == "--readme":
@@ -139,6 +141,11 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "FUZZ":
+		_to_menu()
+		await _fuzz()
 		get_tree().quit()
 		return
 	if shots_spec == "RACESHOT":
@@ -981,6 +988,98 @@ func _storytest() -> void:
 		print("[story] done contract=", Save.data.contract, " cash=", Save.data.cash)
 		await _frames(10)
 	print("[story] COMPLETE story_done=", career.story_done())
+
+## Chaos test: random driving plus random menu/map/phone/race/pursuit actions.
+func _fuzz() -> void:
+	seed(int(OS.get_environment("FUZZ_SEED")) if OS.has_environment("FUZZ_SEED") else 1)
+	Save.wipe()
+	Save.data.cash = 2000000
+	_on_play()
+	autopilot = true
+	var counts := {}
+	for step in 600:
+		var act := randi() % 22
+		counts[act] = counts.get(act, 0) + 1
+		match act:
+			0: hud.big_map.open()
+			1: hud.big_map.close()
+			2:
+				if state == State.PLAY:
+					_pause()
+			3:
+				if state == State.PAUSED:
+					menus.close_all()
+					_on_resume()
+			4: career.answer_phone()
+			5:
+				career.call_timer = 0.0
+			6:
+				if state == State.PLAY and career.idle():
+					career.start_race(Career.RACES.keys()[randi() % Career.RACES.size()], 1, ["", "rook", "juno", "sable"][randi() % 4])
+			7:
+				if state == State.PLAY:
+					police.start_pursuit("FUZZ", 1 + randi() % 5)
+			8: police.end_pursuit(randf() < 0.5) if police.pursuit else null
+			9:
+				var id := randi() % world.node_pos.size()
+				player.reset_to(world.respawn_at(Vector3(world.node_pos[id].x, 0, world.node_pos[id].y)))
+			10:
+				if state == State.PLAY:
+					career.abandon()
+			11:
+				if state == State.RESULTS:
+					menus.close_all()
+					_on_resume()
+					if randf() < 0.5:
+						career.retry()
+			12:
+				if state == State.PLAY and career.idle() and not police.pursuit:
+					_place_at_home()
+					_open_garage()
+					for k in 3:
+						var cid: String = Data.CAR_ORDER[randi() % Data.CAR_ORDER.size()]
+						if not Save.data.owned.has(cid):
+							Save.data.owned.append(cid)
+						Save.data.car = cid
+						var up: Dictionary = Save.data.upgrades.get(cid, {}).duplicate()
+						up[Data.UPGRADES.keys()[randi() % Data.UPGRADES.size()]] = randi() % 4
+						Save.data.upgrades[cid] = up
+						preview_car(cid)
+						await get_tree().process_frame
+					menus.back()
+			13: police.spawn_kane() if police.pursuit else null
+			14: police._try_roadblock() if police.pursuit else null
+			15:
+				if state == State.PLAY and career.idle():
+					career.pending_call = randi() % Career.CONTRACTS.size()
+					career.ringing = 5.0
+					hud.show_dialogue(career.answer_phone())
+			16: cam.cycle()
+			17: hud.skip_line()
+			18:
+				daynight.hour = randf() * 24.0
+				daynight.rain = randf()
+			19:
+				if state == State.MENU:
+					_on_play()
+				elif state == State.PLAY and randf() < 0.3:
+					_to_menu()
+			20:
+				if career.target and is_instance_valid(career.target.car):
+					var tc := career.target.car
+					player.reset_to(Transform3D(tc.global_transform.basis, tc.global_position + tc.global_transform.basis.z * 6.0))
+					player.linear_velocity = tc.linear_velocity - tc.global_transform.basis.z * 10.0
+			21: Settings.set_value("assists", randf() < 0.7)
+		for f in 20:
+			player.input.throttle = randf() if randf() < 0.8 else 0.0
+			player.input.brake = randf() if randf() < 0.2 else 0.0
+			player.input.steer = randf_range(-1.0, 1.0)
+			player.input.handbrake = 1.0 if randf() < 0.1 else 0.0
+			player.input.nitro = randf() < 0.2
+			await get_tree().physics_frame
+		if step % 100 == 0:
+			print("[fuzz] step ", step, " state=", state, " paused=", get_tree().paused, " pursuit=", police.pursuit, " cops=", police.cops.size(), " race=", career.race != null, " job=", career.active.get("title", ""), " car=", Save.data.car)
+	print("[fuzz] done ", counts)
 
 ## Marketing screenshots for the README (saved to SHOT_DIR).
 func _readme_shots() -> void:
