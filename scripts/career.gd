@@ -411,7 +411,9 @@ func _build_billboards() -> void:
 		var base := pos3(p2)
 		var root := Node3D.new()
 		root.position = base
-		root.rotation.y = atan2(-dir.x, -dir.y)
+		# Face the road, angled toward oncoming drivers.
+		var face := (-side.normalized() - dir).normalized()
+		root.rotation.y = atan2(face.x, face.y)
 		add_child(root)
 		var panel_m := StandardMaterial3D.new()
 		var col: Color = colors[placed % colors.size()]
@@ -428,6 +430,19 @@ func _build_billboards() -> void:
 			mi.material_override = spec[2]
 			mi.position = spec[0]
 			root.add_child(mi)
+		var ads := ["HEAT FM 101.7", "DEX'S GARAGE", "SOLANO BAY\nNEVER SLEEPS", "NIGHT KINGS", "DRIVE FAST\nLIVE FASTER", "VANTA\nMOTORS", "STALLION\nSINCE '69", "HARBOR\nSAVINGS"]
+		var lbl := Label3D.new()
+		lbl.text = ads[placed % ads.size()]
+		lbl.font_size = 96
+		lbl.pixel_size = 0.007
+		lbl.outline_size = 12
+		lbl.modulate = Color.WHITE
+		lbl.position = Vector3(0, 4.6, 0.12)
+		root.add_child(lbl)
+		var lbl2 := lbl.duplicate() as Label3D
+		lbl2.position = Vector3(0, 4.6, -0.12)
+		lbl2.rotation.y = PI
+		root.add_child(lbl2)
 		root.visible = not found.has(placed)
 		billboards.append({"i": placed, "pos": base, "node": root})
 		placed += 1

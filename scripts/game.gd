@@ -159,7 +159,7 @@ func _ready() -> void:
 		traffic.set_count(0)
 		police.enabled = false
 		await _frames(60)
-		print("[bb] placed ", career.billboards.size())
+		print("[bb] placed ", career.billboards.size(), " first: ", career.billboards.slice(0, 4).map(func(b): return [int(b.pos.x), int(b.pos.z), snappedf(b.node.rotation.y, 0.01)]))
 		for b in career.billboards:
 			player.reset_to(Transform3D(Basis(), b.pos + Vector3(0, 0.8, 4.0)))
 			for f in 6:
