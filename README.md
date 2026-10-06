@@ -41,7 +41,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 - **Handling that grips by default.** Cars stay planted, with traction control and stability control (both toggleable). Drifts only start when you throw the car in with the handbrake, then they're easy to hold. Raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, an auto or manual gearbox, burnouts and donuts, and wheelspin on powerful cars.
 - **Cars**:
   - modern Vanta builds (realistic scanned-quality model)
-  - procedural classics: Stallion '69 muscle, Wedge '78, and a 900 hp Stallion restomod
+  - procedural classics: Stallion '69 muscle, Kestrel Rally '85 (AWD turbo hatch), Wedge '78, Raiden GT '94 (twin-turbo coupe) and a 900 hp Stallion restomod
   - higher tiers unlock as the story progresses (C after chapter 1, B after 3, A after 6, S after 9)
   - **9 upgrade categories** up to 5 levels; a fully built Vanta Zero does 0-100 km/h in about 1 second and tops out around 500 km/h
 

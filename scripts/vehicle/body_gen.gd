@@ -41,6 +41,30 @@ const BODIES := {
 		],
 		"n_body": 9.0, "n_cabin": 6.0, "scoop": false, "round_lights": false, "chrome": false, "armor": true,
 	},
+	# Mid-80s rally hatchback: short, boxy, flared arches.
+	"hatch": {
+		"wheel_r": 0.33, "wheel_front": -1.25, "wheel_rear": 1.2, "track": 0.82,
+		"body": [
+			[-2.0, 0.86, 0.34, 0.72], [-1.85, 0.94, 0.3, 0.8], [-1.3, 0.98, 0.3, 0.86], [-0.5, 0.98, 0.3, 0.9],
+			[0.6, 0.98, 0.3, 0.92], [1.5, 0.97, 0.32, 0.94], [1.85, 0.94, 0.34, 0.92], [1.98, 0.9, 0.38, 0.88],
+		],
+		"cabin": [
+			[-0.75, 0.82, 0.92], [-0.3, 0.78, 1.32], [0.5, 0.78, 1.38], [1.3, 0.8, 1.34], [1.8, 0.84, 1.02],
+		],
+		"n_body": 7.0, "n_cabin": 5.0, "scoop": true, "round_lights": false, "chrome": false, "wing": true,
+	},
+	# Mid-90s grand tourer coupe: long nose, smooth fastback.
+	"gt": {
+		"wheel_r": 0.35, "wheel_front": -1.38, "wheel_rear": 1.32, "track": 0.84,
+		"body": [
+			[-2.32, 0.84, 0.32, 0.58], [-2.15, 0.94, 0.28, 0.68], [-1.4, 0.99, 0.28, 0.78], [-0.5, 1.0, 0.28, 0.84],
+			[0.6, 1.0, 0.28, 0.88], [1.5, 0.99, 0.3, 0.9], [2.1, 0.95, 0.32, 0.86], [2.3, 0.88, 0.36, 0.8],
+		],
+		"cabin": [
+			[-0.85, 0.8, 0.82], [-0.3, 0.74, 1.18], [0.4, 0.72, 1.2], [1.2, 0.74, 1.06], [1.9, 0.8, 0.88],
+		],
+		"n_body": 4.5, "n_cabin": 3.2, "scoop": false, "round_lights": false, "chrome": false, "wing": true,
+	},
 	# Plain delivery van for traffic.
 	"delivery": {
 		"wheel_r": 0.38, "wheel_front": -1.65, "wheel_rear": 1.55, "track": 0.84,
