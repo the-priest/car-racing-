@@ -282,6 +282,40 @@ func _setup_police_bar() -> void:
 		bar.add_child(ol)
 		police_lights.append(ol)
 
+## Visual body kit from upgrades: Aero 2 adds a low lip wing, Aero 3 a tall GT wing.
+func set_kit(aero_lvl: int) -> void:
+	var old := get_node_or_null("KitWing")
+	if old:
+		old.queue_free()
+	var body_id: String = stats.get("body", "concept")
+	if aero_lvl < 2 or is_police or body_id == "wedge" or body_id == "van" or body_id == "delivery":
+		return
+	var tall := aero_lvl >= 3
+	var base := Vector3(0, 0.98, 2.02) if body_id == "concept" else Vector3(0, 0.93, 2.2)
+	var h := 0.34 if tall else 0.12
+	var carbon := StandardMaterial3D.new()
+	carbon.albedo_color = Color(0.03, 0.03, 0.035)
+	carbon.metallic = 0.35
+	carbon.roughness = 0.35
+	carbon.clearcoat_enabled = true
+	var root := Node3D.new()
+	root.name = "KitWing"
+	add_child(root)
+	var parts := [[Vector3(0, h, 0), Vector3(1.75 if tall else 1.55, 0.05, 0.36)]]
+	for sx in [-0.55, 0.55]:
+		parts.append([Vector3(sx, h * 0.5, 0.02), Vector3(0.05, h, 0.18)])
+	if tall:
+		for sx in [-0.88, 0.88]:
+			parts.append([Vector3(sx, h, 0.0), Vector3(0.04, 0.2, 0.42)])
+	for pt in parts:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = pt[1]
+		mi.mesh = bm
+		mi.material_override = carbon
+		mi.position = base + (pt[0] as Vector3)
+		root.add_child(mi)
+
 func set_paint(c: Color) -> void:
 	for i in paint_mats.size():
 		var m := paint_mats[i]

@@ -69,6 +69,7 @@ static func stats_for(id: String, up: Dictionary) -> Dictionary:
 	base["downforce"] = 0.00011 * (1.0 + 0.45 * lv.call("aero"))
 	base["shift_time"] = 0.15 - 0.03 * lv.call("transmission")
 	base["turbo"] = lv.call("turbo") > 0
+	base["aero_lvl"] = int(lv.call("aero"))
 	return base
 
 static func perf_index(s: Dictionary) -> int:

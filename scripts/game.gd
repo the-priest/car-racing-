@@ -346,6 +346,7 @@ func _build_player(id: String) -> void:
 		player.mass = stats.mass
 		player._setup_engine()
 		player.set_paint(paint)
+	player.set_kit(int(stats.get("aero_lvl", 0)))
 	_player_car_id = id
 
 func reset_career() -> void:
