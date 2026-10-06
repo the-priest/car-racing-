@@ -1,6 +1,6 @@
 class_name Effects
 extends Node3D
-## Tyre smoke, dirt spray, skid marks and rain.
+## Tyre smoke, dirt spray, skid marks, rain and collision sparks.
 
 const MAX_SKIDS := 2400
 
@@ -12,6 +12,13 @@ var smoke_tex: Texture2D
 var rain: GPUParticles3D
 var quality := 1.0
 var wet := 0.0
+var spark_pool: Array[GPUParticles3D] = []
+var spark_next := 0
+var scrape: GPUParticles3D
+var flash: OmniLight3D
+var flash_t := 0.0
+var flash_e := 0.0
+var scrape_light: OmniLight3D
 
 func setup(q: Dictionary) -> void:
 	quality = 1.0 if q.renderer == "forward_plus" else 0.5
@@ -37,6 +44,7 @@ func setup(q: Dictionary) -> void:
 	mmi.custom_aabb = AABB(Vector3(-4000, -100, -4000), Vector3(8000, 900, 8000))
 	add_child(mmi)
 	_build_rain()
+	_build_sparks()
 
 func _smoke_texture() -> ImageTexture:
 	var s := 64
@@ -124,7 +132,12 @@ func clear_skids() -> void:
 
 static var prof_us := 0
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if flash_t > 0.0:
+		flash_t -= delta
+		flash.light_energy = flash_e * clampf(flash_t / 0.16, 0.0, 1.0)
+		if flash_t <= 0.0:
+			flash.visible = false
 	var _t0 := Time.get_ticks_usec()
 	_tick()
 	prof_us += Time.get_ticks_usec() - _t0
@@ -172,6 +185,100 @@ func _tick() -> void:
 					skid_next = (skid_next + 1) % MAX_SKIDS
 					skid_mm.visible_instance_count = maxi(skid_mm.visible_instance_count, skid_next if skid_next > 0 else MAX_SKIDS)
 			last_mark[key] = p
+
+func _spark_emitter(amount: int, one_shot: bool) -> GPUParticles3D:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.03, 0.3)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	quad.material = m
+	var p := GPUParticles3D.new()
+	p.amount = maxi(12, int(amount * quality))
+	p.lifetime = 0.6
+	p.one_shot = one_shot
+	p.explosiveness = 0.92 if one_shot else 0.0
+	p.emitting = false
+	p.local_coords = false
+	p.transform_align = GPUParticles3D.TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.visibility_aabb = AABB(Vector3(-12, -6, -12), Vector3(24, 14, 24))
+	p.draw_pass_1 = quad
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.2
+	pm.direction = Vector3(0, 0.3, 1)
+	pm.spread = 38.0
+	pm.initial_velocity_min = 4.0
+	pm.initial_velocity_max = 15.0
+	pm.gravity = Vector3(0, -15, 0)
+	pm.damping_min = 1.5
+	pm.damping_max = 4.0
+	pm.scale_min = 0.5
+	pm.scale_max = 1.3
+	pm.lifetime_randomness = 0.6
+	var g := Gradient.new()
+	g.set_color(0, Color(1.0, 0.95, 0.75, 1.0))
+	g.set_color(1, Color(0.9, 0.18, 0.02, 0.0))
+	g.add_point(0.3, Color(1.0, 0.62, 0.15, 1.0))
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
+	p.process_material = pm
+	add_child(p)
+	return p
+
+func _build_sparks() -> void:
+	for i in 5:
+		spark_pool.append(_spark_emitter(60, true))
+	scrape = _spark_emitter(160, false)
+	scrape.lifetime = 0.4
+	scrape_light = OmniLight3D.new()
+	scrape_light.light_color = Color(1.0, 0.6, 0.22)
+	scrape_light.omni_range = 6.0
+	scrape_light.visible = false
+	add_child(scrape_light)
+	flash = OmniLight3D.new()
+	flash.light_color = Color(1.0, 0.62, 0.25)
+	flash.omni_range = 9.0
+	flash.light_energy = 0.0
+	flash.visible = false
+	flash.shadow_enabled = false
+	add_child(flash)
+
+## A burst of metal sparks at pos, sprayed along dir (world space). power 0..1.
+func sparks(pos: Vector3, dir: Vector3, power: float) -> void:
+	var p := spark_pool[spark_next]
+	spark_next = (spark_next + 1) % spark_pool.size()
+	p.global_position = pos
+	var pm: ParticleProcessMaterial = p.process_material
+	pm.direction = dir.normalized() if dir.length() > 0.01 else Vector3.UP
+	pm.initial_velocity_max = lerpf(8.0, 20.0, power)
+	p.amount_ratio = clampf(0.25 + power * 0.75, 0.25, 1.0)
+	p.restart()
+	p.emitting = true
+	if power > 0.3:
+		flash.global_position = pos + Vector3.UP * 0.4
+		flash.visible = true
+		flash_t = 0.16
+		flash_e = 2.5 + power * 4.0
+		flash.light_energy = flash_e
+
+## Continuous grinding sparks while a car scrapes along something.
+func set_scrape(on: bool, pos := Vector3.ZERO, dir := Vector3.UP, power := 0.5) -> void:
+	if on:
+		scrape.global_position = pos
+		var pm: ParticleProcessMaterial = scrape.process_material
+		pm.direction = dir.normalized()
+		scrape.amount_ratio = clampf(power, 0.2, 1.0)
+		scrape_light.global_position = pos + dir.normalized() * 0.3
+		scrape_light.light_energy = randf_range(0.8, 2.2) * power
+	scrape_light.visible = on
+	if scrape.emitting != on:
+		scrape.emitting = on
 
 func _build_rain() -> void:
 	rain = GPUParticles3D.new()

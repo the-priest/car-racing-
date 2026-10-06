@@ -70,6 +70,8 @@ func _ready() -> void:
 			shots_spec = "HUDTEST"
 		if a == "--phototest":
 			shots_spec = "PHOTOTEST"
+		if a == "--sparktest":
+			shots_spec = "SPARKTEST"
 		if a == "--musictest":
 			shots_spec = "MUSICTEST"
 		if a == "--creditstest":
@@ -237,6 +239,66 @@ func _ready() -> void:
 		hud.tip("Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching.")
 		await _frames(40)
 		await _snap("hud_elements")
+		get_tree().quit()
+		return
+	if shots_spec == "SPARKTEST":
+		_on_play()
+		traffic.set_count(0)
+		daynight.hour = 22.0
+		Settings.data.time_mode = "night"
+		await _frames(60)
+		var hit := [false]
+		player.impact.connect(func(st): if st > 5.0: hit[0] = true)
+		var yaw := float(OS.get_environment("SPARK_YAW")) if OS.get_environment("SPARK_YAW") != "" else PI / 2
+		var tr := Transform3D(player.global_transform.basis.rotated(Vector3.UP, yaw), player.global_position + Vector3.UP * 0.3)
+		player.reset_to(tr)
+		await _frames(2)
+		player.linear_velocity = -player.global_transform.basis.z * 24.0
+		for i in 400:
+			await get_tree().physics_frame
+			if i % 20 == 0:
+				print("[spark] t=", i, " pos=", player.global_position, " v=", player.linear_velocity.length(), " contacts=", player.get_contact_count())
+			if hit[0]:
+				break
+		print("[spark] hit=", hit[0], " pos=", player.global_position)
+		Engine.time_scale = 0.04
+		await _frames(1)
+		await _snap("sparks_hit")
+		Engine.time_scale = 0.15
+		for k in 3:
+			effects.sparks(cam.global_position - cam.global_transform.basis.z * 6.0 + Vector3(k - 1, -1.0, 0), Vector3(0.3 * (k - 1), 1, 0.2), 1.0)
+		await _frames(4)
+		await _snap("sparks_air")
+		Engine.time_scale = 1.0
+		# Scrape: find the wall beside the street and slide along it.
+		var base := Vector3(-420.0, 1.0, 380.0)
+		var space := player.get_world_3d().direct_space_state
+		var q := PhysicsRayQueryParameters3D.create(base, base + Vector3(-40, 0, 0))
+		q.exclude = [player.get_rid()]
+		var wh := space.intersect_ray(q)
+		print("[spark] wall=", wh.get("position", "none"))
+		if not wh.is_empty():
+			var wp: Vector3 = wh.position
+			var b := Basis(Vector3.UP, PI).rotated(Vector3.UP, 0.08)
+			player.reset_to(Transform3D(b, Vector3(wp.x + 1.4, 0.4, wp.z)))
+			await _frames(2)
+			var scr := 0
+			for i in 160:
+				player.linear_velocity = Vector3(-2.5, player.linear_velocity.y, 22.0)
+				await get_tree().physics_frame
+				if effects.scrape.emitting:
+					scr += 1
+			print("[spark] scrape frames=", scr)
+			Input.action_press("look_back")
+			for i in 30:
+				player.linear_velocity = Vector3(-2.5, player.linear_velocity.y, 22.0)
+				await get_tree().physics_frame
+			Engine.time_scale = 0.1
+			player.linear_velocity = Vector3(-2.5, player.linear_velocity.y, 22.0)
+			print("[spark] scrape at ", effects.scrape.global_position, " emitting=", effects.scrape.emitting, " car=", player.global_position, " ratio=", effects.scrape.amount_ratio)
+			await _snap("sparks_scrape")
+			Engine.time_scale = 1.0
+		Engine.time_scale = 1.0
 		get_tree().quit()
 		return
 	if shots_spec == "MUSICTEST":
@@ -872,7 +934,21 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 			career.abandon("You got busted")
 	persist()
 
-func _on_impact(strength: float) -> void:
+## point/normal: contact position and the direction pushing the player away from what
+## it hit. Unknown (rigid-body hits): guessed from the player's change in velocity.
+func _on_impact(strength: float, point := Vector3.INF, normal := Vector3.ZERO) -> void:
+	if strength > 5.0 and state == State.PLAY:
+		if point == Vector3.INF:
+			var dv := player.linear_velocity - player.last_vel
+			dv.y = 0.0
+			normal = dv.normalized() if dv.length() > 0.5 else player.global_transform.basis.z
+			var l := player.global_transform.basis.inverse() * -normal
+			var t := minf(0.975 / maxf(absf(l.x), 0.01), 2.12 / maxf(absf(l.z), 0.01))
+			point = player.global_transform * (Vector3(l.x * t, 0.0, l.z * t) + Vector3(0, 0.45, 0.05))
+		var v := player.linear_velocity
+		var tang := v - normal * v.dot(normal)
+		var dir := normal * 0.6 + Vector3.UP * 0.35 + (tang.normalized() * 0.8 if tang.length() > 2.0 else Vector3.ZERO)
+		effects.sparks(point, dir, clampf(strength / 25.0, 0.0, 1.0))
 	if strength > 4.0:
 		cam.shake = minf(1.0, strength / 25.0)
 		audio.play_oneshot("impact", randf_range(0.85, 1.1), linear_to_db(clampf(strength / 30.0, 0.1, 1.0)))
@@ -884,8 +960,8 @@ func _on_impact(strength: float) -> void:
 			drift.time = 0.0
 			drift.idle = 0.0
 
-func _on_traffic_hit(strength: float) -> void:
-	_on_impact(strength * 0.5 + 4.0)
+func _on_traffic_hit(strength: float, point: Vector3, normal: Vector3) -> void:
+	_on_impact(strength * 0.5 + 4.0, point, normal)
 
 func _rumble(strong: float, weak: float, secs: float) -> void:
 	# One-shot haptic kick (impacts, landings, gear shifts); layered on top of the
@@ -1059,7 +1135,11 @@ func _read_driving_input(delta: float) -> void:
 # ---------------------------------------------------------------- frame
 func _physics_process(delta: float) -> void:
 	if state != State.PLAY or player == null or hud.big_map.visible:
+		if effects:
+			effects.set_scrape(false)
+			audio.update_scrape(0.0)
 		return
+	_update_scrape()
 	if not autopilot:
 		_read_driving_input(delta)
 	var others: Array = []
@@ -1076,6 +1156,32 @@ func _physics_process(delta: float) -> void:
 		traffic.collide(o, false)
 	_slipstream(delta, others)
 	_pt("contacts", t0)
+
+## Grinding sparks while the player slides along a wall or barrier.
+func _update_scrape() -> void:
+	var on := false
+	if player.speed > 7.0 and player.get_contact_count() > 0:
+		var cars_only := true
+		for b in player.get_colliding_bodies():
+			if not (b is Car):
+				cars_only = false
+		if not cars_only:
+			var space := player.get_world_3d().direct_space_state
+			var tr := player.global_transform
+			var c := tr * Vector3(0, 0.6, 0)
+			for off in [Vector3(-1.5, 0.6, 0), Vector3(1.5, 0.6, 0), Vector3(0, 0.6, -2.7), Vector3(0, 0.6, 2.7)]:
+				var q := PhysicsRayQueryParameters3D.create(c, tr * off)
+				q.exclude = [player.get_rid()]
+				var hit := space.intersect_ray(q)
+				if not hit.is_empty() and not (hit.collider is Car):
+					var n: Vector3 = hit.normal
+					var v := player.linear_velocity
+					effects.set_scrape(true, hit.position - (hit.position - c).normalized() * 0.05, n * 0.45 + Vector3.UP * 0.4 - v.normalized() * 0.3, clampf(player.speed / 30.0, 0.3, 1.0))
+					on = true
+					break
+	audio.update_scrape(clampf(player.speed / 30.0, 0.35, 1.0) if on else 0.0)
+	if not on:
+		effects.set_scrape(false)
 
 ## Slipstream: tucked in behind another car at speed cuts drag and refills nitrous.
 func _slipstream(delta: float, others: Array) -> void:
@@ -1130,7 +1236,8 @@ func _soft_contacts(list: Array) -> void:
 			a.apply_central_impulse(-n * j_imp * a.mass * 0.5 * get_physics_process_delta_time() * 10.0)
 			b.apply_central_impulse(n * j_imp * b.mass * 0.5 * get_physics_process_delta_time() * 10.0)
 			if (a == player or b == player) and rel < -3.0:
-				_on_impact(absf(rel) * 0.6)
+				var mid := (a.global_position + b.global_position) * 0.5 + Vector3.UP * 0.55
+				_on_impact(absf(rel) * 0.6, mid, -n if a == player else n)
 
 func _music_mode() -> String:
 	if menus.rolling_credits():

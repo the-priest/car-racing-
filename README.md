@@ -41,7 +41,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - elite interceptors and **Air One**, a helicopter with a searchlight. Lose it between downtown skyscrapers, or outlast its fuel.
   - **Lt. Kane** in her own interceptor during the finale
 
-  Ram cops while you're the faster car to take them down for bounty. Only buildings can stop your car; everything else gets knocked aside.
+  Ram cops while you're the faster car to take them down for bounty; metal-on-metal hits throw sparks, and grinding along walls sprays them. Only buildings can stop your car; everything else gets knocked aside.
 - **Handling that grips by default.** Cars stay planted, with traction control and stability control (both toggleable). Drifts only start when you throw the car in with the handbrake, then they're easy to hold. Raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, an auto or manual gearbox, burnouts and donuts, and wheelspin on powerful cars.
 - **Cars**:
   - modern Vanta builds (realistic scanned-quality model)

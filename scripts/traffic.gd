@@ -3,7 +3,7 @@ extends Node3D
 ## Ambient traffic on the road graph. Civilians never stop the player: contact
 ## knocks them aside while the player keeps nearly all of their speed.
 
-signal hit(strength: float)
+signal hit(strength: float, point: Vector3, normal: Vector3)
 
 const SPEED := {"city": 13.0, "link": 20.0, "hwy": 27.0, "pass": 14.0, "country": 16.0, "runway": 18.0}
 const MAX_POOL := 45
@@ -193,7 +193,7 @@ func collide(car: Car, report := true) -> void:
 		c.pos = cp + n * 3.25
 		car.linear_velocity *= 0.97
 		if report:
-			hit.emit(maxf(rel, 0.0))
+			hit.emit(maxf(rel, 0.0), cp + n * 1.3 + Vector3.UP * 0.5, -n)
 
 ## Counts fresh near misses (for nitrous rewards).
 func near_misses(car: Car) -> int:

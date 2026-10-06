@@ -39,6 +39,7 @@ var rotor: AudioStreamPlayer
 var horn: AudioStreamPlayer
 var turbo: AudioStreamPlayer
 var rain: AudioStreamPlayer
+var scrape: AudioStreamPlayer
 var spool := 0.0
 var cyl := -1
 var last_throttle := 0.0
@@ -76,6 +77,8 @@ func setup() -> void:
 	streams["rain"] = _gen_rain()
 	streams["thunder"] = _gen_thunder()
 	rain = _player(streams.rain)
+	streams["scrape"] = _gen_scrape()
+	scrape = _player(streams.scrape)
 	rotor = _player(streams.rotor)
 	for mode in ["cruise", "chase", "race", "menu", "credits"]:
 		var mp := _player(null, "Music")
@@ -302,6 +305,58 @@ func _gen_rain() -> AudioStreamWAV:
 	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	s.loop_end = n
 	return s
+
+## Metal grinding: noise through narrow inharmonic resonators with gritty amplitude bursts.
+func _gen_scrape() -> AudioStreamWAV:
+	var rate := 32000
+	var n := int(rate * 1.6)
+	var fade := 1600
+	var buf := PackedFloat32Array()
+	buf.resize(n + fade)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var freqs := [1460.0, 2390.0, 3710.0, 5170.0, 870.0]
+	var gains := [1.0, 0.8, 0.6, 0.35, 0.5]
+	var lows := [0.0, 0.0, 0.0, 0.0, 0.0]
+	var bands := [0.0, 0.0, 0.0, 0.0, 0.0]
+	var grit := 0.5
+	var grit_t := 0.5
+	for i in n + fade:
+		if rng.randf() < 0.004:
+			grit_t = rng.randf_range(0.2, 1.0)
+		grit += (grit_t - grit) * 0.002
+		var x := rng.randf_range(-1.0, 1.0) * (grit + (0.8 if rng.randf() < 0.002 else 0.0))
+		var v := 0.0
+		for k in freqs.size():
+			var f := 2.0 * sin(PI * freqs[k] * (1.0 + 0.02 * sin(float(i) * 0.0007 * (k + 1))) / rate)
+			var hi: float = x - lows[k] - 0.06 * bands[k]
+			bands[k] += f * hi
+			lows[k] += f * bands[k]
+			v += bands[k] * gains[k]
+		buf[i] = v * 0.1 + x * 0.09
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	for i in n:
+		var v := buf[i]
+		if i < fade:
+			var t := float(i) / fade
+			v = v * t + buf[n + i] * (1.0 - t)
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 26000.0))
+	var st := AudioStreamWAV.new()
+	st.format = AudioStreamWAV.FORMAT_16_BITS
+	st.mix_rate = rate
+	st.data = data
+	st.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	st.loop_end = n
+	return st
+
+var scrape_lvl := 0.0
+
+func update_scrape(level: float) -> void:
+	# Smoothed so contacts flickering on and off don't click.
+	scrape_lvl = move_toward(scrape_lvl, clampf(level, 0.0, 1.0), 0.06)
+	scrape.volume_db = _db(scrape_lvl * 0.7)
+	scrape.pitch_scale = 0.85 + scrape_lvl * 0.3
 
 ## Rolling thunder: brown noise with a crack at the start and a long decay.
 func _gen_thunder() -> AudioStreamWAV:
