@@ -64,6 +64,7 @@ var head_mat: StandardMaterial3D
 var headlights: Array[SpotLight3D] = []
 var lights_on := false
 var flames: Array[MeshInstance3D] = []
+var pop_flash := 0.0 # brief exhaust flame on backfire pops
 var police_lights: Array[OmniLight3D] = []
 var police_mats: Array[StandardMaterial3D] = []
 var is_police := false
@@ -748,10 +749,11 @@ func _visuals(delta: float) -> void:
 	if brake_mat:
 		var braking := float(input.brake) > 0.1 and not reverse
 		brake_mat.emission_energy_multiplier = 6.0 if braking else (2.0 if lights_on else 0.2)
+	pop_flash = maxf(0.0, pop_flash - delta)
 	for f in flames:
-		f.visible = nitro_on
-		if nitro_on:
-			f.scale = Vector3.ONE * randf_range(0.8, 1.3)
+		f.visible = nitro_on or pop_flash > 0.0
+		if f.visible:
+			f.scale = Vector3.ONE * (randf_range(0.8, 1.3) if nitro_on else randf_range(0.4, 0.7))
 	if is_police:
 		var t := Time.get_ticks_msec() / 1000.0
 		var phase := int(t * 7.0) % 4

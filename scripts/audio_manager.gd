@@ -147,6 +147,7 @@ func update_player(car: Car, active: bool, delta: float) -> void:
 		pop_timer -= delta
 		if randf() < delta * 14.0:
 			play_oneshot("backfire", randf_range(0.8, 1.3), -4.0)
+			car.pop_flash = 0.06
 	last_throttle = thr
 
 ## Synthesised helicopter rotor loop: blade-pass thumps over filtered noise.
