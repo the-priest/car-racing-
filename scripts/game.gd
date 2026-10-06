@@ -47,6 +47,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--storytest":
+			shots_spec = "STORYTEST"
 	audio = AudioManager.new()
 	add_child(audio)
 	audio.setup()
@@ -94,6 +96,8 @@ func _ready() -> void:
 		audio.set_ringing(true)
 		hud.message("%s is calling" % c, 3.0))
 	career.finished.connect(_on_career_finished)
+	career.dialogue.connect(func(lines): hud.show_dialogue(lines))
+	career.story_complete.connect(_on_story_complete)
 	hud = HUD.new()
 	add_child(hud)
 	_spawn_player()
@@ -110,6 +114,10 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "STORYTEST":
+		await _storytest()
 		get_tree().quit()
 		return
 	if shots_spec == "AUTOTEST":
@@ -220,6 +228,9 @@ func on_settings_changed() -> void:
 		player.manual = bool(Settings.data.manual)
 	cam.mode = int(Settings.data.camera) as CameraRig.Mode
 
+func is_playing() -> bool:
+	return state == State.PLAY
+
 func player_at_home() -> bool:
 	var h: Vector2 = Career.LOC.home
 	return Vector2(player.global_position.x, player.global_position.z).distance_to(h) < 18.0
@@ -260,7 +271,8 @@ func _on_play() -> void:
 	hud.visible = true
 	cam.snap = true
 	if float(Save.data.playtime) < 1.0:
-		hud.show_dialogue(["Your phone buzzes. Unknown number.", "Mara: \"You're the driver everyone's talking about? Stay by your phone.\""])
+		hud.show_dialogue(Career.PROLOGUE)
+		career.call_timer = 16.0
 
 func _on_resume() -> void:
 	state = State.PLAY
@@ -283,6 +295,11 @@ func _on_career_finished(res: Dictionary) -> void:
 	menus.show_results(res)
 	persist()
 
+func _on_story_complete() -> void:
+	hud.big("THE END", 4.0)
+	hud.show_dialogue(["You came to Solano Bay with one car and a reputation.", "Now the city knows your name.",
+		"Story complete. Side jobs, street races and the cops are still out there.", "Thanks for playing VELOCITY HEAT."])
+
 func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 	if escaped:
 		Save.add_cash(bounty)
@@ -296,7 +313,7 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 		hud.big("BUSTED", 2.5)
 		hud.message("Fine -$%s" % HUD._fmt(fine), 3.0)
 		if not career.active.is_empty():
-			career.abandon()
+			career.abandon("You got busted")
 	persist()
 
 func _on_impact(strength: float) -> void:
@@ -449,6 +466,8 @@ func _physics_process(delta: float) -> void:
 	if career.race:
 		for r in career.race.rivals:
 			others.append(r.car)
+	if career.target and is_instance_valid(career.target.car):
+		others.append(career.target.car)
 	others.append_array(police.cars())
 	_soft_contacts([player] + others)
 	traffic.collide(player)
@@ -750,6 +769,67 @@ func _autotest() -> void:
 			await _frames(60 * 13)
 			print("[test] evade: pursuit=", police.pursuit)
 	print("[test] end cash=", Save.data.cash, " contract=", Save.data.contract, " state=", state)
+
+## Plays the whole campaign with shortcuts (teleports, instant race wins) but real
+## takedown rams, waits and pursuits. Prints one line per step.
+func _storytest() -> void:
+	Save.wipe()
+	_on_play()
+	traffic.set_count(0)
+	for idx in Career.CONTRACTS.size():
+		career.pending_call = -1
+		career.call_timer = 0.0
+		await _frames(5)
+		if career.pending_call != idx:
+			print("[story] FAIL expected call ", idx, " got ", career.pending_call)
+			return
+		career.answer_phone()
+		print("[story] === ", idx, " ", career.active.title)
+		var guard := 0
+		while not career.active.is_empty() and guard < 200:
+			guard += 1
+			var st: int = career.step
+			var s: Dictionary = career.active.steps[career.step]
+			if s.has("goto"):
+				player.reset_to(Transform3D(Basis(), career.pos3(career.waypoint) + Vector3(0, 0.8, 0)))
+				if police.pursuit:
+					police.end_pursuit(true)
+				await _frames(20)
+			elif s.has("wait"):
+				await _frames(int(60 * (float(s.wait) + 1.0)))
+			elif s.has("evade"):
+				await _frames(60)
+				police.end_pursuit(true)
+				await _frames(10)
+			elif s.has("race"):
+				await _frames(30)
+				career.race.done = true
+				career.race.result = {"id": career.race.id, "place": 1, "total": 6, "time": 100.0, "need": 1}
+				await _frames(5)
+				if state == State.RESULTS:
+					_on_resume()
+			elif s.has("takedown"):
+				var tg: MissionTarget = career.target
+				await _frames(60)
+				var rams := 0
+				while career.target == tg and not tg.disabled and rams < 30:
+					rams += 1
+					var tc := tg.car
+					var f := -tc.global_transform.basis.z
+					player.reset_to(Transform3D(tc.global_transform.basis, tc.global_position - f * 6.0 + Vector3(0, 0.3, 0)))
+					player.linear_velocity = tc.linear_velocity + f * 9.0
+					await _frames(40)
+				print("[story]   takedown rams=", rams, " hits=", tg.hits, "/", tg.need, " disabled=", tg.disabled, " speed=", int(tg.car.kmh))
+				await _frames(5)
+			if career.step == st and not career.active.is_empty() and career.active.steps[career.step] == s:
+				print("[story]   STUCK on step ", st, " ", s)
+			else:
+				print("[story]   step ", st, " ok -> ", career.step if not career.active.is_empty() else -1)
+		if state == State.RESULTS:
+			_on_resume()
+		print("[story] done contract=", Save.data.contract, " cash=", Save.data.cash)
+		await _frames(10)
+	print("[story] COMPLETE story_done=", career.story_done())
 
 func _aitest() -> void:
 	_on_play()

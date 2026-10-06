@@ -28,6 +28,9 @@ var prompt_l: Label
 var phone_panel: PanelContainer
 var phone_l: Label
 var sub_l: Label
+var sub_name: Label
+var sub_panel: PanelContainer
+var sub_style: StyleBoxFlat
 var sub_lines: Array = []
 var sub_t := 0.0
 var drift_l: Label
@@ -133,12 +136,33 @@ func setup(g: Node) -> void:
 	prompt_l.custom_minimum_size = Vector2(800, 0)
 	root.add_child(prompt_l)
 
-	sub_l = _label(24, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
-	sub_l.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	sub_l.position = Vector2(-560, -200)
-	sub_l.custom_minimum_size = Vector2(1120, 0)
+	# Dialogue box: speaker name in their colour, typewriter text.
+	sub_panel = PanelContainer.new()
+	sub_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	sub_panel.position = Vector2(-430, -236)
+	sub_panel.custom_minimum_size = Vector2(860, 0)
+	sub_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub_style = StyleBoxFlat.new()
+	sub_style.bg_color = Color(0.02, 0.03, 0.06, 0.78)
+	sub_style.border_width_left = 6
+	sub_style.border_color = ACCENT
+	sub_style.content_margin_left = 22
+	sub_style.content_margin_right = 22
+	sub_style.content_margin_top = 12
+	sub_style.content_margin_bottom = 14
+	sub_style.corner_radius_top_right = 6
+	sub_style.corner_radius_bottom_right = 6
+	sub_panel.add_theme_stylebox_override("panel", sub_style)
+	var sv := VBoxContainer.new()
+	sv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub_panel.add_child(sv)
+	sub_name = _label(18, ACCENT)
+	sv.add_child(sub_name)
+	sub_l = _label(24, Color.WHITE)
 	sub_l.autowrap_mode = TextServer.AUTOWRAP_WORD
-	root.add_child(sub_l)
+	sv.add_child(sub_l)
+	sub_panel.visible = false
+	root.add_child(sub_panel)
 
 	phone_panel = PanelContainer.new()
 	phone_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -207,16 +231,34 @@ func message(text: String, secs := 2.5) -> void:
 		toast_box.remove_child(toast_box.get_child(0))
 
 func show_dialogue(lines: Array) -> void:
-	sub_lines = lines.duplicate()
-	sub_t = 0.0
-	_next_sub()
+	## Queues lines ("Speaker: text" or narration) after anything already showing.
+	var was_idle := sub_lines.is_empty() and not sub_panel.visible
+	sub_lines.append_array(lines)
+	if was_idle:
+		_next_sub()
 
 func _next_sub() -> void:
 	if sub_lines.is_empty():
 		sub_l.text = ""
+		sub_panel.visible = false
 		return
-	sub_l.text = sub_lines.pop_front()
-	sub_t = 3.5 + sub_l.text.length() * 0.04
+	var line: String = sub_lines.pop_front()
+	var who := ""
+	var colon := line.find(": ")
+	if colon > 0 and colon < 14:
+		who = line.substr(0, colon)
+		line = line.substr(colon + 2)
+	var col: Color = Career.SPEAKERS.get(who, Color(0.85, 0.85, 0.9))
+	sub_name.text = who.to_upper() if who != "" else ""
+	sub_name.visible = who != ""
+	sub_name.add_theme_color_override("font_color", col)
+	sub_style.border_color = col if who != "" else Color(1, 1, 1, 0.3)
+	sub_l.text = line
+	sub_l.add_theme_color_override("font_color", Color.WHITE if who != "" else Color(0.85, 0.88, 0.95))
+	sub_l.visible_ratio = 0.0
+	sub_panel.visible = true
+	sub_t = 2.6 + line.length() * 0.045
+	game.audio.play_oneshot("beep", 2.4, -18.0)
 
 func _process(delta: float) -> void:
 	if game == null or game.player == null:
@@ -247,6 +289,8 @@ func _process(delta: float) -> void:
 			var arrows := ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"]
 			dtxt = "   %s %s" % [arrows[posmod(int(round(rel / (PI / 4.0))), 8)], dist_text(to.length())]
 		obj_l.text = "▶ " + career.active.title.to_upper() + "\n" + career.waypoint_label + dtxt
+		if career.target:
+			obj_l.text += "\n" + career.target_text()
 		timer_l.text = _time(career.time_left) if career.time_left < INF else ""
 	elif career.race == null and not police.pursuit:
 		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
@@ -267,7 +311,10 @@ func _process(delta: float) -> void:
 		big_l.modulate.a = clampf(big_t * 2.0, 0.0, 1.0)
 	else:
 		big_l.text = ""
-	if sub_t > 0.0:
+	var talking: bool = game.is_playing()
+	if talking and sub_panel.visible and sub_l.visible_ratio < 1.0:
+		sub_l.visible_ratio = minf(1.0, sub_l.visible_ratio + delta * 55.0 / maxf(sub_l.text.length(), 1.0))
+	if sub_t > 0.0 and talking:
 		sub_t -= delta
 		if sub_t <= 0.0:
 			_next_sub()

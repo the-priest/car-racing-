@@ -2,7 +2,7 @@ class_name RaceSession
 extends Node3D
 ## A single race: grid, countdown, checkpoints, AI rivals, standings.
 
-const RIVAL_NAMES := ["Nyx", "Torque", "Vega", "Rook", "Blaze", "Kai", "Mara's cousin"]
+const RIVAL_NAMES := ["Nyx", "Torque", "Vega", "Ash", "Blaze", "Kai", "Diesel"]
 const RIVAL_COLORS := [Color(0.9, 0.9, 0.88), Color(0.9, 0.75, 0.05), Color(0.1, 0.5, 0.15), Color(0.3, 0.08, 0.5), Color(0.05, 0.12, 0.55), Color(0.85, 0.12, 0.02)]
 
 var game: Node
@@ -23,6 +23,7 @@ var place := 1
 var done := false
 var result := {}
 var need_place := 1
+var boss: Dictionary = {} # named story rival (takes grid slot 0)
 var wrong := 0.0
 var gates: Array[Node3D] = []
 var _last_count := 4
@@ -90,17 +91,35 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		var f := float(d.skill) * randf_range(0.97, 1.03) + 0.06
 		st.accel = float(st.accel) * f
 		st.top = float(st.top) * (0.98 + (f - 1.0) * 0.5)
-		var base: Dictionary = Data.CARS[Data.CAR_ORDER[randi() % Data.CAR_ORDER.size()]]
+		var is_boss := k == 0 and not boss.is_empty()
+		var base: Dictionary = Data.CARS[boss.car] if is_boss else Data.CARS[Data.CAR_ORDER[randi() % Data.CAR_ORDER.size()]]
 		st.cyl = base.cyl
 		st.red = base.red
 		st.idle = base.idle
 		st.body = base.get("body", "concept")
-		car.setup(st, RIVAL_COLORS[k % RIVAL_COLORS.size()], false, false)
+		var skill := float(d.skill) * randf_range(0.97, 1.02)
+		if is_boss:
+			skill = float(d.skill) + float(boss.skill)
+			st.accel = float(st.accel) * (1.0 + float(boss.skill))
+		car.setup(st, boss.paint if is_boss else RIVAL_COLORS[k % RIVAL_COLORS.size()], false, false)
 		car.reset_to(slot.call(s))
 		s += 1
-		var ai := AIDriver.new(car, path, float(d.skill) * randf_range(0.97, 1.02), float(k % 3 - 1) * 2.2)
+		var ai := AIDriver.new(car, path, skill, float(k % 3 - 1) * 2.2)
 		ai.idx = path.nearest(Vector2(car.global_position.x, car.global_position.z), start_idx, 12, 12)
-		rivals.append({"car": car, "ai": ai, "name": RIVAL_NAMES[k % RIVAL_NAMES.size()], "finished": false, "time": INF})
+		var rname: String = boss.name if is_boss else RIVAL_NAMES[k % RIVAL_NAMES.size()]
+		if is_boss:
+			var tag := Label3D.new()
+			tag.text = rname
+			tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			tag.no_depth_test = true
+			tag.fixed_size = true
+			tag.pixel_size = 0.0022
+			tag.font_size = 30
+			tag.outline_size = 10
+			tag.modulate = Color(1.0, 0.4, 0.6)
+			tag.position = Vector3(0, 2.6, 0)
+			car.add_child(tag)
+		rivals.append({"car": car, "ai": ai, "name": rname, "finished": false, "time": INF, "boss": is_boss})
 		game.on_car_spawned(car)
 	game.on_race_start()
 

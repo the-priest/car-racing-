@@ -29,6 +29,18 @@ const BODIES := {
 		],
 		"n_body": 6.0, "n_cabin": 4.0, "scoop": false, "round_lights": false, "chrome": false, "wing": true,
 	},
+	# Armoured cash-in-transit truck: tall box body, short cab.
+	"van": {
+		"wheel_r": 0.42, "wheel_front": -1.75, "wheel_rear": 1.7, "track": 0.86,
+		"body": [
+			[-2.75, 0.96, 0.44, 0.98], [-2.6, 1.04, 0.4, 1.08], [-2.0, 1.08, 0.38, 1.16], [-1.35, 1.08, 0.38, 1.22],
+			[-1.0, 1.1, 0.38, 2.3], [0.0, 1.12, 0.38, 2.4], [2.0, 1.12, 0.4, 2.4], [2.7, 1.1, 0.44, 2.36],
+		],
+		"cabin": [
+			[-2.1, 0.94, 1.14], [-1.75, 0.98, 1.95], [-1.4, 1.0, 2.05], [-1.05, 1.02, 2.1],
+		],
+		"n_body": 9.0, "n_cabin": 6.0, "scoop": false, "round_lights": false, "chrome": false,
+	},
 }
 
 static func _interp(keys: Array, z: float, k: int) -> float:
