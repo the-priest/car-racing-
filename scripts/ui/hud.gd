@@ -49,6 +49,7 @@ var minimap: Minimap
 var big_map: BigMap
 var vignette: ColorRect
 var nitro_fx := 0.0
+var last_beep := -1
 
 func setup(g: Node) -> void:
 	game = g
@@ -432,6 +433,15 @@ func _update(delta: float) -> void:
 		if career.target:
 			obj_l.text += "\n" + career.target_text()
 		timer_l.text = _time(career.time_left) if career.time_left < INF else ""
+		var tl: float = career.time_left
+		if tl < 20.0:
+			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+			timer_l.add_theme_color_override("font_color", Color(1, 0.2, 0.25).lerp(Color.WHITE, pulse * 0.4))
+			if tl < 10.0 and int(ceil(tl)) != last_beep:
+				last_beep = int(ceil(tl))
+				game.audio.play_oneshot("beep", 1.9, -8.0)
+		else:
+			timer_l.add_theme_color_override("font_color", ACCENT)
 		if career.wait_left >= 0.0:
 			timer_l.text = "%d" % int(ceil(career.wait_left))
 	elif career.drift_zone >= 0:
