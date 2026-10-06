@@ -306,6 +306,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if current == "" or current == "loading":
 		return
+	if current == "settings" and (event.is_action_pressed("shift_up") or event.is_action_pressed("shift_down")):
+		_settings_tab(settings_tab + (1 if event.is_action_pressed("shift_up") else -1))
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") or (event.is_action_pressed("pause") and current != "main"):
 		if current != "main":
 			back()
@@ -390,7 +394,6 @@ func _build_main(box: VBoxContainer) -> void:
 		_button(box, "STORY", func(): show_screen("story"))
 		_button(box, "RECORDS", func(): show_screen("records"))
 	_button(box, "SETTINGS", func(): show_screen("settings"))
-	_button(box, "CONTROLS", func(): show_screen("controls"))
 	_button(box, "CREDITS", func(): show_screen("credits"))
 	if started:
 		_button(box, "NEW CAREER" if not confirm_new else "CONFIRM: ERASE ALL PROGRESS?", func():
@@ -609,41 +612,65 @@ func _stat_bar(label: String, val: float, stock: float, text: String) -> Control
 	row.add_child(v)
 	return row
 
+## Each row: key, label, values, value names, tab (index into SETTINGS_TABS).
+const SETTINGS_TABS := ["GAMEPLAY", "DISPLAY", "AUDIO", "CONTROLS"]
 const SETTINGS := [
-	["quality", "Graphics preset", ["low", "medium", "high", "ultra"], ["Low (laptops)", "Medium", "High", "Ultra"]],
-	["render_scale", "Render scale", [0.0, 0.5, 0.67, 0.77, 0.85, 1.0, 1.25], ["Preset", "50%", "67%", "77%", "85%", "100%", "125%"]],
-	["fullscreen", "Fullscreen", [true, false], ["On", "Off"]],
-	["vsync", "V-Sync", [true, false], ["On", "Off"]],
-	["fov", "Field of view", [60.0, 66.0, 72.0, 78.0, 85.0, 95.0], ["60", "66", "72", "78", "85", "95"]],
-	["assists", "Driving assists", [true, false], ["Traction + stability", "Off (raw)"]],
-	["manual", "Gearbox", [false, true], ["Automatic", "Manual"]],
-	["units", "Units", ["kmh", "mph"], ["km/h", "mph"]],
-	["traffic", "Traffic density", [0.0, 0.5, 1.0, 1.5], ["Off", "Light", "Normal", "Heavy"]],
-	["music", "Music volume", [0.0, 0.25, 0.5, 0.75, 1.0], ["Off", "25%", "50%", "75%", "100%"]],
-	["sfx", "Effects volume", [0.0, 0.25, 0.5, 0.85, 1.0], ["Off", "25%", "50%", "85%", "100%"]],
-	["radio", "Radio (your music)", [false, true], ["Off - soundtrack", "On"]],
-	["radio_shuffle", "Radio order", [true, false], ["Shuffle", "In order"]],
-	["difficulty", "Difficulty", ["easy", "normal", "hard"], ["Easy", "Normal", "Hard"]],
-	["time_mode", "Time of day", ["dynamic", "day", "dusk", "night"], ["Dynamic cycle", "Always day", "Always dusk", "Always night"]],
-	["weather", "Weather", ["dynamic", "clear", "rain"], ["Dynamic", "Always clear", "Always rain"]],
-	["speed_fx", "Speed blur", [true, false], ["On", "Off"]],
-	["cam_shake", "Camera shake", [0.0, 0.5, 1.0], ["Off", "Low", "Full"]],
-	["show_fps", "Show FPS", [false, true], ["Off", "On"]],
-	["vibration", "Controller vibration", [0.0, 0.5, 0.75, 1.0, 1.5], ["Off", "Low", "Medium", "Full", "Extreme"]],
-	["steer_sens", "Steering sensitivity", [0.7, 0.85, 1.0, 1.15, 1.3], ["70%", "85%", "100%", "115%", "130%"]],
-	["deadzone", "Stick deadzone", [0.03, 0.05, 0.08, 0.12, 0.18], ["3%", "5%", "8%", "12%", "18%"]],
-	["steer_curve", "Steering response", [1.0, 1.3, 1.6, 2.0], ["Linear", "Smooth", "Precise centre", "Very precise"]],
+	["difficulty", "Difficulty", ["easy", "normal", "hard"], ["Easy", "Normal", "Hard"], 0],
+	["assists", "Driving assists", [true, false], ["On", "Off (expert)"], 0],
+	["manual", "Gearbox", [false, true], ["Automatic", "Manual"], 0],
+	["units", "Units", ["kmh", "mph"], ["km/h", "mph"], 0],
+	["traffic", "Traffic density", [0.0, 0.5, 1.0, 1.5], ["Off", "Light", "Normal", "Heavy"], 0],
+	["time_mode", "Time of day", ["dynamic", "day", "dusk", "night"], ["Dynamic cycle", "Always day", "Always dusk", "Always night"], 0],
+	["weather", "Weather", ["dynamic", "clear", "rain"], ["Dynamic", "Always clear", "Always rain"], 0],
+	["quality", "Graphics preset", ["low", "medium", "high", "ultra"], ["Low (laptops)", "Medium", "High", "Ultra"], 1],
+	["render_scale", "Render scale", [0.0, 0.5, 0.67, 0.77, 0.85, 1.0, 1.25], ["Preset", "50%", "67%", "77%", "85%", "100%", "125%"], 1],
+	["fullscreen", "Fullscreen", [true, false], ["On", "Off"], 1],
+	["vsync", "V-Sync", [true, false], ["On", "Off"], 1],
+	["fov", "Field of view", [60.0, 66.0, 72.0, 78.0, 85.0, 95.0], ["60", "66", "72", "78", "85", "95"], 1],
+	["speed_fx", "Motion blur", [true, false], ["On", "Off"], 1],
+	["cam_shake", "Camera shake", [0.0, 0.5, 1.0], ["Off", "Low", "Full"], 1],
+	["show_fps", "FPS counter", [false, true], ["Off", "On"], 1],
+	["music", "Music volume", [0.0, 0.25, 0.5, 0.75, 1.0], ["Off", "25%", "50%", "75%", "100%"], 2],
+	["sfx", "Effects volume", [0.0, 0.25, 0.5, 0.85, 1.0], ["Off", "25%", "50%", "85%", "100%"], 2],
+	["radio", "Radio (your music)", [false, true], ["Off (soundtrack)", "On"], 2],
+	["radio_shuffle", "Radio order", [true, false], ["Shuffle", "In order"], 2],
+	["steer_sens", "Steering sensitivity", [0.7, 0.85, 1.0, 1.15, 1.3], ["70%", "85%", "100%", "115%", "130%"], 3],
+	["steer_curve", "Steering response", [1.0, 1.3, 1.6, 2.0], ["Linear", "Smooth", "Precise center", "Very precise"], 3],
+	["deadzone", "Stick deadzone", [0.03, 0.05, 0.08, 0.12, 0.18], ["3%", "5%", "8%", "12%", "18%"], 3],
+	["vibration", "Controller vibration", [0.0, 0.5, 0.75, 1.0, 1.5], ["Off", "Low", "Medium", "Full", "Extreme"], 3],
 ]
+
+var settings_tab := 0
+
+func _settings_tab(i: int) -> void:
+	settings_tab = posmod(i, SETTINGS_TABS.size())
+	focus_hint = SETTINGS_TABS[settings_tab]
+	show_screen("settings", false)
 
 func _build_settings(box: VBoxContainer) -> void:
 	_title(box, "SETTINGS")
-	if Settings.needs_restart():
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 6)
+	box.add_child(tabs)
+	for i in SETTINGS_TABS.size():
+		var tb := _button(tabs, SETTINGS_TABS[i], func(): _settings_tab(i))
+		tb.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var on := i == settings_tab
+		for c in ["font_color", "font_focus_color", "font_hover_color"]:
+			tb.add_theme_color_override(c, ACCENT if on else Color(1, 1, 1, 0.55))
+	_text(box, "%s / %s  switch tabs" % [Settings.glyph("shift_down"), Settings.glyph("shift_up")], 13, Color(1, 1, 1, 0.4))
+	if settings_tab == 1 and Settings.needs_restart():
 		_text(box, "This preset uses a different renderer. Restart to apply it fully.", 17, ACCENT)
 		_button(box, "RESTART NOW", func():
 			game.persist()
 			OS.set_restart_on_exit(true)
 			get_tree().quit())
 	for row in SETTINGS:
+		if int(row[4]) != settings_tab:
+			continue
+		if row[0] == "radio_shuffle" and not bool(Settings.data.radio):
+			continue
 		var key: String = row[0]
 		var values: Array = row[2]
 		var names: Array = row[3]
@@ -664,7 +691,7 @@ func _build_settings(box: VBoxContainer) -> void:
 			if key == "radio_shuffle":
 				game.audio._radio_shuffle()
 			update_text.call(maxi(values.find(Settings.data[key]), 0))
-			if key == "quality":
+			if key == "quality" or key == "radio":
 				show_screen("settings", false)
 		b.pressed.connect(func(): cycle.call(1))
 		b.gui_input.connect(func(ev: InputEvent):
@@ -674,22 +701,28 @@ func _build_settings(box: VBoxContainer) -> void:
 			elif ev.is_action_pressed("ui_right"):
 				cycle.call(1)
 				b.accept_event())
-	_button(box, "OPEN RADIO FOLDER", func():
-		var dir := AudioManager.radio_folder()
-		DirAccess.make_dir_recursive_absolute(dir)
-		if not FileAccess.file_exists(dir.path_join(".gdignore")):
-			var gi := FileAccess.open(dir.path_join(".gdignore"), FileAccess.WRITE)
-			if gi:
-				gi.close()
-		OS.shell_open(dir)
-		game.audio.radio_scan())
-	_text(box, "Radio: drop MP3 files into %s, then press %s while driving (tap: on / next song, hold: off)." % [AudioManager.radio_folder(), Settings.glyph("radio")], 14)
-	if not Input.get_connected_joypads().is_empty():
-		_button(box, "TEST VIBRATION", func():
-			var g := float(Settings.data.vibration)
-			for d in Input.get_connected_joypads():
-				Input.start_joy_vibration(d, clampf(0.6 * g, 0.0, 1.0), clampf(0.8 * g, 0.0, 1.0), 0.5))
-	_text(box, "Low uses the lightweight OpenGL renderer for older laptops. Ultra enables real-time global illumination, screen-space reflections & GI, volumetric fog, 8K shadows and dense grass.", 15)
+	match settings_tab:
+		1:
+			_text(box, "Low uses the lightweight OpenGL renderer for older laptops. Ultra adds real-time global illumination, reflections, volumetric fog, 8K shadows and dense grass.", 14)
+		2:
+			_button(box, "OPEN RADIO FOLDER", func():
+				var dir := AudioManager.radio_folder()
+				DirAccess.make_dir_recursive_absolute(dir)
+				if not FileAccess.file_exists(dir.path_join(".gdignore")):
+					var gi := FileAccess.open(dir.path_join(".gdignore"), FileAccess.WRITE)
+					if gi:
+						gi.close()
+				OS.shell_open(dir)
+				game.audio.radio_scan())
+			_text(box, "Drop MP3 files into %s, then press %s while driving: tap for on / next song, hold to switch back to the soundtrack." % [AudioManager.radio_folder(), Settings.glyph("radio")], 14)
+		3:
+			_button(box, "CONTROLLER LAYOUT", func(): show_screen("controls"))
+			_button(box, "REMAP CONTROLS", func(): show_screen("remap"))
+			if not Input.get_connected_joypads().is_empty():
+				_button(box, "TEST VIBRATION", func():
+					var g := float(Settings.data.vibration)
+					for d in Input.get_connected_joypads():
+						Input.start_joy_vibration(d, clampf(0.6 * g, 0.0, 1.0), clampf(0.8 * g, 0.0, 1.0), 0.5))
 	_button(box, "BACK", func(): back())
 
 func _build_controls(box: VBoxContainer) -> void:
