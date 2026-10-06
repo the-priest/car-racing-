@@ -254,6 +254,7 @@ func _rebuild(name: String) -> void:
 			"settings": _screen("settings", false, 760)
 			"controls": _screen("controls")
 			"credits": _screen("credits")
+			"story": _screen("story", false, 700)
 			"results": _screen("results")
 	var box: VBoxContainer = screens[name].box
 	_clear(box)
@@ -264,6 +265,7 @@ func _rebuild(name: String) -> void:
 		"settings": _build_settings(box)
 		"controls": _build_controls(box)
 		"credits": _build_credits(box)
+		"story": _build_story(box)
 
 func _build_main(box: VBoxContainer) -> void:
 	box.add_theme_constant_override("separation", 12)
@@ -277,6 +279,8 @@ func _build_main(box: VBoxContainer) -> void:
 	box.add_child(sp2)
 	var started: bool = int(Save.data.contract) > 0 or float(Save.data.playtime) > 30.0
 	_button(box, "CONTINUE" if started else "START CAREER", func(): play_pressed.emit())
+	if started:
+		_button(box, "STORY", func(): show_screen("story"))
 	_button(box, "SETTINGS", func(): show_screen("settings"))
 	_button(box, "CONTROLS", func(): show_screen("controls"))
 	_button(box, "CREDITS", func(): show_screen("credits"))
@@ -286,12 +290,13 @@ func _build_main(box: VBoxContainer) -> void:
 			game.reset_career()
 			show_screen("main", false))
 	_button(box, "QUIT", func(): get_tree().quit())
-	_text(box, "\nBank  $%s   ·   Contracts %d / %d" % [HUD._fmt(int(Save.data.cash)), mini(int(Save.data.contract), Career.CONTRACTS.size()), Career.CONTRACTS.size()], 18)
+	_text(box, "\nBank  $%s   ·   Story %d / %d" % [HUD._fmt(int(Save.data.cash)), mini(int(Save.data.contract), Career.CONTRACTS.size()), Career.CONTRACTS.size()], 18)
 
 func _build_pause(box: VBoxContainer) -> void:
 	_title(box, "PAUSED")
 	var career: Career = game.career
 	_button(box, "RESUME", func(): back())
+	_button(box, "STORY", func(): show_screen("story"))
 	if career.race != null or not career.active.is_empty():
 		_button(box, "ABANDON " + ("RACE" if career.race else "JOB"), func():
 			career.abandon()
@@ -453,9 +458,9 @@ func _build_controls(box: VBoxContainer) -> void:
 	var G: Dictionary = Settings.PLAYSTATION if ps else Settings.XBOX
 	_text(box, ("PlayStation" if ps else "Xbox / generic") + " controller layout" + ("  -  " + Input.get_joy_name(Input.get_connected_joypads()[0]) if not Input.get_connected_joypads().is_empty() else "  -  no controller detected"), 16, ACCENT)
 	var rows := [
-		["Accelerate / Brake-Reverse", "W / S", G.throttle + " / " + G.brake], ["Steer", "A / D", "Left stick"], ["Handbrake", "Space", G.handbrake],
+		["Accelerate / Brake-Reverse", "W / S", G.throttle + " / " + G.brake], ["Steer", "A / D", "Left stick"], ["Handbrake (start a drift)", "Space", G.handbrake],
 		["Nitrous", "Shift / N", G.nitro + " or L3"], ["Burnout / donuts", "W + S while stopped", G.throttle + " + " + G.brake], ["Camera", "C", G.camera],
-		["Look back / around", "B", "R3 / right stick"], ["Answer phone", "Tab", G.phone], ["Start race / garage", "E / Enter", G.interact],
+		["Look back / around", "B", "R3 / right stick"], ["Answer / make call", "Tab", G.phone], ["Full map", "M", G.map], ["Start race / garage", "E / Enter", G.interact],
 		["Reset to road", "R", G.reset], ["Shift up / down (manual)", "X / Z", G.shift_up + " / " + G.shift_down], ["Headlights", "L", G.headlights],
 		["Pause", "Esc", G.pause], ["Menu select / back", "Enter / Esc", G.accept + " / " + G.back],
 	]
@@ -471,6 +476,34 @@ func _build_controls(box: VBoxContainer) -> void:
 			grid.add_child(l)
 	box.add_child(grid)
 	_text(box, "Controller vibration: engine near redline, tyre slip, ABS pulse, rough ground, gear shifts, landings, impacts, nitrous and burnouts. Adjust strength, steering sensitivity, deadzone and response curve in Settings.", 15)
+	_button(box, "BACK", func(): back())
+
+func _build_story(box: VBoxContainer) -> void:
+	_title(box, "STORY")
+	var cur := int(Save.data.contract)
+	var total := Career.CONTRACTS.size()
+	_text(box, ("Chapter %d of %d" % [cur + 1, total]) if cur < total else "Story complete - side jobs keep coming", 18, ACCENT)
+	for i in total:
+		var c: Dictionary = Career.CONTRACTS[i]
+		if c.has("act"):
+			_text(box, "\n" + Career.ACTS[int(c.act)], 17, Color(1, 1, 1, 0.5))
+		var line := ""
+		var col := Color.WHITE
+		if i < cur:
+			line = "✓  %s" % c.title
+			col = Color(0.5, 1.0, 0.62)
+		elif i == cur:
+			line = "▶  %s   ·   %s" % [c.title, c.caller]
+			col = ACCENT
+		else:
+			line = "·  ?????"
+			col = Color(1, 1, 1, 0.35)
+		_text(box, line, 20, col)
+		if i == cur:
+			var brief: Array = c.brief
+			_text(box, "	 " + str(brief[brief.size() - 1]), 16, Color(1, 1, 1, 0.7))
+	if cur < total:
+		_text(box, "\nWait for the call in free roam, or press %s to call your contact." % Settings.glyph("phone"), 16)
 	_button(box, "BACK", func(): back())
 
 func _build_credits(box: VBoxContainer) -> void:
@@ -498,7 +531,20 @@ func show_results(res: Dictionary) -> void:
 		_text(box, res.title.to_upper(), 20, ACCENT)
 		if not res.ok and res.why != "":
 			_text(box, res.why, 20, Color.WHITE)
-	_text(box, "Reward  +$%s" % HUD._fmt(int(res.reward)), 26, Color(0.5, 1.0, 0.62))
+		if res.ok and res.get("story", false):
+			var cur := int(Save.data.contract)
+			if cur < Career.CONTRACTS.size():
+				_text(box, "Story  %d / %d   ·   Next: %s calls soon" % [cur, Career.CONTRACTS.size(), Career.CONTRACTS[cur].caller], 18, Color.WHITE)
+			else:
+				_text(box, "STORY COMPLETE", 22, ACCENT)
+	if res.ok or res.kind == "race":
+		_text(box, "Reward  +$%s" % HUD._fmt(int(res.reward)), 26, Color(0.5, 1.0, 0.62))
+	if not res.ok and res.kind == "contract" and not game.career.last_failed.is_empty():
+		_button(box, "RETRY JOB", func():
+			screens.results.root.visible = false
+			current = ""
+			resume_pressed.emit()
+			game.career.retry())
 	_button(box, "CONTINUE", func():
 		screens.results.root.visible = false
 		current = ""

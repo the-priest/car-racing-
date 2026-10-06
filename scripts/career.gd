@@ -191,6 +191,7 @@ var trap_cool := {}
 var target: MissionTarget
 var wait_pos := Vector2.INF
 var away_warned := 0.0
+var last_failed: Dictionary = {}
 
 func setup(g: Node, w: World) -> void:
 	game = g
@@ -526,11 +527,24 @@ func _complete_contract(ok: bool, why := "") -> void:
 		if story_idx == CONTRACTS.size() - 1:
 			story_complete.emit()
 	else:
+		last_failed = c
 		var who: String = c.get("caller", "Mara")
 		dialogue.emit(["%s: %s. Call me when you're ready to go again." % [who, why if why != "" else "That fell apart"]])
 		call_timer = 20.0
 	res.story = story_idx >= 0
+	if ok:
+		last_failed = {}
 	finished.emit(res)
+
+func retry() -> void:
+	if last_failed.is_empty() or not idle():
+		return
+	var c := last_failed
+	last_failed = {}
+	pending_call = -1
+	ringing = 0.0
+	game.police.clear()
+	_start_contract(c)
 
 func abandon(why := "Abandoned") -> void:
 	if race:
