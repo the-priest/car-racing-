@@ -306,6 +306,38 @@ func message(text: String, secs := 2.5) -> void:
 		toast_box.get_child(0).queue_free()
 		toast_box.remove_child(toast_box.get_child(0))
 
+## Cinematic title card for a new job: act line, big title, subtitle; fades out.
+func title_card(top: String, title: String, sub: String) -> void:
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_CENTER)
+	box.position = Vector2(-500, -190)
+	box.custom_minimum_size = Vector2(1000, 0)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var a := _label(20, ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
+	a.text = top
+	var b := _label(84, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	b.text = title
+	b.add_theme_constant_override("outline_size", 8)
+	b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	var line := ColorRect.new()
+	line.color = ACCENT
+	line.custom_minimum_size = Vector2(0, 3)
+	line.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var c := _label(18, Color(1, 1, 1, 0.8), HORIZONTAL_ALIGNMENT_CENTER)
+	c.text = sub
+	for n in [a, b, line, c]:
+		box.add_child(n)
+	root.add_child(box)
+	box.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(box, "modulate:a", 1.0, 0.35)
+	tw.parallel().tween_property(line, "custom_minimum_size:x", 420.0, 0.6).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(2.6)
+	tw.tween_property(box, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(box.queue_free)
+	big_t = 0.0
+	big_l.text = ""
+
 func radio(text: String) -> void:
 	radio_l.text = text
 	radio_t = 5.0 + text.length() * 0.03

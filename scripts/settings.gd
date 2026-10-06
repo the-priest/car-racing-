@@ -44,7 +44,70 @@ var data := {
 	"show_fps": false, "traffic": 1.0, "camera": 0, "sensitivity": 1.0,
 	"vibration": 1.0, "steer_sens": 1.0, "deadzone": 0.08, "steer_curve": 1.3,
 	"speed_fx": true, "cam_shake": 1.0,
+	"bindings": {}, # action -> {"key": physical keycode, "pad": joy button} overrides
 }
+
+## Actions the player can rebind (keyboard: all; controller: button actions).
+const REBINDABLE := ["throttle", "brake", "steer_left", "steer_right", "handbrake", "nitro", "camera", "look_back",
+	"reset", "interact", "phone", "map", "shift_up", "shift_down", "horn", "headlights"]
+const PAD_REBINDABLE := ["handbrake", "nitro", "camera", "look_back", "reset", "interact", "phone", "map",
+	"shift_up", "shift_down", "horn", "headlights"]
+const ACTION_NAMES := {"throttle": "Accelerate", "brake": "Brake / reverse", "steer_left": "Steer left", "steer_right": "Steer right",
+	"handbrake": "Handbrake", "nitro": "Nitrous", "camera": "Change camera", "look_back": "Look back", "reset": "Reset to road",
+	"interact": "Interact / next line", "phone": "Phone", "map": "Map", "shift_up": "Shift up", "shift_down": "Shift down",
+	"horn": "Horn", "headlights": "Headlights"}
+const PAD_NAMES_XBOX := {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB",
+	JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3", JOY_BUTTON_BACK: "View",
+	JOY_BUTTON_START: "Menu", JOY_BUTTON_DPAD_UP: "D-pad ↑", JOY_BUTTON_DPAD_DOWN: "D-pad ↓", JOY_BUTTON_DPAD_LEFT: "D-pad ←",
+	JOY_BUTTON_DPAD_RIGHT: "D-pad →", JOY_BUTTON_TOUCHPAD: "Touchpad", JOY_BUTTON_GUIDE: "Guide"}
+const PAD_NAMES_PS := {JOY_BUTTON_A: "✕", JOY_BUTTON_B: "○", JOY_BUTTON_X: "□", JOY_BUTTON_Y: "△", JOY_BUTTON_LEFT_SHOULDER: "L1",
+	JOY_BUTTON_RIGHT_SHOULDER: "R1", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3", JOY_BUTTON_BACK: "Create",
+	JOY_BUTTON_START: "Options", JOY_BUTTON_DPAD_UP: "D-pad ↑", JOY_BUTTON_DPAD_DOWN: "D-pad ↓", JOY_BUTTON_DPAD_LEFT: "D-pad ←",
+	JOY_BUTTON_DPAD_RIGHT: "D-pad →", JOY_BUTTON_TOUCHPAD: "Touchpad", JOY_BUTTON_GUIDE: "PS"}
+
+## Rebinds one action for keyboard (InputEventKey) or controller (InputEventJoypadButton).
+func rebind(action: String, ev: InputEvent) -> void:
+	var b: Dictionary = data.bindings.get(action, {}).duplicate()
+	if ev is InputEventKey:
+		b["key"] = int((ev as InputEventKey).physical_keycode)
+	elif ev is InputEventJoypadButton:
+		b["pad"] = int((ev as InputEventJoypadButton).button_index)
+	data.bindings[action] = b
+	_apply_binding(action)
+	save_settings()
+
+func reset_bindings() -> void:
+	data.bindings = {}
+	for a in _default_map():
+		if InputMap.has_action(a):
+			InputMap.action_erase_events(a)
+	_default_events()
+	save_settings()
+
+func _apply_binding(action: String) -> void:
+	var b: Dictionary = data.bindings.get(action, {})
+	if b.has("key"):
+		for e in InputMap.action_get_events(action):
+			if e is InputEventKey:
+				InputMap.action_erase_event(action, e)
+		InputMap.action_add_event(action, _key(int(b.key) as Key))
+	if b.has("pad"):
+		for e in InputMap.action_get_events(action):
+			if e is InputEventJoypadButton:
+				InputMap.action_erase_event(action, e)
+		InputMap.action_add_event(action, _btn(int(b.pad) as JoyButton))
+
+## Current label of an action's binding on keyboard or pad.
+func binding_text(action: String, pad: bool) -> String:
+	for e in InputMap.action_get_events(action):
+		if pad and e is InputEventJoypadButton:
+			var names := PAD_NAMES_PS if pad_style() == "playstation" else PAD_NAMES_XBOX
+			return names.get((e as InputEventJoypadButton).button_index, "Button %d" % (e as InputEventJoypadButton).button_index)
+		if not pad and e is InputEventKey:
+			return OS.get_keycode_string((e as InputEventKey).physical_keycode)
+	if pad:
+		return (PLAYSTATION if pad_style() == "playstation" else XBOX).get(action, "-")
+	return "-"
 
 # ---------------------------------------------------------------- controller glyphs
 const XBOX := {"handbrake": "X", "nitro": "A", "camera": "Y", "reset": "B (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
@@ -69,6 +132,9 @@ func pad_style() -> String:
 
 ## Button/key label for an action on the device the player is currently using.
 func glyph(action: String) -> String:
+	if REBINDABLE.has(action) and data.bindings.has(action):
+		var t := binding_text(action, using_pad)
+		return t + (" (hold)" if action == "reset" and using_pad else "")
 	if not using_pad:
 		return KEYS.get(action, action)
 	return (PLAYSTATION if pad_style() == "playstation" else XBOX).get(action, action)
@@ -77,6 +143,9 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	setup_input()
 	load_settings()
+	for a in data.bindings:
+		if InputMap.has_action(a):
+			_apply_binding(a)
 	if data.quality == "":
 		# Default to High; the player's chosen preset is always respected afterwards.
 		data.quality = "high"
@@ -184,7 +253,31 @@ func apply_graphics(env: Environment, sun: DirectionalLight3D, vp: Viewport, cam
 	cam.fov = data.fov
 
 func setup_input() -> void:
-	var map := {
+	_default_events()
+	# Gamepad confirm/back in menus (A / Cross, B / Circle) and D-pad navigation.
+	InputMap.action_add_event("ui_accept", _btn(JOY_BUTTON_A))
+	InputMap.action_add_event("ui_cancel", _btn(JOY_BUTTON_B))
+	InputMap.action_add_event("ui_up", _btn(JOY_BUTTON_DPAD_UP))
+	InputMap.action_add_event("ui_down", _btn(JOY_BUTTON_DPAD_DOWN))
+	InputMap.action_add_event("ui_left", _btn(JOY_BUTTON_DPAD_LEFT))
+	InputMap.action_add_event("ui_right", _btn(JOY_BUTTON_DPAD_RIGHT))
+	# Menu navigation also follows the left stick.
+	InputMap.action_add_event("ui_up", _axis(JOY_AXIS_LEFT_Y, -1.0))
+	InputMap.action_add_event("ui_down", _axis(JOY_AXIS_LEFT_Y, 1.0))
+	InputMap.action_add_event("ui_left", _axis(JOY_AXIS_LEFT_X, -1.0))
+	InputMap.action_add_event("ui_right", _axis(JOY_AXIS_LEFT_X, 1.0))
+
+func _default_events() -> void:
+	var map := _default_map()
+	for action in map:
+		if not InputMap.has_action(action):
+			# Steering uses the player's own deadzone setting only.
+			InputMap.add_action(action, 0.0 if action.begins_with("steer_") else 0.12)
+		for ev in map[action]:
+			InputMap.action_add_event(action, ev)
+
+func _default_map() -> Dictionary:
+	return {
 		"throttle": [_key(KEY_W), _key(KEY_UP), _axis(JOY_AXIS_TRIGGER_RIGHT, 1.0)],
 		"brake": [_key(KEY_S), _key(KEY_DOWN), _axis(JOY_AXIS_TRIGGER_LEFT, 1.0)],
 		"steer_left": [_key(KEY_A), _key(KEY_LEFT), _axis(JOY_AXIS_LEFT_X, -1.0)],
@@ -205,24 +298,6 @@ func setup_input() -> void:
 		"horn": [_key(KEY_H), _btn(JOY_BUTTON_DPAD_LEFT)],
 		"headlights": [_key(KEY_L), _btn(JOY_BUTTON_DPAD_RIGHT)],
 	}
-	for action in map:
-		if not InputMap.has_action(action):
-			# Steering uses the player's own deadzone setting only.
-			InputMap.add_action(action, 0.0 if action.begins_with("steer_") else 0.12)
-		for ev in map[action]:
-			InputMap.action_add_event(action, ev)
-	# Gamepad confirm/back in menus (A / Cross, B / Circle) and D-pad navigation.
-	InputMap.action_add_event("ui_accept", _btn(JOY_BUTTON_A))
-	InputMap.action_add_event("ui_cancel", _btn(JOY_BUTTON_B))
-	InputMap.action_add_event("ui_up", _btn(JOY_BUTTON_DPAD_UP))
-	InputMap.action_add_event("ui_down", _btn(JOY_BUTTON_DPAD_DOWN))
-	InputMap.action_add_event("ui_left", _btn(JOY_BUTTON_DPAD_LEFT))
-	InputMap.action_add_event("ui_right", _btn(JOY_BUTTON_DPAD_RIGHT))
-	# Menu navigation also follows the left stick.
-	InputMap.action_add_event("ui_up", _axis(JOY_AXIS_LEFT_Y, -1.0))
-	InputMap.action_add_event("ui_down", _axis(JOY_AXIS_LEFT_Y, 1.0))
-	InputMap.action_add_event("ui_left", _axis(JOY_AXIS_LEFT_X, -1.0))
-	InputMap.action_add_event("ui_right", _axis(JOY_AXIS_LEFT_X, 1.0))
 
 func _key(k: Key) -> InputEventKey:
 	var e := InputEventKey.new()

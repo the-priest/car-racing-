@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--remaptest":
+			shots_spec = "REMAPTEST"
 		if a == "--drifttest":
 			shots_spec = "DRIFTTEST"
 		if a == "--fuzz":
@@ -127,6 +129,7 @@ func _ready() -> void:
 	career.finished.connect(_on_career_finished)
 	career.dialogue.connect(func(lines): hud.show_dialogue(lines))
 	career.dialogue_clear.connect(func(): hud.clear_dialogue())
+	career.title_card.connect(func(a, b, c): hud.title_card(a, b, c))
 	career.story_complete.connect(_on_story_complete)
 	hud = HUD.new()
 	add_child(hud)
@@ -144,6 +147,31 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "REMAPTEST":
+		_to_menu()
+		menus.show_screen("controls")
+		await _snap("m1_controls")
+		menus.show_screen("remap")
+		await _snap("m2_remap")
+		await _click_button("Handbrake")
+		await _snap("m3_listening")
+		var k := InputEventKey.new()
+		k.physical_keycode = KEY_K
+		k.pressed = true
+		Input.parse_input_event(k)
+		await _frames(4)
+		await _snap("m4_after_key")
+		print("[remap] key glyph=", Settings.binding_text("handbrake", false), " events=", InputMap.action_get_events("handbrake").map(func(e): return e.as_text()))
+		await _click_button("Handbrake")
+		await _pad(JOY_BUTTON_Y)
+		await _frames(4)
+		print("[remap] pad glyph=", Settings.binding_text("handbrake", true), " events=", InputMap.action_get_events("handbrake").map(func(e): return e.as_text()))
+		Settings.using_pad = false
+		print("[remap] hud glyph kb=", Settings.glyph("handbrake"))
+		Settings.reset_bindings()
+		print("[remap] after reset=", InputMap.action_get_events("handbrake").map(func(e): return e.as_text()), " pause events=", InputMap.action_get_events("pause").size())
 		get_tree().quit()
 		return
 	if shots_spec == "DRIFTTEST":

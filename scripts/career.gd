@@ -6,6 +6,7 @@ extends Node3D
 signal message(text: String, seconds: float)
 signal dialogue(lines: Array)
 signal dialogue_clear
+signal title_card(top: String, title: String, sub: String)
 signal story_complete
 signal big(text: String, seconds: float)
 signal phone_ring(caller: String)
@@ -488,10 +489,18 @@ func pos_of(key: String) -> Vector2:
 func _start_contract(c: Dictionary) -> void:
 	active = c
 	step = -1
-	if c.has("act"):
-		big.emit(ACTS[int(c.act)], 3.5)
+	var idx := -1
+	for i in CONTRACTS.size():
+		if CONTRACTS[i].title == c.title:
+			idx = i
+	if idx >= 0:
+		var act := 0
+		for i in idx + 1:
+			if CONTRACTS[i].has("act"):
+				act = int(CONTRACTS[i].act)
+		title_card.emit(ACTS[act], c.title.to_upper(), "CHAPTER %d  ·  %s" % [idx + 1, c.caller.to_upper()])
 	else:
-		big.emit(c.title.to_upper(), 2.5)
+		title_card.emit("SIDE JOB", c.title.to_upper(), "FOR %s  ·  $%s" % [str(c.caller).to_upper(), HUD._fmt(int(c.reward))])
 	_next_step()
 
 func _next_step() -> void:

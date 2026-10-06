@@ -17,6 +17,8 @@ var current := ""
 var stack: Array[String] = []
 var garage_sel := "vanta"
 var confirm_new := false
+var listening := "" # action being rebound on the remap screen
+var focus_hint := "" # focus the button starting with this text after the next rebuild
 var loading_bar: ProgressBar
 var loading_label: Label
 
@@ -185,6 +187,13 @@ func show_screen(name: String, push := true) -> void:
 	screens[name].root.visible = true
 	await get_tree().process_frame
 	var btns := _buttons(screens[name].box)
+	if focus_hint != "":
+		for x in btns:
+			if (x as Button).text.begins_with(focus_hint):
+				(x as Button).grab_focus()
+				focus_hint = ""
+				return
+		focus_hint = ""
 	if keep >= 0 and not btns.is_empty():
 		var k := mini(keep, btns.size() - 1)
 		# Prefer the button with the same label (settings rows keep their name).
@@ -299,6 +308,7 @@ func _rebuild(name: String) -> void:
 			"credits": _screen("credits")
 			"story": _screen("story")
 			"records": _screen("records")
+			"remap": _screen("remap", false, 760)
 			"results": _screen("results")
 	var box: VBoxContainer = screens[name].box
 	_clear(box)
@@ -311,6 +321,7 @@ func _rebuild(name: String) -> void:
 		"credits": _build_credits(box)
 		"story": _build_story(box)
 		"records": _build_records(box)
+		"remap": _build_remap(box)
 
 func _build_main(box: VBoxContainer) -> void:
 	box.add_theme_constant_override("separation", 8)
@@ -552,13 +563,16 @@ func _build_controls(box: VBoxContainer) -> void:
 	var ps := Settings.pad_style() == "playstation"
 	var G: Dictionary = Settings.PLAYSTATION if ps else Settings.XBOX
 	_text(box, ("PlayStation" if ps else "Xbox / generic") + " controller layout" + ("  -  " + Input.get_joy_name(Input.get_connected_joypads()[0]) if not Input.get_connected_joypads().is_empty() else "  -  no controller detected"), 16, ACCENT)
-	var rows := [
-		["Accelerate / Brake-Reverse", "W / S", G.throttle + " / " + G.brake], ["Steer", "A / D", "Left stick"], ["Handbrake (start a drift)", "Space", G.handbrake],
-		["Nitrous", "Shift / N", G.nitro + " or L3"], ["Burnout / donuts", "W + S while stopped", G.throttle + " + " + G.brake], ["Camera", "C", G.camera],
-		["Look back / around", "B", "R3 / right stick"], ["Answer / make call", "Tab", G.phone], ["Full map", "M", G.map], ["Start race / garage", "E / Enter", G.interact],
-		["Reset to road", "R", G.reset], ["Shift up / down (manual)", "X / Z", G.shift_up + " / " + G.shift_down], ["Headlights", "L", G.headlights], ["Horn", "H", G.horn],
-		["Pause", "Esc", G.pause], ["Menu select / back", "Enter / Esc", G.accept + " / " + G.back],
-	]
+	var rows := []
+	for a in Settings.REBINDABLE:
+		var pad := Settings.binding_text(a, true)
+		if a.begins_with("steer_"):
+			pad = "Left stick"
+		rows.append([Settings.ACTION_NAMES[a], Settings.binding_text(a, false), pad + (" (hold)" if a == "reset" else "")])
+	rows.append(["Burnout / donuts", "Throttle + brake stopped", G.throttle + " + " + G.brake])
+	rows.append(["Look around", "-", "Right stick"])
+	rows.append(["Pause", "Esc", G.pause])
+	rows.append(["Menu select / back", "Enter / Esc", G.accept + " / " + G.back])
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 26)
@@ -566,12 +580,59 @@ func _build_controls(box: VBoxContainer) -> void:
 		for k in 3:
 			var l := Label.new()
 			l.text = r[k]
-			l.add_theme_font_size_override("font_size", 18)
+			l.add_theme_font_size_override("font_size", 17)
 			l.add_theme_color_override("font_color", Color(1, 1, 1, 0.65) if k == 0 else Color.WHITE)
 			grid.add_child(l)
 	box.add_child(grid)
-	_text(box, "Controller vibration: engine near redline, tyre slip, ABS pulse, rough ground, gear shifts, landings, impacts, nitrous and burnouts. Adjust strength, steering sensitivity, deadzone and response curve in Settings.", 15)
+	_button(box, "REMAP CONTROLS", func(): show_screen("remap"))
+	_text(box, "Vibration strength, steering sensitivity, deadzone and response curve are in Settings.", 15)
 	_button(box, "BACK", func(): back())
+
+func _build_remap(box: VBoxContainer) -> void:
+	_title(box, "REMAP CONTROLS")
+	if listening != "":
+		_text(box, "Press a key or controller button for:", 18)
+		_text(box, str(Settings.ACTION_NAMES[listening]).to_upper(), 30, ACCENT)
+		_text(box, "Esc or Start / Options cancels." + ("" if Settings.PAD_REBINDABLE.has(listening) else "  (Keyboard only - this one uses an analog trigger or stick on controllers.)"), 15)
+		return
+	_text(box, "Select an action, then press the new key or button.", 16)
+	for a in Settings.REBINDABLE:
+		var pad := "Left stick" if a.begins_with("steer_") else Settings.binding_text(a, true)
+		_button(box, "%s:  %s   ·   %s" % [Settings.ACTION_NAMES[a], Settings.binding_text(a, false), pad], func():
+			listening = a
+			show_screen("remap", false))
+	_button(box, "RESET TO DEFAULTS", func():
+		Settings.reset_bindings()
+		show_screen("remap", false))
+	_button(box, "BACK", func(): back())
+
+func _input(event: InputEvent) -> void:
+	if listening == "" or current != "remap":
+		return
+	var done := false
+	if event is InputEventKey and event.pressed and not event.echo:
+		if (event as InputEventKey).physical_keycode != KEY_ESCAPE:
+			Settings.rebind(listening, event)
+		done = true
+	elif event is InputEventJoypadButton and event.pressed:
+		var b := (event as InputEventJoypadButton).button_index
+		if b == JOY_BUTTON_START:
+			done = true
+		elif Settings.PAD_REBINDABLE.has(listening):
+			Settings.rebind(listening, event)
+			done = true
+	elif event is InputEventJoypadMotion or event is InputEventMouseButton:
+		get_viewport().set_input_as_handled()
+		return
+	if done:
+		get_viewport().set_input_as_handled()
+		focus_hint = str(Settings.ACTION_NAMES[listening]) + ":"
+		listening = ""
+		# Wait a frame so the same press doesn't also activate the focused button.
+		await get_tree().process_frame
+		show_screen("remap", false)
+	elif event is InputEventKey or event is InputEventJoypadButton:
+		get_viewport().set_input_as_handled()
 
 func _build_story(box: VBoxContainer) -> void:
 	_title(box, "STORY")
