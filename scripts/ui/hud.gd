@@ -50,6 +50,7 @@ var big_map: BigMap
 var vignette: ColorRect
 var nitro_fx := 0.0
 var last_beep := -1
+var last_place := 0
 
 func setup(g: Node) -> void:
 	game = g
@@ -457,6 +458,17 @@ func _update(delta: float) -> void:
 	race_box.visible = r != null
 	if r:
 		pos_l.text = "%d/%d" % [r.place, r.rivals.size() + 1]
+		if r.place != last_place and r.countdown <= 0.0:
+			var better := r.place < last_place
+			last_place = r.place
+			pos_l.pivot_offset = pos_l.size * Vector2(1.0, 0.5)
+			pos_l.add_theme_color_override("font_color", Color(0.4, 1.0, 0.55) if better else Color(1.0, 0.35, 0.35))
+			var tw := create_tween()
+			tw.tween_property(pos_l, "scale", Vector2(1.35, 1.35), 0.08)
+			tw.tween_property(pos_l, "scale", Vector2.ONE, 0.25)
+			tw.tween_callback(func(): pos_l.add_theme_color_override("font_color", Color.WHITE))
+		elif r.countdown > 0.0:
+			last_place = r.place
 		lap_l.text = ("LAP %d/%d" % [mini(r.lap + 1, r.laps), r.laps]) if r.path.closed else ("CP %d/%d" % [r.next_cp, r.cps.size()])
 		rtime_l.text = _time(r.race_time)
 		wrong_l.text = "WRONG WAY" if r.wrong > 1.0 else ""
