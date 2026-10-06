@@ -117,7 +117,7 @@ const CONTRACTS := [
 	{"title": "Burned", "caller": "Mara", "reward": 20000,
 		"brief": ["Mara: GET OUT. Kane's people are on their way to your garage RIGHT NOW.", "Mara: Sable sold us out. He gave them everything.",
 			"Mara: Lose them and get to the safehouse at the valley farm."],
-		"steps": [{"heat": 4, "say": ["Kane: There you are. Every unit, every road. Nobody leaves the city."]},
+		"steps": [{"heat": 4, "kane": true, "say": ["Kane: There you are. Every unit, every road. Nobody leaves the city."]},
 			{"evade": true, "label": "Escape Kane's ambush"},
 			{"goto": "farm", "label": "Reach the safehouse at the farm", "time": 300}],
 		"outro": ["Mara: You made it. Good.", "Mara: Sable has a car stashed at the pier. He's going to run.", "Mara: Let's go have a word with him."]},
@@ -136,7 +136,7 @@ const CONTRACTS := [
 			"Mara: Get the crew in, get the crew out, and get us to the pier. I trust you."],
 		"steps": [{"goto": "reserve", "label": "Pull up at the Reserve"},
 			{"wait": 18, "label": "The crew is cracking the vault...", "alarm": 4, "say": ["Kane: I knew you couldn't resist. Every unit to the Reserve. NOW."]},
-			{"heat": 5, "say": ["Mara: They're out! GO GO GO!"]},
+			{"heat": 5, "kane": true, "say": ["Mara: They're out! GO GO GO!"]},
 			{"evade": true, "label": "Lose every cop in the city"},
 			{"goto": "pier", "label": "Get the crew to the pier"}],
 		"outro": ["Kane: ...All units, stand down. They're gone.", "Mara: We did it. We actually did it.", "Mara: Solano Bay is yours, driver. Don't let it get boring."]},
@@ -193,6 +193,7 @@ var target: MissionTarget
 var wait_pos := Vector2.INF
 var away_warned := 0.0
 var last_failed: Dictionary = {}
+var kane_pending := 0.0
 
 func setup(g: Node, w: World) -> void:
 	game = g
@@ -299,6 +300,10 @@ func update(dt: float) -> void:
 		if race.done:
 			_race_finished(race.result)
 		return
+	if kane_pending > 0.0:
+		kane_pending -= dt
+		if kane_pending <= 0.0 and game.police.pursuit:
+			game.police.spawn_kane()
 	if not active.is_empty():
 		_update_contract(dt, pp)
 	beacon.visible = waypoint != Vector2.INF and target == null
@@ -398,6 +403,8 @@ func _next_step() -> void:
 	elif s.has("heat"):
 		game.police.min_heat = int(s.heat)
 		game.police.start_pursuit("THE COPS ARE COMING", int(s.heat))
+		if s.get("kane", false):
+			kane_pending = 6.0
 		_next_step()
 	elif s.has("evade"):
 		waypoint_label = s.label
@@ -505,6 +512,7 @@ func _complete_contract(ok: bool, why := "") -> void:
 	active = {}
 	waypoint = Vector2.INF
 	game.police.min_heat = 0
+	kane_pending = 0.0
 	if target:
 		_end_target()
 	var res := {"kind": "contract", "title": c.title, "ok": ok, "reward": 0, "why": why}

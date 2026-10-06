@@ -1030,7 +1030,12 @@ func _copstest() -> void:
 	for t in 60 * 90:
 		bot.update(1.0 / 60.0, [player], false)
 		await get_tree().physics_frame
+		if t == 300:
+			police.spawn_kane()
 		if t % 300 == 0:
+			var kc: Array = police.cops.filter(func(c): return c.get("kane", false))
+			if not kc.is_empty():
+				print("[cops] kane hp=", kc[0].hp, " down=", kc[0].down, " dist=", int(kc[0].car.global_position.distance_to(player.global_position)), " kmh=", int(kc[0].car.kmh))
 			var modes := {}
 			for c in police.cops:
 				modes[c.mode] = modes.get(c.mode, 0) + 1

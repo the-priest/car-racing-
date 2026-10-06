@@ -10,6 +10,7 @@ signal radio(text: String)
 signal cop_down(bonus: int)
 
 const TAKEDOWN_BONUS := 750
+const KANE_BONUS := 6000
 
 var game: Node
 var world: World
@@ -25,6 +26,7 @@ var enabled := true
 var min_heat := 0 # contracts can force a minimum heat level
 var night := 0.0
 var takedowns := 0
+var bonus := 0 # extra bounty (Kane)
 var roadblock_timer := 25.0
 var heli: Node3D
 var heli_light: SpotLight3D
@@ -74,7 +76,63 @@ func say(text: String, force := false) -> void:
 	radio.emit(text)
 
 func bounty() -> int:
-	return int(1500 * heat + pursuit_time * 40.0 + takedowns * TAKEDOWN_BONUS)
+	return int(1500 * heat + pursuit_time * 40.0 + takedowns * TAKEDOWN_BONUS + bonus)
+
+## A road node ahead of the player's travel direction, facing back toward them.
+func _ahead_spot(min_d: float, max_d: float) -> Transform3D:
+	var pc: Car = game.player
+	var p2 := Vector2(pc.global_position.x, pc.global_position.z)
+	var vdir := Vector2(pc.linear_velocity.x, pc.linear_velocity.z).normalized()
+	var best := -1
+	var bs := -INF
+	for _t in 120:
+		var id := randi() % world.node_pos.size()
+		var np := world.node_pos[id]
+		var d := np.distance_to(p2)
+		if d < min_d or d > max_d or world.adj[id].is_empty():
+			continue
+		var sc := (np - p2).normalized().dot(vdir)
+		if sc > bs:
+			bs = sc
+			best = id
+	if best < 0:
+		return Transform3D()
+	var np2 := world.node_pos[best]
+	var dir := Vector3(p2.x - np2.x, 0, p2.y - np2.y).normalized()
+	var y := 0.1 if world.in_city(np2.x, np2.y) else world.ground(np2.x, np2.y) + 0.6
+	return Transform3D(Basis.looking_at(dir, Vector3.UP), Vector3(np2.x, y + 0.5, np2.y))
+
+## Lt. Kane's personal interceptor: faster, named, needs three hard rams.
+func spawn_kane() -> void:
+	for c in cops:
+		if c.get("kane", false):
+			return
+	var before := cops.size()
+	spawn_near(160.0, 320.0, "chase")
+	if cops.size() == before:
+		return
+	var c: Dictionary = cops[cops.size() - 1]
+	c.kane = true
+	c.elite = true
+	c.hp = 3
+	var car: Car = c.car
+	car.stats.accel = float(car.stats.accel) * 1.15
+	car.stats.top = float(car.stats.top) * 1.1
+	car._setup_engine()
+	car.set_paint(Color(0.92, 0.92, 0.95))
+	var tag := Label3D.new()
+	tag.text = "LT. KANE"
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.no_depth_test = true
+	tag.fixed_size = true
+	tag.pixel_size = 0.0022
+	tag.font_size = 22
+	tag.outline_size = 8
+	tag.modulate = Color(0.45, 0.7, 1.0)
+	tag.position = Vector3(0, 2.4, 0)
+	car.add_child(tag)
+	c.tag = tag
+	say("Kane: I'm taking this one personally. Nobody touches the driver but me.", true)
 
 func _make_cop(t: Transform3D, mode: String, elite := false) -> Dictionary:
 	var car := Car.new()
@@ -162,6 +220,7 @@ func start_pursuit(reason: String, at_heat := 1) -> void:
 	pursuit_time = 0.0
 	cooldown = 0.0
 	takedowns = 0
+	bonus = 0
 	engaged = false
 	reinforce = 0.0
 	last_heat = heat
@@ -239,9 +298,18 @@ func _drive_cop(c: Dictionary, dt: float) -> void:
 					c.ri += 1
 				else:
 					break
-			var n2 := world.node_pos[c.route[mini(c.ri, c.route.size() - 1)]]
+			var ri2 := mini(c.ri, c.route.size() - 1)
+			var n2 := world.node_pos[c.route[ri2]]
 			target = Vector3(n2.x, pos.y, n2.y)
 			max_speed = 85.0 if c.elite else 75.0
+			# Brake for the turn at the next junction.
+			if ri2 > 0 and ri2 < c.route.size() - 1:
+				var na := world.node_pos[c.route[ri2 - 1]]
+				var nc := world.node_pos[c.route[ri2 + 1]]
+				var turn := absf((n2 - na).angle_to(nc - n2))
+				var dn := Vector2(pos.x, pos.z).distance_to(n2)
+				var v_turn := lerpf(max_speed, 16.0, smoothstep(0.2, 1.3, turn))
+				max_speed = minf(max_speed, sqrt(v_turn * v_turn + 2.0 * 9.0 * maxf(dn - 8.0, 0.0)))
 	else:
 		if c.patrol_node < 0:
 			c.patrol_node = world.nearest_node(Vector2(pos.x, pos.z))
@@ -290,14 +358,29 @@ func _check_takedown(c: Dictionary) -> void:
 	if touching and not c.contact and c.down <= 0.0 and pursuit:
 		var n := dv / maxf(d, 0.01)
 		var rel := (p.linear_velocity - car.linear_velocity).dot(n)
+		if rel > 11.0 and p.speed > car.speed and c.get("hp", 1) > 1:
+			c.hp -= 1
+			car.apply_central_impulse(n * car.mass * minf(rel, 25.0) * 0.25)
+			say(["Kane: Is that all you've got?", "Kane: You'll have to hit harder than that."][c.hp % 2], true)
+			game.hud.message("KANE HIT  %d / 3" % (3 - c.hp), 1.5)
+			c.contact = touching
+			return
 		if rel > 11.0 and p.speed > car.speed:
 			c.down = 7.0
 			takedowns += 1
 			car.set_police_active(false)
 			car.apply_central_impulse(n * car.mass * minf(rel, 25.0) * 0.35 + Vector3.UP * car.mass * 2.0)
 			car.apply_torque_impulse(Vector3.UP * (1.0 if randf() < 0.5 else -1.0) * car.mass * 6.0)
-			cop_down.emit(TAKEDOWN_BONUS)
-			say(["Dispatch: Unit down! Unit down!", "Dispatch: We've lost a car. Suspect is ramming units.", "Kane: Stop letting that car walk through you!"][randi() % 3], true)
+			if c.get("kane", false):
+				bonus += KANE_BONUS
+				if c.has("tag"):
+					c.tag.text = "LT. KANE - DOWN"
+				cop_down.emit(KANE_BONUS)
+				say("Kane: I'm hit! I'm out! ...Don't you DARE lose them!", true)
+				game.hud.big("KANE TAKEN DOWN", 2.0)
+			else:
+				cop_down.emit(TAKEDOWN_BONUS)
+				say(["Dispatch: Unit down! Unit down!", "Dispatch: We've lost a car. Suspect is ramming units.", "Kane: Stop letting that car walk through you!"][randi() % 3], true)
 			heat = mini(5, heat + (1 if takedowns % 3 == 0 else 0))
 	c.contact = touching
 
@@ -534,7 +617,20 @@ func update(dt: float) -> void:
 	var nearest := INF
 	for c in cops.duplicate():
 		var d2: float = c.car.global_position.distance_to(p.global_position)
-		if d2 > 900.0:
+		# Units left far behind get recycled ahead of the player.
+		c.far_t = c.get("far_t", 0.0) + dt if (d2 > 600.0 and c.mode == "chase") else 0.0
+		if c.far_t > 15.0:
+			c.far_t = 0.0
+			if c.get("kane", false):
+				var t := _ahead_spot(260.0, 420.0)
+				if t != Transform3D():
+					c.car.reset_to(t)
+					c.car.linear_velocity = -t.basis.z * 20.0
+					say("Kane: You think you can outrun me? I know these roads.", true)
+				continue
+			_remove(c)
+			continue
+		if d2 > 900.0 and not c.get("kane", false):
 			_remove(c)
 			continue
 		if c.down <= 0.0 and c.mode != "block":

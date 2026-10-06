@@ -124,8 +124,8 @@ func _drive(dt: float, d_player: float) -> void:
 		var c := world.node_pos[route[ri + 1]]
 		var turn := absf((n - a).angle_to(c - n))
 		var dist := p2.distance_to(n)
-		if dist < car.speed * 1.8 + 20.0:
-			vmax = minf(vmax, lerpf(vmax, 13.0, smoothstep(0.25, 1.3, turn)))
+		var v_turn := lerpf(vmax, 13.0, smoothstep(0.25, 1.3, turn))
+		vmax = minf(vmax, sqrt(v_turn * v_turn + 2.0 * 7.0 * maxf(dist - 6.0, 0.0)))
 	var local := car.global_transform.basis.inverse() * (target - pos)
 	var ang := atan2(local.x, -local.z)
 	if absf(ang) > 0.5:
