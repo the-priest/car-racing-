@@ -78,7 +78,7 @@ func _place(c: Dictionary, snap: bool) -> void:
 	var L := maxf(dv.length(), 0.1)
 	var u := dv / L
 	var tp := world.node_type_name(c.a)
-	var lane := 5.0 if tp == "city" or tp == "link" else (8.0 if tp == "hwy" else 3.0)
+	var lane := (5.0 if tp == "city" or tp == "link" else (8.0 if tp == "hwy" else 3.0)) + float(c.get("pull", 0.0)) * 2.6
 	var right := Vector2(-u.y, u.x)
 	var p := A + dv * float(c.t) + right * lane
 	var y := 0.0 if world.in_city(p.x, p.y) else world.ground(p.x, p.y) + 0.07
@@ -129,6 +129,18 @@ func update(delta: float, player: Car, others: Array) -> void:
 					target = minf(target, maxf(0.0, (ah - 8.0) * 1.4))
 			if c.t > 0.6 and world.node_type_name(c.a) == "city":
 				target = minf(target, 8.0)
+			# Pull over for police cars running lights behind us.
+			var pull_to := 0.0
+			for o in others:
+				var cop := o as Car
+				if cop == null or not cop.is_police or cop.police_lights.is_empty() or not cop.police_lights[0].visible:
+					continue
+				var dvc: Vector3 = cop.global_position - c.pos
+				var behind := -dvc.dot(fwd)
+				if behind > 0.0 and behind < 70.0 and absf(dvc.dot(Vector3(-fwd.z, 0, fwd.x))) < 7.0:
+					pull_to = 1.0
+					target = minf(target, 5.0)
+			c.pull = move_toward(float(c.get("pull", 0.0)), pull_to, delta * 0.9)
 			c.speed = lerpf(c.speed, target, 1.0 - exp(-2.0 * delta))
 			c.t += c.speed * delta / maxf(c.len, 1.0)
 			while c.t >= 1.0:
