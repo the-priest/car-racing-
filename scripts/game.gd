@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--raceshot":
+			shots_spec = "RACESHOT"
 		if a == "--readme":
 			shots_spec = "README"
 		if a == "--review":
@@ -137,6 +139,20 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "RACESHOT":
+		_on_play()
+		traffic.set_count(0)
+		daynight.hour = 13.0
+		career.start_race("summit", 1, "sable")
+		autopilot = true
+		var bot := AIDriver.new(player, career.race.path, 0.93, 0.0)
+		bot.idx = career.race.p_idx
+		for t in 60 * 16:
+			bot.update(1.0 / 60.0, [player], career.race.countdown > 0.0)
+			await get_tree().physics_frame
+		await _snap("race_hud")
 		get_tree().quit()
 		return
 	if shots_spec == "README":
