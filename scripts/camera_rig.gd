@@ -21,6 +21,10 @@ var _pitch := 0.0
 var _boom := 1.0 # 0..1 fraction of chase distance allowed by buildings
 var _rng := RandomNumberGenerator.new()
 
+func _ready() -> void:
+	# Moved every rendered frame from interpolated targets; never physics-interpolate the camera itself.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
 func cycle() -> void:
 	mode = ((mode + 1) % 4) as Mode
 	snap = true

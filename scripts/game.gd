@@ -1392,7 +1392,7 @@ func _fuzz() -> void:
 	autopilot = true
 	var counts := {}
 	for step in (int(OS.get_environment("FUZZ_STEPS")) if OS.has_environment("FUZZ_STEPS") else 600):
-		var act := randi() % 22
+		var act := randi() % 26
 		counts[act] = counts.get(act, 0) + 1
 		match act:
 			0: hud.big_map.open()
@@ -1464,6 +1464,18 @@ func _fuzz() -> void:
 					player.reset_to(Transform3D(tc.global_transform.basis, tc.global_position + tc.global_transform.basis.z * 6.0))
 					player.linear_velocity = tc.linear_velocity - tc.global_transform.basis.z * 10.0
 			21: Settings.set_value("assists", randf() < 0.7)
+			22:
+				if state == State.PLAY:
+					_pause()
+					enter_photo()
+			23:
+				if state == State.PHOTO:
+					_pause()
+			24:
+				if state == State.PLAY and randf() < 0.3:
+					credits_pending = true
+					_on_resume()
+			25: menus.credits_done.emit()
 		for f in 20:
 			player.input.throttle = randf() if randf() < 0.8 else 0.0
 			player.input.brake = randf() if randf() < 0.2 else 0.0
