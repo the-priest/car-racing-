@@ -214,7 +214,9 @@ func _spawn_player() -> void:
 			Settings.using_pad = true
 			hud.message("Controller connected: %s" % Input.get_joy_name(dev), 3.0)
 		else:
-			hud.message("Controller disconnected", 3.0))
+			hud.message("Controller disconnected", 3.0)
+			if state == State.PLAY and not hud.big_map.visible:
+				_pause())
 	using_pad = not Input.get_connected_joypads().is_empty()
 	Settings.using_pad = using_pad
 
