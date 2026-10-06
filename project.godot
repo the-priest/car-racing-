@@ -49,6 +49,7 @@ occlusion_culling/use_occlusion_culling=true
 environment/defaults/default_clear_color=Color(0.02, 0.025, 0.04, 1)
 anti_aliasing/quality/use_debanding=true
 mesh_lod/lod_change/threshold_pixels=1.0
+limits/opengl/max_lights_per_object=24
 
 [shader_globals]
 

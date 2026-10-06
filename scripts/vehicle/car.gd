@@ -76,6 +76,7 @@ const POLICE_LIVERIES := [
 	[Color(0.75, 0.55, 0.12), Color(0.9, 0.9, 0.93)], # Kane: white with gold
 ]
 var cast_light_shadows := false
+const SELF_LAYER := 1 << 10
 
 func setup(car_stats: Dictionary, paint: Color, police := false, detail := true, light_shadows := false) -> void:
 	cast_light_shadows = light_shadows
@@ -220,20 +221,46 @@ func _setup_generated(body_id: String, paint: Color) -> void:
 	_setup_lamps()
 
 func _setup_lamps() -> void:
-	# Headlights
+	# Headlights: two wide low beams that light the road and verges, plus a
+	# long, narrow main beam so you can see what's coming at speed.
 	for x in [-0.62, 0.62]:
 		var l := SpotLight3D.new()
 		l.position = Vector3(x, 0.66, -2.2)
-		l.rotation_degrees = Vector3(-6, 0, 0)
-		l.spot_range = 60.0
-		l.spot_angle = 32.0
-		l.spot_attenuation = 0.8
+		l.rotation_degrees = Vector3(-5.0, 2.0 if x < 0.0 else -2.0, 0)
+		l.spot_range = 55.0
+		l.spot_angle = 52.0
+		l.spot_attenuation = 0.55
+		l.spot_angle_attenuation = 0.75
 		l.light_energy = 0.0
+		l.light_specular = 0.6
 		l.light_color = Color(1.0, 0.95, 0.88)
-		l.shadow_enabled = cast_light_shadows
+		# No shadows on the wide beams: a spot shadow map can't cover a cone this
+		# wide and everything outside it renders black.
+		l.shadow_enabled = false
 		l.visible = false
 		add_child(l)
 		headlights.append(l)
+	var hb := SpotLight3D.new()
+	hb.position = Vector3(0, 0.7, -2.3)
+	hb.rotation_degrees = Vector3(-1.6, 0, 0)
+	hb.spot_range = 130.0
+	hb.spot_angle = 17.0
+	hb.spot_attenuation = 0.35
+	hb.spot_angle_attenuation = 0.9
+	hb.light_energy = 0.0
+	hb.light_specular = 0.4
+	hb.light_color = Color(1.0, 0.96, 0.9)
+	hb.visible = false
+	hb.shadow_enabled = cast_light_shadows
+	hb.set_meta("main_beam", true)
+	add_child(hb)
+	headlights.append(hb)
+	if cast_light_shadows:
+		# The car's own body must not shadow its main beam: put it on its own render
+		# layer and leave that layer out of the beam's shadow casters.
+		for gi in find_children("*", "GeometryInstance3D", true, false):
+			(gi as GeometryInstance3D).layers |= SELF_LAYER
+		hb.shadow_caster_mask = 0xFFFFF & ~SELF_LAYER
 	# Nitrous flames at the exhaust
 	var flame_mat := StandardMaterial3D.new()
 	flame_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -410,7 +437,7 @@ func set_lights(on: bool, night: float) -> void:
 	lights_on = on
 	for l in headlights:
 		l.visible = on
-		l.light_energy = 6.0 if on else 0.0
+		l.light_energy = (12.0 if l.has_meta("main_beam") else 9.0) if on else 0.0
 	if head_mat:
 		head_mat.emission_energy_multiplier = 6.0 if on else 0.3
 
