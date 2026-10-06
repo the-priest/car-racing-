@@ -629,6 +629,7 @@ func _process(delta: float) -> void:
 		lights = lights_override == 1
 	player.set_lights(lights, night)
 	if not playing:
+		audio.set_ringing(false)
 		audio.update_siren(0.0)
 		audio.update_rotor(INF)
 		audio.set_horn(false)
@@ -678,6 +679,7 @@ func _process(delta: float) -> void:
 	for c in police.cars():
 		if police.pursuit:
 			siren = maxf(siren, clampf(1.0 - c.global_position.distance_to(player.global_position) / 260.0, 0.0, 1.0))
+	audio.set_ringing(career.pending_call >= 0 and career.ringing > 0.0)
 	audio.update_siren(siren)
 	audio.update_rotor(police.heli.global_position.distance_to(cam.global_position) if police.heli else INF)
 	audio.update_music(police.pursuit or career.race != null, delta)
