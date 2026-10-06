@@ -56,6 +56,7 @@ var vignette: ColorRect
 var nitro_fx := 0.0
 var last_beep := -1
 var last_place := 0
+var free_t := 0.0
 
 func setup(g: Node) -> void:
 	game = g
@@ -511,6 +512,9 @@ func _update(delta: float) -> void:
 		pursuit_l.modulate = Color(1, 0.3, 0.3) if int(Time.get_ticks_msec() / 300) % 2 == 0 else Color(0.4, 0.6, 1.0)
 	# Objective
 	var pp2 := Vector2(car.global_position.x, car.global_position.z)
+	if not (career.active.is_empty() and career.race == null and not police.pursuit and career.drift_zone < 0 and game.custom_wp == Vector2.INF):
+		free_t = 0.0
+		obj_l.modulate.a = 1.0
 	if not career.active.is_empty() and career.race == null:
 		var dtxt := ""
 		if career.waypoint != Vector2.INF:
@@ -541,7 +545,9 @@ func _update(delta: float) -> void:
 		obj_l.text = "WAYPOINT  ·  %s" % dist_text(game.custom_wp.distance_to(pp2))
 		timer_l.text = ""
 	elif career.race == null and not police.pursuit:
+		free_t += delta
 		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
+		obj_l.modulate.a = clampf((15.0 - free_t) / 1.5, 0.0, 1.0)
 		timer_l.text = ""
 	else:
 		obj_l.text = ""
