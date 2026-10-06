@@ -47,6 +47,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--copstest":
+			shots_spec = "COPSTEST"
 		if a == "--storytest":
 			shots_spec = "STORYTEST"
 	audio = AudioManager.new()
@@ -87,6 +89,15 @@ func _ready() -> void:
 		hud.big("PURSUIT", 1.5)
 		hud.message(reason, 3.0))
 	police.pursuit_ended.connect(_on_pursuit_ended)
+	police.radio.connect(func(t):
+		hud.radio(t)
+		audio.play_oneshot("radio", randf_range(0.95, 1.05), -8.0))
+	police.cop_down.connect(func(bonus):
+		hud.big("TAKEDOWN", 1.2)
+		hud.message("Cop taken out  +$%d bounty" % bonus, 2.0)
+		audio.play_oneshot("impact", 0.7)
+		cam.shake = maxf(cam.shake, 0.8)
+		_rumble(1.0, 0.8, 0.35))
 	career = Career.new()
 	add_child(career)
 	career.setup(self, world)
@@ -114,6 +125,10 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "COPSTEST":
+		await _copstest()
 		get_tree().quit()
 		return
 	if shots_spec == "STORYTEST":
@@ -513,6 +528,9 @@ func _process(delta: float) -> void:
 	if lights_override >= 0:
 		lights = lights_override == 1
 	player.set_lights(lights, night)
+	if not playing:
+		audio.update_siren(0.0)
+		audio.update_rotor(INF)
 	if state == State.MENU:
 		_menu_camera(delta)
 		audio.update_player(player, false, delta)
@@ -553,6 +571,7 @@ func _process(delta: float) -> void:
 		if police.pursuit:
 			siren = maxf(siren, clampf(1.0 - c.global_position.distance_to(player.global_position) / 260.0, 0.0, 1.0))
 	audio.update_siren(siren)
+	audio.update_rotor(police.heli.global_position.distance_to(cam.global_position) if police.heli else INF)
 	audio.update_music(police.pursuit or career.race != null, delta)
 	var ai_cars: Array = police.cars()
 	if career.race:
@@ -830,6 +849,35 @@ func _storytest() -> void:
 		print("[story] done contract=", Save.data.contract, " cash=", Save.data.cash)
 		await _frames(10)
 	print("[story] COMPLETE story_done=", career.story_done())
+
+## Heat-5 pursuit with the player car on autopilot around the ring road.
+func _copstest() -> void:
+	_on_play()
+	traffic.set_count(0)
+	career.start_race("ring")
+	var path: RacePath = career.race.path
+	var start := career.race.p_idx
+	career.race.cleanup()
+	career.race.queue_free()
+	career.race = null
+	autopilot = true
+	var bot := AIDriver.new(player, path, 0.9, 0.0)
+	bot.idx = start
+	police.start_pursuit("TEST", 5)
+	var shot_dir := OS.get_environment("SHOT_DIR")
+	for t in 60 * 90:
+		bot.update(1.0 / 60.0, [player], false)
+		await get_tree().physics_frame
+		if t % 300 == 0:
+			var modes := {}
+			for c in police.cops:
+				modes[c.mode] = modes.get(c.mode, 0) + 1
+			print("[cops] t=", t / 60, " kmh=", int(player.kmh), " heat=", police.heat, " cops=", modes, " down=", police.cops.filter(func(c): return c.down > 0.0).size(), " takedowns=", police.takedowns, " heli=", police.heli != null, " sees=", police.heli_sees, " cooldown=", snappedf(police.cooldown, 0.1), " bust=", snappedf(police.bust, 0.1), " pursuit=", police.pursuit, " bounty=", police.bounty())
+		if shot_dir != "" and t in [60 * 20, 60 * 40, 60 * 60]:
+			get_viewport().get_texture().get_image().save_png(shot_dir + "/cops_%d.png" % (t / 60))
+		if not police.pursuit:
+			print("[cops] pursuit ended at t=", t / 60)
+			break
 
 func _aitest() -> void:
 	_on_play()

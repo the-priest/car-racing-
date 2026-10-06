@@ -15,6 +15,10 @@ var obj_l: Label
 var timer_l: Label
 var pursuit_box: VBoxContainer
 var pursuit_l: Label
+var pursuit_stats: Label
+var radio_panel: PanelContainer
+var radio_l: Label
+var radio_t := 0.0
 var cooldown_bar: ProgressBar
 var race_box: VBoxContainer
 var pos_l: Label
@@ -40,6 +44,7 @@ var speedo: Speedo
 var minimap: Minimap
 var big_map: BigMap
 var vignette: ColorRect
+var nitro_fx := 0.0
 
 func setup(g: Node) -> void:
 	game = g
@@ -52,7 +57,31 @@ func setup(g: Node) -> void:
 	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var vs := Shader.new()
-	vs.code = "shader_type canvas_item; uniform float amount = 0.0; void fragment(){ vec2 d = UV - 0.5; float v = smoothstep(0.35, 0.85, length(d) * 1.3); COLOR = vec4(0.15, 0.45, 1.0, v * amount * 0.7); }"
+	# Speed effect: radial blur toward the screen edges plus a blue nitrous vignette.
+	vs.code = """shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
+uniform float amount = 0.0;
+uniform float blur = 0.0;
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	vec2 d = uv - 0.5;
+	float r = length(d);
+	float edge = smoothstep(0.12, 0.62, r);
+	vec3 col = vec3(0.0);
+	float a = 0.0;
+	if (blur > 0.001) {
+		float k = blur * edge * 0.055;
+		vec3 acc = vec3(0.0);
+		for (int i = 0; i < 8; i++) {
+			acc += texture(screen_tex, uv - d * k * float(i) / 7.0).rgb;
+		}
+		col = acc / 8.0;
+		a = edge * min(blur * 1.6, 1.0);
+	}
+	float v = smoothstep(0.35, 0.85, r * 1.3) * amount * 0.6;
+	col = mix(col, vec3(0.15, 0.45, 1.0), v / max(a + v, 0.001));
+	COLOR = vec4(col, clamp(a + v, 0.0, 1.0));
+}"""
 	var vm := ShaderMaterial.new()
 	vm.shader = vs
 	vignette.material = vm
@@ -90,9 +119,37 @@ func setup(g: Node) -> void:
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = Color(0.5, 1.0, 0.6)
 	cooldown_bar.add_theme_stylebox_override("fill", fill)
+	pursuit_stats = _label(18, Color(1, 1, 1, 0.85), HORIZONTAL_ALIGNMENT_CENTER)
 	pursuit_box.add_child(pursuit_l)
+	pursuit_box.add_child(pursuit_stats)
 	pursuit_box.add_child(cooldown_bar)
 	tc.add_child(pursuit_box)
+
+	# Police radio ticker (top right).
+	radio_panel = PanelContainer.new()
+	radio_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	radio_panel.position = Vector2(-470, 120)
+	radio_panel.custom_minimum_size = Vector2(440, 0)
+	radio_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rs := StyleBoxFlat.new()
+	rs.bg_color = Color(0.02, 0.04, 0.09, 0.72)
+	rs.border_width_left = 4
+	rs.border_color = Color(0.3, 0.6, 1.0)
+	rs.content_margin_left = 14
+	rs.content_margin_right = 12
+	rs.content_margin_top = 8
+	rs.content_margin_bottom = 10
+	radio_panel.add_theme_stylebox_override("panel", rs)
+	var rv := VBoxContainer.new()
+	radio_panel.add_child(rv)
+	var rh := _label(13, Color(0.45, 0.7, 1.0))
+	rh.text = "POLICE RADIO"
+	rv.add_child(rh)
+	radio_l = _label(17, Color(0.85, 0.92, 1.0))
+	radio_l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	rv.add_child(radio_l)
+	radio_panel.modulate.a = 0.0
+	root.add_child(radio_panel)
 
 	race_box = VBoxContainer.new()
 	race_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -230,6 +287,11 @@ func message(text: String, secs := 2.5) -> void:
 		toast_box.get_child(0).queue_free()
 		toast_box.remove_child(toast_box.get_child(0))
 
+func radio(text: String) -> void:
+	radio_l.text = text
+	radio_t = 5.0 + text.length() * 0.03
+	radio_panel.modulate.a = 1.0
+
 func show_dialogue(lines: Array) -> void:
 	## Queues lines ("Speaker: text" or narration) after anything already showing.
 	var was_idle := sub_lines.is_empty() and not sub_panel.visible
@@ -276,6 +338,10 @@ func _process(delta: float) -> void:
 	pursuit_box.visible = police.pursuit
 	if police.pursuit:
 		pursuit_l.text = ("BUSTED IN %.1f" % maxf(0.0, 4.0 - police.bust)) if police.bust > 0.3 else ("EVADING..." if police.cooldown > 0.0 else "PURSUIT")
+		var air := ""
+		if police.heli:
+			air = "   ·   AIR UNIT: " + ("TRACKING" if police.heli_sees else "SEARCHING")
+		pursuit_stats.text = "COPS %d   ·   TAKEDOWNS %d   ·   BOUNTY $%s%s" % [police.active_count(), police.takedowns, _fmt(police.bounty()), air]
 		cooldown_bar.value = police.cooldown / 10.0
 		pursuit_l.modulate = Color(1, 0.3, 0.3) if int(Time.get_ticks_msec() / 300) % 2 == 0 else Color(0.4, 0.6, 1.0)
 	# Objective
@@ -314,6 +380,9 @@ func _process(delta: float) -> void:
 	var talking: bool = game.is_playing()
 	if talking and sub_panel.visible and sub_l.visible_ratio < 1.0:
 		sub_l.visible_ratio = minf(1.0, sub_l.visible_ratio + delta * 55.0 / maxf(sub_l.text.length(), 1.0))
+	if radio_t > 0.0:
+		radio_t -= delta
+		radio_panel.modulate.a = clampf(radio_t * 2.0, 0.0, 1.0)
 	if sub_t > 0.0 and talking:
 		sub_t -= delta
 		if sub_t <= 0.0:
@@ -325,7 +394,14 @@ func _process(delta: float) -> void:
 	var d: Dictionary = game.drift
 	drift_l.text = _fmt(int(d.chain)) if d.chain > 0 else ""
 	drift_m.text = ("DRIFT x%d" % d.mult) if d.chain > 0 else ""
-	(vignette.material as ShaderMaterial).set_shader_parameter("amount", 1.0 if car.nitro_on else 0.0)
+	var vm2 := vignette.material as ShaderMaterial
+	nitro_fx = move_toward(nitro_fx, 1.0 if car.nitro_on else 0.0, delta * 3.0)
+	var blur := 0.0
+	if bool(Settings.data.speed_fx):
+		blur = smoothstep(42.0, 95.0, car.speed) * 0.7 + nitro_fx * 0.45
+	vm2.set_shader_parameter("amount", nitro_fx)
+	vm2.set_shader_parameter("blur", blur)
+	vignette.visible = blur > 0.01 or nitro_fx > 0.01
 	prompt_l.text = game.prompt_text
 	speedo.car = car
 	speedo.units_mph = Settings.data.units == "mph"

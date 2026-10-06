@@ -100,7 +100,7 @@ func _process(delta: float) -> void:
 		_look = _look.lerp(look_at_pt, 1.0 - exp(-20.0 * delta))
 	global_position = _pos
 	shake = maxf(0.0, shake - delta * 2.5)
-	var s := shake * 0.3 + pow(sp, 3.0) * 0.03 + (0.025 if target.nitro_on else 0.0)
+	var s := (shake * 0.3 + pow(sp, 3.0) * 0.03 + (0.025 if target.nitro_on else 0.0)) * float(Settings.data.cam_shake)
 	if target.surface == "terrain" and spd > 8.0:
 		s += 0.02
 	if s > 0.001:

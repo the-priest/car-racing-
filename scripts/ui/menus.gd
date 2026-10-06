@@ -409,6 +409,8 @@ const SETTINGS := [
 	["traffic", "Traffic density", [0.0, 0.5, 1.0, 1.5], ["Off", "Light", "Normal", "Heavy"]],
 	["music", "Music volume", [0.0, 0.25, 0.5, 0.75, 1.0], ["Off", "25%", "50%", "75%", "100%"]],
 	["sfx", "Effects volume", [0.0, 0.25, 0.5, 0.85, 1.0], ["Off", "25%", "50%", "85%", "100%"]],
+	["speed_fx", "Speed blur", [true, false], ["On", "Off"]],
+	["cam_shake", "Camera shake", [0.0, 0.5, 1.0], ["Off", "Low", "Full"]],
 	["show_fps", "Show FPS", [false, true], ["Off", "On"]],
 	["vibration", "Controller vibration", [0.0, 0.5, 0.75, 1.0, 1.5], ["Off", "Low", "Medium", "Full", "Extreme"]],
 	["steer_sens", "Steering sensitivity", [0.7, 0.85, 1.0, 1.15, 1.3], ["70%", "85%", "100%", "115%", "130%"]],

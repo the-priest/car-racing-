@@ -16,6 +16,7 @@ var siren: AudioStreamPlayer
 var music_a: AudioStreamPlayer
 var music_b: AudioStreamPlayer
 var ring: AudioStreamPlayer
+var rotor: AudioStreamPlayer
 var cyl := -1
 var last_throttle := 0.0
 var pop_timer := 0.0
@@ -44,6 +45,9 @@ func setup() -> void:
 	siren = _player(streams.siren)
 	ring = _player(streams.phone_ring)
 	ring.volume_db = -80.0
+	streams["rotor"] = _gen_rotor()
+	streams["radio"] = _gen_radio()
+	rotor = _player(streams.rotor)
 	music_a = _player(streams.music_night, "Music")
 	music_b = _player(streams.music_chase, "Music")
 	music_b.volume_db = -80.0
@@ -132,6 +136,57 @@ func update_player(car: Car, active: bool, delta: float) -> void:
 		if randf() < delta * 14.0:
 			play_oneshot("backfire", randf_range(0.8, 1.3), -4.0)
 	last_throttle = thr
+
+## Synthesised helicopter rotor loop: blade-pass thumps over filtered noise.
+func _gen_rotor() -> AudioStreamWAV:
+	var rate := 22050
+	var n := rate
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var lp := 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in n:
+		var t := float(i) / rate
+		var env := pow(maxf(0.0, sin(TAU * 17.0 * t)), 6.0)
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.08
+		var v := (lp * 1.6 * (0.25 + env) + sin(TAU * 51.0 * t) * 0.35 * env) * 0.7
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 30000.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = rate
+	s.data = data
+	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	s.loop_end = n
+	return s
+
+## Radio squelch: click, short tone, band-limited static.
+func _gen_radio() -> AudioStreamWAV:
+	var rate := 22050
+	var n := int(rate * 0.32)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var hp := 0.0
+	var prev := 0.0
+	for i in n:
+		var t := float(i) / rate
+		var noise := rng.randf_range(-1.0, 1.0)
+		hp = 0.7 * (hp + noise - prev)
+		prev = noise
+		var v := hp * 0.5 * exp(-t * 9.0)
+		if t < 0.06:
+			v += (1.0 if fmod(t * 1400.0, 1.0) < 0.5 else -1.0) * 0.25
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 26000.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = rate
+	s.data = data
+	return s
+
+func update_rotor(dist: float) -> void:
+	rotor.volume_db = _db(clampf(1.0 - dist / 260.0, 0.0, 1.0) * 0.8)
 
 func update_siren(intensity: float) -> void:
 	siren.volume_db = _db(intensity * 0.5)
