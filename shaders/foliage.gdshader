@@ -26,6 +26,9 @@ void fragment() {
 	float lod = max(0.5 * log2(max(dot(ddx, ddx), dot(ddy, ddy))), 0.0);
 	ALPHA = t.a * (1.0 + lod * 0.3);
 	ALPHA_SCISSOR_THRESHOLD = 0.42;
+	// Cards carry outward canopy normals; keep them on the back side too instead of
+	// the flipped one (which pointed down and turned tree tops black).
+	NORMAL = FRONT_FACING ? NORMAL : -NORMAL;
 	ROUGHNESS = 0.75;
 	SPECULAR = 0.3;
 	BACKLIGHT = t.rgb * tint * 0.6;
