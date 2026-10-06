@@ -824,6 +824,8 @@ func _to_menu() -> void:
 	if hud.big_map.visible:
 		hud.big_map.visible = false
 	get_tree().paused = true
+	# Physics is frozen behind the menu: put the car on its wheels so it doesn't hover.
+	_settle_player()
 	menus.close_all()
 	menus.show_screen("main", false)
 	menu_t = 0.0

@@ -403,7 +403,9 @@ func _build_main(box: VBoxContainer) -> void:
 	_button(box, "QUIT", func():
 		Save.save_game()
 		get_tree().quit())
-	_text(box, "Bank  $%s   ·   Story %d / %d" % [HUD._fmt(int(Save.data.cash)), mini(int(Save.data.contract), Career.CONTRACTS.size()), Career.CONTRACTS.size()], 18)
+	var done_ch := int(Save.data.contract)
+	var total_ch := Career.CONTRACTS.size()
+	_text(box, "Bank  $%s   ·   %s" % [HUD._fmt(int(Save.data.cash)), ("Chapter %d of %d" % [done_ch + 1, total_ch]) if done_ch < total_ch else "Story complete"], 18)
 
 func _build_pause(box: VBoxContainer) -> void:
 	_title(box, "PAUSED")
@@ -919,7 +921,7 @@ func show_results(res: Dictionary) -> void:
 		if res.ok and res.get("story", false):
 			var cur := int(Save.data.contract)
 			if cur < Career.CONTRACTS.size():
-				_text(box, "Story  %d / %d   ·   Next: %s calls soon" % [cur, Career.CONTRACTS.size(), Career.CONTRACTS[cur].caller], 18, Color.WHITE)
+				_text(box, "Up next: chapter %d of %d, %s  ·  %s calls soon" % [cur + 1, Career.CONTRACTS.size(), Career.CONTRACTS[cur].title, Career.CONTRACTS[cur].caller], 18, Color.WHITE)
 			else:
 				_text(box, "STORY COMPLETE", 22, ACCENT)
 	if res.ok or res.kind == "race":
