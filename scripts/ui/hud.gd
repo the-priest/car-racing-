@@ -380,6 +380,8 @@ func _update(delta: float) -> void:
 		if career.target:
 			obj_l.text += "\n" + career.target_text()
 		timer_l.text = _time(career.time_left) if career.time_left < INF else ""
+		if career.wait_left >= 0.0:
+			timer_l.text = "%d" % int(ceil(career.wait_left))
 	elif career.race == null and not police.pursuit:
 		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
 		timer_l.text = ""

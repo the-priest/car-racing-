@@ -194,6 +194,8 @@ var wait_pos := Vector2.INF
 var away_warned := 0.0
 var last_failed: Dictionary = {}
 var kane_pending := 0.0
+var alarm_sent := false
+var wait_left := -1.0
 
 func setup(g: Node, w: World) -> void:
 	game = g
@@ -415,6 +417,8 @@ func _next_step() -> void:
 	time_left = INF
 	waypoint = Vector2.INF
 	wait_pos = Vector2.INF
+	alarm_sent = false
+	wait_left = -1.0
 	if step >= active.steps.size():
 		_complete_contract(true)
 		return
@@ -503,9 +507,16 @@ func _update_contract(dt: float, pp: Vector2) -> void:
 			away_warned -= dt
 		else:
 			waypoint = Vector2.INF
-		if s.has("alarm") and step_t > float(s.alarm) and not game.police.pursuit:
-			game.police.start_pursuit("SILENT ALARM TRIPPED", 1)
+		if s.has("alarm") and step_t > float(s.alarm) and not alarm_sent:
+			# Cops are inbound but arrive as the crew comes out (the heat step).
+			alarm_sent = true
+			big.emit("SILENT ALARM", 1.5)
+			message.emit("Cops inbound - %d seconds" % int(float(s.wait) - step_t), 2.5)
+			game.police.say("Dispatch: Silent alarm triggered. All units, respond code three.", true)
+			game.audio.play_oneshot("beep", 0.7)
+		wait_left = maxf(0.0, float(s.wait) - step_t)
 		if step_t >= float(s.wait):
+			wait_left = -1.0
 			if not s.get("here", false):
 				message.emit("Crew's in - GO GO GO!", 3.0)
 			_next_step()
@@ -543,6 +554,7 @@ func _end_target() -> void:
 func _complete_contract(ok: bool, why := "") -> void:
 	var c := active
 	active = {}
+	wait_left = -1.0
 	waypoint = Vector2.INF
 	game.police.min_heat = 0
 	kane_pending = 0.0
