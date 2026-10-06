@@ -165,7 +165,7 @@ void fragment() {
 
 	big_l = _label(96, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	big_l.set_anchors_preset(Control.PRESET_CENTER)
-	big_l.position = Vector2(-600, -260)
+	big_l.position = Vector2(-600, -235)
 	big_l.custom_minimum_size = Vector2(1200, 120)
 	big_l.add_theme_color_override("font_outline_color", ACCENT)
 	big_l.add_theme_constant_override("outline_size", 6)
@@ -173,7 +173,7 @@ void fragment() {
 
 	toast_box = VBoxContainer.new()
 	toast_box.set_anchors_preset(Control.PRESET_CENTER)
-	toast_box.position = Vector2(-300, -140)
+	toast_box.position = Vector2(-300, -70)
 	toast_box.custom_minimum_size = Vector2(600, 0)
 	root.add_child(toast_box)
 

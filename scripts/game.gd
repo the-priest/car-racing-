@@ -47,6 +47,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--review":
+			shots_spec = "REVIEW"
 		if a == "--copstest":
 			shots_spec = "COPSTEST"
 		if a == "--storytest":
@@ -125,6 +127,11 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "REVIEW":
+		_to_menu()
+		await _review()
 		get_tree().quit()
 		return
 	if shots_spec == "COPSTEST":
@@ -849,6 +856,68 @@ func _storytest() -> void:
 		print("[story] done contract=", Save.data.contract, " cash=", Save.data.cash)
 		await _frames(10)
 	print("[story] COMPLETE story_done=", career.story_done())
+
+## Screenshot tour of menus and new gameplay moments for visual review.
+func _review() -> void:
+	Save.data.contract = 4
+	Save.data.playtime = 100.0
+	menus.show_screen("main", false)
+	await _snap("r01_main")
+	menus.show_screen("story")
+	await _snap("r02_story")
+	menus.back()
+	_on_play()
+	traffic.set_count(0)
+	# Armored Run: skip to the takedown, look at the truck.
+	career.pending_call = 4
+	career.ringing = 5.0
+	hud.show_dialogue(career.answer_phone())
+	player.reset_to(Transform3D(Basis(), career.pos3(career.waypoint) + Vector3(0, 0.8, 0)))
+	await _frames(40)
+	var tg: MissionTarget = career.target
+	for i in 90:
+		if tg and is_instance_valid(tg.car):
+			var f := -tg.car.global_transform.basis.z
+			player.reset_to(Transform3D(tg.car.global_transform.basis, tg.car.global_position - f * 12.0 + Vector3(0, 0.3, 0)))
+			player.linear_velocity = tg.car.linear_velocity
+		await get_tree().physics_frame
+	await _snap("r03_takedown")
+	career.abandon()
+	if state == State.RESULTS:
+		await _snap("r04_results")
+		menus.close_all()
+		_on_resume()
+	# Air unit + roadblock.
+	police.start_pursuit("TEST", 5)
+	await _frames(60 * 8)
+	if police.heli:
+		var hp := police.heli.global_position
+		cam.process_mode = Node.PROCESS_MODE_DISABLED
+		cam.global_position = player.global_position + Vector3(0, 6, 14)
+		cam.look_at(hp)
+		await _snap("r05_heli")
+		cam.process_mode = Node.PROCESS_MODE_INHERIT
+	police._try_roadblock()
+	player.linear_velocity = -player.global_transform.basis.z * 30.0
+	police._try_roadblock()
+	await _frames(20)
+	for c in police.cops:
+		if c.mode == "block":
+			cam.process_mode = Node.PROCESS_MODE_DISABLED
+			cam.global_position = c.car.global_position + Vector3(10, 4, 10)
+			cam.look_at(c.car.global_position)
+			await _snap("r06_roadblock")
+			cam.process_mode = Node.PROCESS_MODE_INHERIT
+			break
+	police.clear()
+	# Night city dialogue box
+	daynight.hour = 23.0
+	hud.show_dialogue(["Kane: This is Lieutenant Kane, Heat Task Force.", "Mara: That's Kane. She's never lost a driver."])
+	await _frames(90)
+	await _snap("r07_dialogue_night")
+	_open_garage()
+	await _frames(30)
+	await _snap("r08_garage")
 
 ## Heat-5 pursuit with the player car on autopilot around the ring road.
 func _copstest() -> void:

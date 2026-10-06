@@ -823,19 +823,44 @@ func _build_graph() -> void:
 func node_type_name(i: int) -> String:
 	return types[node_type[i]]
 
+const GRID := 200.0
+var _grid := {}
+
+func _build_node_grid() -> void:
+	_grid.clear()
+	for i in node_pos.size():
+		var key := Vector2i(floori(node_pos[i].x / GRID), floori(node_pos[i].y / GRID))
+		if not _grid.has(key):
+			_grid[key] = PackedInt32Array()
+		_grid[key].append(i)
+
+## Nearest road node (optionally of given road types), via a spatial grid.
 func nearest_node(p: Vector2, allowed: Array = []) -> int:
+	if _grid.is_empty():
+		_build_node_grid()
+	var c := Vector2i(floori(p.x / GRID), floori(p.y / GRID))
 	var best := -1
 	var bd := INF
-	for i in node_pos.size():
-		if not allowed.is_empty() and not allowed.has(types[node_type[i]]):
-			continue
-		var dd := node_pos[i].distance_squared_to(p)
-		if dd < bd:
-			bd = dd
-			best = i
+	for r in 40:
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var key := Vector2i(c.x + dx, c.y + dy)
+				if not _grid.has(key):
+					continue
+				for i in _grid[key]:
+					if not allowed.is_empty() and not allowed.has(types[node_type[i]]):
+						continue
+					var dd := node_pos[i].distance_squared_to(p)
+					if dd < bd:
+						bd = dd
+						best = i
+		if best >= 0 and bd <= pow(r * GRID, 2.0):
+			break
 	return best
 
-## Dijkstra over the road graph, optionally limited to some road types.
+## Dijkstra (binary heap) over the road graph, optionally limited to some road types.
 func route(a: int, b: int, allowed: Array = []) -> PackedInt32Array:
 	var n := node_pos.size()
 	var dist := PackedFloat32Array()
@@ -847,32 +872,67 @@ func route(a: int, b: int, allowed: Array = []) -> PackedInt32Array:
 	var done := PackedByteArray()
 	done.resize(n)
 	dist[a] = 0.0
-	var open: Array = [a]
-	while not open.is_empty():
-		var bi := 0
-		for k in open.size():
-			if dist[open[k]] < dist[open[bi]]:
-				bi = k
-		var u: int = open[bi]
-		open.remove_at(bi)
-		if u == b:
-			break
+	var hk := PackedFloat32Array([0.0]) # heap keys
+	var hv := PackedInt32Array([a]) # heap values
+	while not hv.is_empty():
+		var u := hv[0]
+		# pop
+		var last := hv.size() - 1
+		hk[0] = hk[last]
+		hv[0] = hv[last]
+		hk.resize(last)
+		hv.resize(last)
+		var i := 0
+		while true:
+			var l := i * 2 + 1
+			if l >= hv.size():
+				break
+			var m := l
+			if l + 1 < hv.size() and hk[l + 1] < hk[l]:
+				m = l + 1
+			if hk[m] >= hk[i]:
+				break
+			var tk := hk[i]
+			hk[i] = hk[m]
+			hk[m] = tk
+			var tv := hv[i]
+			hv[i] = hv[m]
+			hv[m] = tv
+			i = m
 		if done[u]:
 			continue
+		if u == b:
+			break
 		done[u] = 1
 		for v in adj[u]:
+			if done[v]:
+				continue
 			if not allowed.is_empty() and not allowed.has(types[node_type[v]]):
 				continue
 			var nd := dist[u] + node_pos[u].distance_to(node_pos[v])
 			if nd < dist[v]:
 				dist[v] = nd
 				prev[v] = u
-				open.append(v)
+				# push
+				hk.append(nd)
+				hv.append(v)
+				var j := hv.size() - 1
+				while j > 0:
+					var pj := (j - 1) / 2
+					if hk[pj] <= hk[j]:
+						break
+					var tk2 := hk[pj]
+					hk[pj] = hk[j]
+					hk[j] = tk2
+					var tv2 := hv[pj]
+					hv[pj] = hv[j]
+					hv[j] = tv2
+					j = pj
 	var path := PackedInt32Array()
-	var u := b
-	while u != -1:
-		path.append(u)
-		u = prev[u]
+	var u2 := b
+	while u2 != -1:
+		path.append(u2)
+		u2 = prev[u2]
 	path.reverse()
 	if path.is_empty() or path[0] != a:
 		return PackedInt32Array([a, b])

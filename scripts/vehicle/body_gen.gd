@@ -39,7 +39,7 @@ const BODIES := {
 		"cabin": [
 			[-2.1, 0.94, 1.14], [-1.75, 0.98, 1.95], [-1.4, 1.0, 2.05], [-1.05, 1.02, 2.1],
 		],
-		"n_body": 9.0, "n_cabin": 6.0, "scoop": false, "round_lights": false, "chrome": false,
+		"n_body": 9.0, "n_cabin": 6.0, "scoop": false, "round_lights": false, "chrome": false, "armor": true,
 	},
 }
 
@@ -227,6 +227,21 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 		root.add_child(e)
 	if def.scoop:
 		_box(root, Vector3(0, _interp(keys, -1.2, 3) + 0.06, -1.2), Vector3(0.62, 0.12, 0.8), dark)
+	if def.get("armor", false):
+		var stripe := StandardMaterial3D.new()
+		stripe.albedo_color = Color(0.95, 0.72, 0.05)
+		stripe.roughness = 0.4
+		for sx in [-1.0, 1.0]:
+			_box(root, Vector3(sx * 1.125, 1.45, 0.9), Vector3(0.02, 0.22, 3.4), stripe)
+			_box(root, Vector3(sx * 1.13, 0.95, 0.9), Vector3(0.03, 0.5, 3.2), dark)
+		_box(root, Vector3(0, 1.4, 2.72), Vector3(0.02, 1.7, 0.03), dark)
+		_box(root, Vector3(0, 1.4, 2.71), Vector3(2.0, 1.75, 0.02), chrome)
+		var amber := StandardMaterial3D.new()
+		amber.albedo_color = Color(1.0, 0.55, 0.05)
+		amber.emission_enabled = true
+		amber.emission = Color(1.0, 0.5, 0.0)
+		amber.emission_energy_multiplier = 3.0
+		_box(root, Vector3(0, 2.46, -0.7), Vector3(0.5, 0.12, 0.25), amber)
 	if def.get("wing", false):
 		_box(root, Vector3(0, 1.08, zr - 0.25), Vector3(1.7, 0.05, 0.4), paint)
 		for sx in [-0.6, 0.6]:

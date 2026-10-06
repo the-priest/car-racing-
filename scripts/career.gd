@@ -390,19 +390,16 @@ func _next_step() -> void:
 		waypoint_label = s.label
 		if s.has("time"):
 			time_left = float(s.time)
-		message.emit(s.label, 3.0)
 	elif s.has("wait"):
 		waypoint_label = s.label
 		if not s.get("here", false) and step > 0 and active.steps[step - 1].has("goto"):
 			wait_pos = pos_of(active.steps[step - 1].goto)
-		message.emit(s.label, 3.0)
 	elif s.has("heat"):
 		game.police.min_heat = int(s.heat)
 		game.police.start_pursuit("THE COPS ARE COMING", int(s.heat))
 		_next_step()
 	elif s.has("evade"):
 		waypoint_label = s.label
-		message.emit(s.label, 3.0)
 	elif s.has("race"):
 		start_race(s.race, s.get("place", 1), s.get("boss", ""))
 	elif s.has("takedown"):
@@ -412,7 +409,6 @@ func _next_step() -> void:
 		target.start(game, world, s.takedown, pos_of(s.from), pos_of(s.to), int(s.hits))
 		target.was_hit.connect(_on_target_hit)
 		waypoint = target.pos2()
-		message.emit(s.label, 3.0)
 
 func _on_target_hit(hits: int, need: int) -> void:
 	game.audio.play_oneshot("impact", 0.8)

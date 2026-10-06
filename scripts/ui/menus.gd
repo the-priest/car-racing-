@@ -16,6 +16,7 @@ var screens := {}
 var current := ""
 var stack: Array[String] = []
 var garage_sel := "vanta"
+var confirm_new := false
 var loading_bar: ProgressBar
 var loading_label: Label
 
@@ -165,17 +166,40 @@ func _button(box: Container, text: String, cb: Callable, disabled := false) -> B
 	return b
 
 func show_screen(name: String, push := true) -> void:
+	# Refreshing the same screen keeps focus on the same button (pad users).
+	if name != "main":
+		confirm_new = false
+	var keep := -1
+	if name == current and screens.has(name):
+		var f := get_viewport().gui_get_focus_owner()
+		if f is Button:
+			keep = _buttons(screens[name].box).find(f)
 	if current != "" and screens.has(current):
 		screens[current].root.visible = false
-		if push:
+		if push and current != name:
 			stack.append(current)
 	current = name
 	_rebuild(name)
 	screens[name].root.visible = true
 	await get_tree().process_frame
+	var btns := _buttons(screens[name].box)
+	if keep >= 0 and not btns.is_empty():
+		var k := mini(keep, btns.size() - 1)
+		while k < btns.size() - 1 and (btns[k] as Button).disabled:
+			k += 1
+		var b: Button = btns[k]
+		if confirm_new:
+			for x in btns:
+				if x.text.begins_with("CONFIRM"):
+					b = x
+		b.grab_focus()
+		return
 	var first := _first_focus(screens[name].box)
 	if first:
 		first.grab_focus()
+
+func _buttons(box: Node) -> Array:
+	return box.find_children("*", "Button", true, false).filter(func(b): return b.is_visible_in_tree())
 
 func back() -> void:
 	if current == "":
@@ -254,7 +278,7 @@ func _rebuild(name: String) -> void:
 			"settings": _screen("settings", false, 760)
 			"controls": _screen("controls")
 			"credits": _screen("credits")
-			"story": _screen("story", false, 700)
+			"story": _screen("story")
 			"results": _screen("results")
 	var box: VBoxContainer = screens[name].box
 	_clear(box)
@@ -270,12 +294,12 @@ func _rebuild(name: String) -> void:
 func _build_main(box: VBoxContainer) -> void:
 	box.add_theme_constant_override("separation", 12)
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 120)
+	spacer.custom_minimum_size = Vector2(0, 30)
 	box.add_child(spacer)
-	_title(box, "VELOCITY\nHEAT", 76)
+	_title(box, "VELOCITY\nHEAT", 68)
 	_text(box, "GETAWAY DRIVER  ·  OPEN WORLD", 18, ACCENT)
 	var sp2 := Control.new()
-	sp2.custom_minimum_size = Vector2(0, 30)
+	sp2.custom_minimum_size = Vector2(0, 14)
 	box.add_child(sp2)
 	var started: bool = int(Save.data.contract) > 0 or float(Save.data.playtime) > 30.0
 	_button(box, "CONTINUE" if started else "START CAREER", func(): play_pressed.emit())
@@ -285,7 +309,12 @@ func _build_main(box: VBoxContainer) -> void:
 	_button(box, "CONTROLS", func(): show_screen("controls"))
 	_button(box, "CREDITS", func(): show_screen("credits"))
 	if started:
-		_button(box, "NEW CAREER", func():
+		_button(box, "NEW CAREER" if not confirm_new else "CONFIRM: ERASE ALL PROGRESS?", func():
+			if not confirm_new:
+				confirm_new = true
+				show_screen("main", false)
+				return
+			confirm_new = false
 			Save.wipe()
 			game.reset_career()
 			show_screen("main", false))
@@ -299,8 +328,9 @@ func _build_pause(box: VBoxContainer) -> void:
 	_button(box, "STORY", func(): show_screen("story"))
 	if career.race != null or not career.active.is_empty():
 		_button(box, "ABANDON " + ("RACE" if career.race else "JOB"), func():
-			career.abandon()
-			back())
+			close_all()
+			game._on_resume()
+			career.abandon())
 	var at_home: bool = game.player_at_home()
 	_button(box, "GARAGE" + ("" if at_home else "  (drive home to use)"), func(): show_screen("garage"), not at_home or game.police.pursuit)
 	_button(box, "SKIP TO " + ("DAY" if game.daynight.night > 0.5 else "NIGHT"), func():
@@ -485,27 +515,47 @@ func _build_story(box: VBoxContainer) -> void:
 	var cur := int(Save.data.contract)
 	var total := Career.CONTRACTS.size()
 	_text(box, ("Chapter %d of %d" % [cur + 1, total]) if cur < total else "Story complete - side jobs keep coming", 18, ACCENT)
+	var flow: HFlowContainer = null
 	for i in total:
 		var c: Dictionary = Career.CONTRACTS[i]
 		if c.has("act"):
-			_text(box, "\n" + Career.ACTS[int(c.act)], 17, Color(1, 1, 1, 0.5))
-		var line := ""
-		var col := Color.WHITE
+			_text(box, Career.ACTS[int(c.act)], 16, Color(1, 1, 1, 0.5))
+			flow = HFlowContainer.new()
+			flow.add_theme_constant_override("h_separation", 8)
+			flow.add_theme_constant_override("v_separation", 8)
+			box.add_child(flow)
+		var chip := PanelContainer.new()
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(4)
+		sb.content_margin_left = 12
+		sb.content_margin_right = 12
+		sb.content_margin_top = 5
+		sb.content_margin_bottom = 5
+		var l := Label.new()
+		l.add_theme_font_size_override("font_size", 17)
 		if i < cur:
-			line = "✓  %s" % c.title
-			col = Color(0.5, 1.0, 0.62)
+			l.text = "✓ " + c.title
+			sb.bg_color = Color(0.2, 0.55, 0.3, 0.35)
+			l.add_theme_color_override("font_color", Color(0.6, 1.0, 0.7))
 		elif i == cur:
-			line = "▶  %s   ·   %s" % [c.title, c.caller]
-			col = ACCENT
+			l.text = "▶ " + c.title
+			sb.bg_color = Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.3)
+			sb.border_color = ACCENT
+			sb.set_border_width_all(2)
+			l.add_theme_color_override("font_color", Color.WHITE)
 		else:
-			line = "·  ?????"
-			col = Color(1, 1, 1, 0.35)
-		_text(box, line, 20, col)
-		if i == cur:
-			var brief: Array = c.brief
-			_text(box, "	 " + str(brief[brief.size() - 1]), 16, Color(1, 1, 1, 0.7))
+			l.text = "? ? ?"
+			sb.bg_color = Color(1, 1, 1, 0.05)
+			l.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
+		chip.add_theme_stylebox_override("panel", sb)
+		chip.add_child(l)
+		flow.add_child(chip)
 	if cur < total:
-		_text(box, "\nWait for the call in free roam, or press %s to call your contact." % Settings.glyph("phone"), 16)
+		var c2: Dictionary = Career.CONTRACTS[cur]
+		var brief: Array = c2.brief
+		_text(box, "\nNEXT:  %s  ·  call from %s" % [c2.title.to_upper(), c2.caller], 18, ACCENT)
+		_text(box, str(brief[0]), 16, Color(1, 1, 1, 0.75))
+		_text(box, "Wait for the call in free roam, or press %s to call your contact." % Settings.glyph("phone"), 15)
 	_button(box, "BACK", func(): back())
 
 func _build_credits(box: VBoxContainer) -> void:
