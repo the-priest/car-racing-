@@ -3,9 +3,10 @@ extends RefCounted
 ## Achievement definitions and checks. Unlocked keys live in Save.data.ach.
 
 const LIST := [
-	["first_job", "Getaway Driver", "Finish your first story chapter."],
+	["first_job", "First Wheels", "Finish your first story chapter."],
 	["act1", "New in Town", "Finish Act I."],
 	["act2", "The Crew", "Finish Act II."],
+	["act3", "Burned, Not Broken", "Survive Kane's ambush in Burned."],
 	["story", "Legend of Solano Bay", "Finish the story."],
 	["escape5", "Untouchable", "Escape a heat 5 pursuit."],
 	["kane", "Kane's Nemesis", "Take down Lt. Kane."],
@@ -45,6 +46,7 @@ static func check(top_kmh: float) -> Array:
 	if c >= 1: want.append("first_job")
 	if c >= 3: want.append("act1")
 	if c >= 8: want.append("act2")
+	if c >= 11: want.append("act3")
 	if c >= 14: want.append("story")
 	if int(d.get("cop_takedowns", 0)) >= 10: want.append("takedowns10")
 	if int(d.races_won) >= 5: want.append("races5")

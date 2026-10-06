@@ -94,10 +94,13 @@ func _place(c: Dictionary, snap: bool) -> void:
 	var y := world.drive_y(p.x, p.y)
 	c.pos = Vector3(p.x, y, p.y)
 	var yaw := atan2(-u.x, -u.y)
-	c.yaw = yaw if snap else lerp_angle(c.yaw, yaw, 0.15)
+	c.yaw = yaw if snap else lerp_angle(c.yaw, yaw, 1.0 - exp(-9.75 * _dt)) # frame-rate independent
 	c.len = L
 
+var _dt := 1.0 / 60.0
+
 func update(delta: float, player: Car, others: Array) -> void:
+	_dt = delta
 	var pp := player.global_position
 	for i in active_count:
 		var c: Dictionary = cars[i]

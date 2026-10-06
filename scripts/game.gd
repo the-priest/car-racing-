@@ -179,6 +179,10 @@ func _ready() -> void:
 		n.process_mode = Node.PROCESS_MODE_PAUSABLE
 	hud.setup(self)
 	audio.now_playing.connect(hud.now_playing)
+	audio.radio_failed.connect(func():
+		Settings.data.radio = false
+		Settings.save_settings()
+		hud.message("Radio off: no playable music in %s" % AudioManager.radio_folder(), 5.0))
 	hud.visible = false
 	on_settings_changed()
 	if shots_spec == "MENUTEST":
@@ -239,6 +243,12 @@ func _ready() -> void:
 		Save.data.tips = []
 		tip_test = true
 		hud.tip("Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching.")
+		hud.radio("Dispatch: Units, set up roadblocks. Box this car in.")
+		hud.message("NEAR MISS  +N2O", 3.0)
+		hud.message("NEAR MISS  +N2O", 3.0)
+		hud.now_playing("Solano Nights", "Midnight Grid")
+		drift.chain = 12345.0
+		drift.mult = 3
 		await _frames(40)
 		await _snap("hud_elements")
 		get_tree().quit()
@@ -698,11 +708,15 @@ func _build_player(id: String) -> void:
 func reset_career() -> void:
 	session_id += 1
 	credits_pending = false
+	credits_roll_after_results = false
+	pending_chase = ""
 	top_kmh = 0.0
 	custom_wp = Vector2.INF
 	for b in career.billboards:
 		b.node.visible = true
 	career.abandon()
+	career._end_drift_zone()
+	hud.clear_dialogue()
 	career.pending_call = -1
 	career.ringing = 0.0
 	career.last_failed = {}
@@ -846,15 +860,10 @@ func _on_play() -> void:
 	cam.snap = true
 	if float(Save.data.playtime) >= 1.0 and not welcomed:
 		welcomed = true
-		var ci := int(Save.data.contract)
-		if ci < Career.CONTRACTS.size():
-			hud.message("Next up: chapter %d, %s - %s will call soon (or ring them with %s)" % [ci + 1, Career.CONTRACTS[ci].title, Career.CONTRACTS[ci].caller, Settings.glyph("phone")], 6.0)
+		hud.free_t = 0.0 # show the "NEXT" objective again
 	if float(Save.data.playtime) < 1.0:
 		hud.show_dialogue(Career.PROLOGUE)
-		career.call_timer = 16.0
-		var g := func(k: String) -> String: return Settings.glyph(k)
-		hud.message("%s Throttle   %s Brake   %s Handbrake (hairpins)   %s Nitrous   Drift: tap %s while steering" % [g.call("throttle"), g.call("brake"), g.call("handbrake"), g.call("nitro"), g.call("throttle")], 9.0)
-		hud.message("%s Camera   %s Map   %s Phone   %s Reset to road" % [g.call("camera"), g.call("map"), g.call("phone"), g.call("reset")], 9.0)
+		career.call_timer = 24.0
 
 func _on_resume() -> void:
 	state = State.PLAY
@@ -935,6 +944,8 @@ func _take_photo() -> void:
 	var path := "user://screenshots/velocity_heat_%s.png" % Time.get_datetime_string_from_system().replace(":", "-")
 	get_viewport().get_texture().get_image().save_png(path)
 	audio.play_oneshot("reward", 1.4, -6.0)
+	if state != State.PHOTO:
+		return # left photo mode while saving: don't leave the label on screen
 	photo_hint.text = "Saved: " + ProjectSettings.globalize_path(path)
 	photo_hint.visible = true
 	await get_tree().create_timer(2.5, true, false, true).timeout
@@ -971,10 +982,14 @@ func _on_career_finished(res: Dictionary) -> void:
 		await get_tree().create_timer(1.7, true, false, true).timeout
 		while state != State.PLAY:
 			if state == State.MENU or my_session != session_id:
+				pending_chase = ""
 				return
 			await get_tree().process_frame
 		if my_session != session_id:
+			pending_chase = ""
 			return
+	if hud.big_map.visible:
+		hud.big_map.close()
 	state = State.RESULTS
 	get_tree().paused = true
 	if credits_roll_after_results:
@@ -1002,6 +1017,25 @@ func _check_achievements(delta: float) -> void:
 		_award(k)
 
 ## One-time contextual hint (remembered in the save).
+## First-play onboarding: controls are introduced one at a time once the intro
+## dialogue is over, instead of all at once.
+var onboard_t := 0.0
+
+func _update_onboarding(delta: float) -> void:
+	if shots_spec != "" or hud.sub_panel.visible:
+		return
+	onboard_t += delta
+	var seen: Array = Save.data.get("tips", [])
+	if seen.has("ctl_map"):
+		return
+	var g := func(k: String) -> String: return Settings.glyph(k)
+	if onboard_t > 2.0 and not seen.has("ctl_drive"):
+		tip("ctl_drive", "Drive: %s accelerate, %s brake / reverse, %s nitrous. Nitrous refills from near misses, drifts and big air." % [g.call("throttle"), g.call("brake"), g.call("nitro")])
+	elif onboard_t > 35.0 and not seen.has("ctl_drift"):
+		tip("ctl_drift", "Drift: while steering into a corner, lift off %s and press it again. Steer to hold the angle. %s (handbrake) is for tight hairpins." % [g.call("throttle"), g.call("handbrake")])
+	elif onboard_t > 70.0:
+		tip("ctl_map", "%s opens the map (pin your own waypoint there). %s resets your car to the road, %s changes camera, %s turns on the radio." % [g.call("map"), g.call("reset"), g.call("camera"), g.call("radio")])
+
 func tip(key: String, text: String) -> void:
 	if shots_spec != "":
 		return
@@ -1013,11 +1047,17 @@ func tip(key: String, text: String) -> void:
 	hud.tip(text)
 
 ## Brief slow motion for big moments (takedowns). Real-time timer restores it.
+var slowmo_until := 0
+
 func slowmo(secs: float) -> void:
 	if profiling or shots_spec != "":
 		return
 	Engine.time_scale = 0.35
-	get_tree().create_timer(secs, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
+	# Overlapping slow-mos (takedown, then job done) end at the latest deadline.
+	slowmo_until = maxi(slowmo_until, Time.get_ticks_msec() + int(secs * 1000.0))
+	get_tree().create_timer(secs, true, false, true).timeout.connect(func():
+		if Time.get_ticks_msec() >= slowmo_until - 5:
+			Engine.time_scale = 1.0)
 
 func _on_story_complete() -> void:
 	credits_roll_after_results = true
@@ -1030,7 +1070,7 @@ func _roll_credits() -> void:
 	await menus.roll_credits()
 	_on_resume()
 	hud.show_dialogue(["You came to Solano Bay with one car and a reputation.", "Now the city knows your name.",
-		"Side jobs, street races and the cops are still out there. The phone's still on."])
+		"Side jobs, street races and Kane's task force are still out there."])
 
 func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 	if escaped:
@@ -1050,10 +1090,14 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 		var fine := mini(int(Save.data.cash), 2500 * maxi(int(police.last_stats.get("heat", 1)), 1))
 		Save.add_cash(-fine)
 		hud.big("BUSTED", 2.5, true)
-		if not career.active.is_empty() or career.race:
+		if not career.active.is_empty():
 			career.abandon("You got busted  ·  fine $%s" % HUD._fmt(fine))
 		else:
-			hud.message("Fine $%s" % HUD._fmt(fine), 3.0)
+			if career.race:
+				career.abandon("You got busted")
+				hud.message("Race over  ·  fine $%s" % HUD._fmt(fine), 3.0)
+			else:
+				hud.message("Fine $%s" % HUD._fmt(fine), 3.0)
 	persist()
 
 ## point/normal: contact position and the direction pushing the player away from what
@@ -1172,7 +1216,7 @@ func _input(event: InputEvent) -> void:
 		var rid := career.race_near(Vector2(player.global_position.x, player.global_position.z))
 		if rid != "" and not police.pursuit:
 			career.start_race(rid)
-		elif player_at_home() and not police.pursuit and career.active.is_empty():
+		elif player_at_home() and not police.pursuit and career.idle():
 			_open_garage()
 		elif hud.sub_panel.visible:
 			hud.skip_line()
@@ -1437,6 +1481,7 @@ func _process(delta: float) -> void:
 	career.update(delta)
 	t0 = _pt("career", t0)
 	_update_drift(delta)
+	_update_onboarding(delta)
 	_update_prompt()
 	_update_gps(delta)
 	t0 = _pt("gps/prompt", t0)
@@ -1492,8 +1537,8 @@ func _update_storm(delta: float) -> void:
 		return
 	storm_t = randf_range(18.0, 45.0)
 	daynight.flash = 1.0
-	get_tree().create_timer(0.2).timeout.connect(func(): daynight.flash = 0.7)
-	get_tree().create_timer(randf_range(0.6, 2.2)).timeout.connect(func(): audio.play_oneshot("thunder", randf_range(0.8, 1.1), -4.0))
+	get_tree().create_timer(0.2, false).timeout.connect(func(): daynight.flash = 0.7)
+	get_tree().create_timer(randf_range(0.6, 2.2), false).timeout.connect(func(): audio.play_oneshot("thunder", randf_range(0.8, 1.1), -4.0))
 
 func _update_weather(delta: float) -> void:
 	_update_storm(delta)

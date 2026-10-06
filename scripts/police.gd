@@ -49,22 +49,30 @@ func setup(g: Node, w: World) -> void:
 	world = w
 
 # ---------------------------------------------------------------- helpers
+func _kane_known() -> bool:
+	return int(Save.data.contract) >= 3
+
+## Where something is, phrased for radio chatter ("downtown", "on Summit Pass").
 func area_name(p: Vector3) -> String:
 	if world.in_city(p.x, p.z):
 		return "downtown"
 	var t := world.node_type_name(world.nearest_node(Vector2(p.x, p.z)))
 	match t:
 		"hwy":
-			return "the ring highway"
+			return "on the Coastal Highway"
 		"pass":
-			return "Summit Pass"
+			return "on Summit Pass"
 		"country":
-			return "the valley road"
+			return "on Valley Road"
 		"runway":
-			return "the airfield"
+			return "at the airfield"
 		"link":
-			return "the expressway"
-	return "the outskirts"
+			if absf(p.x) < 80.0:
+				return "on the North Expressway" if p.z < 0.0 else "on the Harbor Expressway"
+			if absf(p.z) < 80.0:
+				return "on the East Expressway" if p.x > 0.0 else "on the West Expressway"
+			return "on the airfield road"
+	return "in the outskirts"
 
 func heading_name(v: Vector3) -> String:
 	if v.length() < 3.0:
@@ -139,7 +147,7 @@ func spawn_kane() -> void:
 	tag.position = Vector3(0, 2.4, 0)
 	car.add_child(tag)
 	c.tag = tag
-	say("Kane: I'm taking this one personally. Nobody touches the driver but me.", true)
+	say("Kane: I'm on them personally. Keep the roads shut and leave the driver to me.", true)
 
 func _make_cop(t: Transform3D, mode: String, elite := false) -> Dictionary:
 	var car := Car.new()
@@ -241,7 +249,7 @@ func start_pursuit(reason: String, at_heat := 1) -> void:
 		c.car.set_police_active(true)
 	pursuit_started.emit(reason)
 	var p: Car = game.player
-	say("Dispatch: All units, suspect vehicle %s on %s. Pursuit is a go." % [heading_name(p.linear_velocity), area_name(p.global_position)], true)
+	say("Dispatch: All units, suspect vehicle %s %s. Pursuit is a go." % [heading_name(p.linear_velocity), area_name(p.global_position)], true)
 
 func end_pursuit(escaped: bool) -> void:
 	last_stats = {"time": pursuit_time, "heat": heat, "takedowns": takedowns, "kane": bonus > 0}
@@ -432,7 +440,7 @@ func _try_roadblock() -> void:
 		var face := Vector3(right.x, 0, right.y).rotated(Vector3.UP, 0.35 * (1.0 if i % 2 == 0 else -1.0))
 		var c := _make_cop(Transform3D(Basis.looking_at(face, Vector3.UP), Vector3(q.x, y + 0.4, q.y)), "block")
 		c.block_t = 0.0
-	say("Dispatch: Roadblock in position on %s. Box them in!" % area_name(Vector3(np.x, 0, np.y)), true)
+	say("Dispatch: Roadblock in position %s. Box them in!" % area_name(Vector3(np.x, 0, np.y)), true)
 	game.tip("roadblock", "Roadblocks are just parked cars. Hit them flat out - ramming cops while you're faster takes them down for bounty.")
 	game.hud.message("ROADBLOCK AHEAD", 2.0)
 
@@ -593,9 +601,10 @@ func update(dt: float) -> void:
 		game.hud.big("HEAT %d" % heat, 1.4)
 		match heat:
 			2: say("Dispatch: Suspect is not stopping. Additional units, respond.", true)
-			3: say("Kane: This is Kane. Set up roadblocks, I want this car boxed.", true)
-			4: say("Kane: Send the interceptors and put Air One in the sky.", true)
-			5: say("Kane: Every unit in Solano Bay. I don't care what it costs.", true)
+			# Kane only takes over the radio once the story has introduced her.
+			3: say("Kane: Roadblocks on every exit. I want this car boxed in." if _kane_known() else "Dispatch: Units, set up roadblocks. Box this car in.", true)
+			4: say("Kane: Send the interceptors and put Air One in the sky." if _kane_known() else "Dispatch: Interceptors are cleared. Air One is in the sky.", true)
+			5: say("Kane: Every unit in Solano Bay. I don't care what it costs." if _kane_known() else "Dispatch: All units, all channels. This one does not get away.", true)
 	var want := mini(1 + heat, 7)
 	# Taken-out cops leave the chase once they've stopped spinning.
 	for c in cops.duplicate():

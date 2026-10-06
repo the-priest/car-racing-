@@ -23,21 +23,21 @@ const LOC_NAMES := {
 	"home": "your garage", "lot": "the downtown lot", "docks": "the docks", "harbor_bank": "Harbor Savings",
 	"first_bank": "First National", "reserve": "the Federal Reserve", "quarry": "the quarry", "airfield": "the airfield",
 	"farm": "the valley farm", "overpass": "the east overpass", "chop_shop": "Dex's chop shop", "pier": "the pier",
-	"depot": "the cash depot", "west_gate": "the west highway",
+	"depot": "the cash depot", "west_gate": "the West Expressway junction",
 }
 
 ## Speaker colours for dialogue ("Name: line").
 const SPEAKERS := {
 	"Mara": Color(1.0, 0.62, 0.25), "Dex": Color(0.45, 1.0, 0.55), "Sable": Color(0.78, 0.5, 1.0),
 	"Kane": Color(0.45, 0.7, 1.0), "Dispatch": Color(0.55, 0.85, 1.0), "Juno": Color(1.0, 0.45, 0.7),
-	"Rook": Color(1.0, 0.85, 0.4),
+	"Rook": Color(1.0, 0.85, 0.4), "Unknown": Color(0.75, 0.78, 0.85),
 }
 
-const ACTS := ["ACT I  ·  NEW IN TOWN", "ACT II  ·  THE CREW", "ACT III  ·  BURNED", "EPILOGUE  ·  LEGEND"]
+const ACTS := ["ACT I  ·  NEW IN TOWN", "ACT II  ·  THE CREW", "ACT III  ·  FALLOUT", "EPILOGUE  ·  THE CROWN"]
 
 const PROLOGUE := [
-	"Solano Bay. Neon, money and three hundred kilometres of road.",
-	"The Night Kings run the streets. Lieutenant Kane's task force runs the cops.",
+	"Solano Bay. Neon, money and fifty kilometers of road.",
+	"The Night Kings run the streets. Lieutenant Kane's Heat Task Force hunts anyone faster than them.",
 	"You just rolled into town with one car and a reputation. Keep your phone close.",
 ]
 
@@ -53,10 +53,10 @@ const CONTRACTS := [
 		"outro": ["Mara: Not bad. Not bad at all.", "Mara: Keep your phone on. I'll have real work soon."]},
 	{"title": "Proving Ground", "caller": "Mara", "reward": 6000,
 		"brief": ["Mara: Nobody hires a driver they've never heard of.", "Mara: The Night Kings run a circuit downtown. Win it and the whole city hears your name.",
-			"Mara: Watch out for Rook. He drives dirty."],
+			"Mara: Sable runs the Night Kings. Rook is his attack dog, and he drives dirty."],
 		"steps": [{"race": "downtown", "place": 1, "boss": "rook",
 			"say": ["Rook: Fresh meat. Sable's gonna love hearing about this.", "Rook: Try to keep up, tourist."]}],
-		"outro": ["Rook: ...Who ARE you?", "Mara: That was Sable's crew you just embarrassed. Good. Let him notice you."]},
+		"outro": ["Rook: ...Okay. NOW I'm paying attention.", "Mara: That was Sable's crew you just embarrassed. Good. Let him notice you."]},
 	{"title": "Hot Plates", "caller": "Dex", "reward": 7000,
 		"brief": ["Dex: Yo. Dex. Mara's mechanic, smuggler, therapist. Mostly mechanic.", "Dex: There's a hot car at my chop shop that needs to disappear into your garage.",
 			"Dex: Fair warning: half the cops in the city are looking for it."],
@@ -71,8 +71,8 @@ const CONTRACTS := [
 		"steps": [{"goto": "harbor_bank", "label": "Pull up at Harbor Savings"},
 			{"wait": 12, "label": "The crew is inside...", "alarm": 6, "say": ["Mara: Engine running. Eyes on the mirrors."]},
 			{"heat": 3, "say": ["Kane: This is Lieutenant Kane, Heat Task Force.", "Kane: Whoever's driving that car - I'll be seeing you very soon."]},
-			{"evade": true, "label": "Shake the cops"},
-			{"goto": "docks", "label": "Drop the crew at the docks", "say": ["Mara: That's Kane. She's never lost a driver. Let's not be her first."]}],
+			{"evade": true, "label": "Lose the cops", "say": ["Mara: That's Kane. Nobody has ever outrun her. Let's be the first."]},
+			{"goto": "docks", "label": "Drop the crew at the docks", "say": ["Mara: Clean. Now get them to the docks."]}],
 		"outro": ["Mara: Everyone's out, everyone's paid. You're officially a getaway driver.", "Mara: Kane's going to remember your car. Paint it if you're nervous."]},
 	{"title": "Armored Run", "caller": "Mara", "reward": 22000,
 		"brief": ["Mara: There's a cash truck leaving the Reserve for the airfield.", "Mara: Catch it and ram it until it gives up. The crew does the rest.",
@@ -85,13 +85,13 @@ const CONTRACTS := [
 			{"evade": true, "label": "Lose the cops"},
 			{"goto": "chop_shop", "label": "Bring the cash to Dex's"}],
 		"outro": ["Dex: That truck's a pancake. I love it.", "Mara: Best haul in years. People are starting to talk about you."]},
-	{"title": "Ring King", "caller": "Mara", "reward": 14000,
-		"brief": ["Mara: Juno runs the ring road for the Night Kings. Fastest driver Sable has.", "Mara: Beat her and Sable has nobody left to hide behind."],
+	{"title": "Queen of the Coast", "caller": "Mara", "reward": 14000,
+		"brief": ["Mara: Juno owns the Coastal Highway for the Night Kings. Fastest driver Sable has.", "Mara: Beat her and Sable has nobody left to hide behind."],
 		"steps": [{"race": "ring", "place": 1, "boss": "juno",
 			"say": ["Juno: So you're Mara's new toy. Let's see what you've got on a real road."]}],
 		"outro": ["Juno: ...Fine. You're fast. Sable won't like this.", "Juno: Watch your back. He doesn't lose gracefully."]},
 	{"title": "Mountain Courier", "caller": "Dex", "reward": 14000,
-		"brief": ["Dex: Package for the quarry at the top of Summit Pass.", "Dex: Don't ask what's in it. Do ask why the cops keep sniffing around it."],
+		"brief": ["Dex: Pick up a package at the east overpass. It goes to the quarry at the top of Summit Pass.", "Dex: Don't ask what's in it. Do ask why the cops keep sniffing around it."],
 		"steps": [{"goto": "overpass", "label": "Collect the package"},
 			{"goto": "quarry", "label": "Deliver it to the quarry", "time": 190, "heat_mid": 2,
 				"say": ["Dex: Up the hairpins. Brake late, but brake."]}],
@@ -116,36 +116,36 @@ const CONTRACTS := [
 			"say": ["Sable: No crew, no Mara. Just you and the mountain."]}],
 		"outro": ["Sable: Enjoy it, driver.", "Sable: You won't be driving much longer."]},
 	{"title": "Burned", "caller": "Mara", "reward": 20000,
-		"brief": ["Mara: GET OUT. Kane's people are on their way to your garage RIGHT NOW.", "Mara: Sable sold us out. He gave them everything.",
+		"brief": ["Mara: GET OUT. Kane's raiding your garage and every unit in the city is looking for your car.", "Mara: Sable sold us out. He gave them everything.",
 			"Mara: Lose them and get to the safehouse at the valley farm."],
 		"steps": [{"heat": 4, "kane": true, "say": ["Kane: There you are. Every unit, every road. Nobody leaves the city."]},
 			{"evade": true, "label": "Escape Kane's ambush"},
 			{"goto": "farm", "label": "Reach the safehouse at the farm", "time": 260}],
-		"outro": ["Mara: You made it. Good.", "Mara: Sable has a car stashed at the pier. He's going to run.", "Mara: Let's go have a word with him."]},
+		"outro": ["Mara: You made it. Good.", "Mara: Sable has a car stashed at the pier. He's going to run.", "Mara: Let's make sure he doesn't get far."]},
 	{"title": "Payback", "caller": "Mara", "reward": 26000,
-		"brief": ["Mara: Sable's bolting from the pier for the mountain.", "Mara: Run him down. I want him stopped, not escaped."],
+		"brief": ["Mara: Sable's bolting from the pier for the mountain.", "Mara: Run him down. I want him stopped, not gone."],
 		"steps": [{"goto": "pier", "label": "Get to the pier"},
 			{"takedown": "sable", "from": "pier", "to": "quarry", "hits": 6, "label": "Take Sable down",
-				"say": ["Sable: You?! You should be in a cell by now!", "Mara: Stop him before he reaches the mountain!"]},
-			{"wait": 4, "label": "Mara is having a word with Sable...", "here": true,
-				"say": ["Sable: Okay! OKAY! Kane's planning a trap at the Reserve...", "Sable: She wants all of you there. I was supposed to bring you in."]},
+				"say": ["Sable: You?! You should be in a cell by now!", "Mara: Stop him before he reaches the quarry!"]},
+			{"wait": 4, "label": "Making Sable talk...", "here": true,
+				"say": ["Sable: Okay! OKAY! Kane's setting a trap at the Reserve...", "Sable: She wants all of you there. I was supposed to bring you in."]},
 			{"heat": 3},
 			{"evade": true, "label": "Lose the cops"}],
-		"outro": ["Mara: So Kane wants a show at the Reserve.", "Mara: Then let's give her one. Biggest vault in Solano Bay.", "Mara: Last job, driver. Then we disappear."]},
+		"outro": ["Mara: Sable's on a boat out of Solano Bay tonight. If he ever comes back, Kane can have him.", "Mara: So Kane wants a show at the Reserve. Then let's give her one.", "Mara: Last job, driver. Then we disappear."]},
 	{"title": "The Reserve", "caller": "Mara", "reward": 80000,
-		"brief": ["Mara: This is it. The Federal Reserve.", "Mara: Kane will throw everything she has at us: roadblocks, helicopters, interceptors.",
+		"brief": ["Mara: This is it. The Federal Reserve.", "Mara: Kane's waiting for Sable to hand us over. He won't show, so we hit the vault before her trap closes.", "Mara: She'll throw everything she has at us: roadblocks, Air One, interceptors.",
 			"Mara: Get the crew in, get the crew out, and get us to the pier. I trust you."],
 		"steps": [{"goto": "reserve", "label": "Pull up at the Reserve"},
 			{"wait": 18, "label": "The crew is cracking the vault...", "alarm": 4, "say": ["Kane: I knew you couldn't resist. Every unit to the Reserve. NOW."]},
-			{"heat": 5, "kane": true, "say": ["Mara: They're out! GO GO GO!"]},
+			{"heat": 5, "kane": true, "say": ["Mara: They're out! Drive!"]},
 			{"evade": true, "label": "Lose every cop in the city"},
 			{"goto": "pier", "label": "Get the crew to the pier"}],
 		"outro": ["Kane: ...All units, stand down. They're gone.", "Mara: We did it. We actually did it.", "Mara: Solano Bay is yours, driver. Don't let it get boring."]},
 	# ---------------------------------------------------------------- EPILOGUE
 	{"title": "Legend", "caller": "Juno", "reward": 50000, "act": 3,
-		"brief": ["Juno: Sable's gone. The Night Kings need someone at the top.", "Juno: One last race. The Grand Tour, the whole map. Beat me and the crown is yours."],
+		"brief": ["Juno: Sable's gone for good. The Night Kings need someone at the top.", "Juno: One last race. The Grand Tour, the whole map. Beat me and the crown is yours."],
 		"steps": [{"race": "grand", "place": 1, "boss": "juno", "say": ["Juno: No holding back this time."]}],
-		"outro": ["Juno: Long live the king of Solano Bay.", "Mara: Phone's still on, driver. There's always another job."]},
+		"outro": ["Juno: The crown's yours. Long live the new boss of the Night Kings.", "Kane: (voicemail) You got lucky, driver. I still never forget a car.", "Mara: I said I'd disappear. Turns out I'm bad at retiring. Phone's on."]},
 ]
 
 ## Messages that arrive in free roam after a chapter, before the next job call.
@@ -155,7 +155,7 @@ const FLAVOR := {
 	3: ["Kane: (voicemail) This is Lieutenant Kane. I've seen your car.", "Kane: I never forget a car."],
 	5: ["Juno: You drive like you've got nothing to lose.", "Juno: Careful. That's exactly the kind of driver Sable likes to use."],
 	7: ["Mara: Lay low for a bit. Kane has the whole task force out tonight.", "Mara: Go cruise the mountain. Clear your head."],
-	9: ["Dex: Sable looked rattled after that race. Rattled people do stupid things."],
+	9: ["Dex: Sable didn't look beaten after that race. He looked like he'd already made a call."],
 	11: ["Juno: Heard what you did to Sable.", "Juno: The Night Kings are... reconsidering who they follow."],
 }
 
@@ -367,6 +367,7 @@ func update(dt: float) -> void:
 	if race:
 		race.update(dt)
 		waypoint = Vector2.INF
+		beacon.visible = false
 		if race.done:
 			_race_finished(race.result)
 		return
@@ -559,18 +560,25 @@ func answer_phone() -> Array:
 	## ring your contact yourself and they call back in a moment.
 	if not idle():
 		return []
+	if game.police.pursuit:
+		message.emit("Lose the cops before making calls", 2.5, "")
+		return []
 	if pending_call < 0:
-		if game.police.pursuit:
-			message.emit("Lose the cops before making calls", 2.5, "")
-			return []
 		call_timer = minf(call_timer, 2.5)
-		message.emit("Calling %s..." % _caller(contract_index() if not story_done() else 100), 2.5, "")
+		message.emit(("Calling %s..." % _caller(contract_index())) if not story_done() else "Asking around for work...", 2.5, "")
 		return []
 	var c: Dictionary = CONTRACTS[pending_call] if pending_call < CONTRACTS.size() else _random_contract(pending_call)
 	pending_call = -1
 	ringing = 0.0
+	# The briefing comes first; lines from the job's first step follow it.
+	_collect_say = true
+	_held_say.clear()
 	_start_contract(c)
-	return c.brief
+	_collect_say = false
+	return c.brief + _held_say
+
+var _collect_say := false
+var _held_say: Array = []
 
 func _random_contract(seed_idx: int) -> Dictionary:
 	var keys := LOC.keys()
@@ -579,10 +587,16 @@ func _random_contract(seed_idx: int) -> Dictionary:
 	var b: String = keys[randi() % keys.size()]
 	while b == a:
 		b = keys[randi() % keys.size()]
-	var kind := randi() % 4
+	# The job matches whoever is calling: Mara has crews, Dex has cargo, strangers race.
+	var kind := 3
+	match seed_idx - 100:
+		0: kind = 0 if randi() % 2 == 0 else 2
+		1: kind = 1
+	var banks := ["harbor_bank", "first_bank", "reserve"]
 	if kind == 0:
-		var banks := ["harbor_bank", "first_bank", "reserve"]
 		var bank: String = banks[randi() % 3]
+		var drops: Array = keys.filter(func(k): return not banks.has(k))
+		b = drops[randi() % drops.size()]
 		return {"title": "Bank Job", "caller": "Mara", "reward": 14000 + randi() % 14000,
 			"brief": ["Mara: Another crew needs a driver. Same drill as always.", "Mara: %s, then drop them at %s." % [LOC_NAMES[bank].capitalize(), LOC_NAMES[b]]],
 			"steps": [{"goto": bank, "label": "Pull up at " + LOC_NAMES[bank]}, {"wait": 12, "label": "The crew is inside...", "alarm": 5}, {"heat": 3 + randi() % 3}, {"evade": true, "label": "Lose the cops"}, {"goto": b, "label": "Drop the crew at " + LOC_NAMES[b]}],
@@ -641,7 +655,10 @@ func _next_step() -> void:
 		return
 	var s: Dictionary = active.steps[step]
 	if s.has("say"):
-		dialogue.emit(s.say)
+		if _collect_say:
+			_held_say.append_array(s.say)
+		else:
+			dialogue.emit(s.say)
 	if s.has("goto"):
 		waypoint = pos_of(s.goto)
 		waypoint_label = s.label
@@ -676,7 +693,7 @@ func _on_target_hit(hits: int, need: int) -> void:
 	game._rumble(0.9, 0.6, 0.3)
 	if hits == 2 and target.def.name == "ARMORED TRUCK" and not game.police.pursuit:
 		message.emit("The guards called it in - cops are on the way", 2.5, "")
-		game.police.say("Dispatch: Armored car under attack on %s! All units, respond!" % game.police.area_name(target.car.global_position), true)
+		game.police.say("Dispatch: Armored car under attack %s! All units, respond!" % game.police.area_name(target.car.global_position), true)
 	if hits >= need:
 		game.slowmo(0.8)
 		big.emit("%s DISABLED" % target.def.name, 2.0)
@@ -737,7 +754,7 @@ func _update_contract(dt: float, pp: Vector2) -> void:
 		if step_t >= float(s.wait):
 			wait_left = -1.0
 			if not s.get("here", false):
-				message.emit("Crew's in - GO GO GO!", 3.0, "")
+				message.emit("Crew's aboard - GO!", 3.0, "")
 			_next_step()
 	elif s.has("evade"):
 		if not game.police.pursuit:
@@ -794,7 +811,10 @@ func _complete_contract(ok: bool, why := "") -> void:
 			Save.data.contract = story_idx + 1
 			for tier in Data.TIER_UNLOCK:
 				if int(Data.TIER_UNLOCK[tier]) == story_idx + 1:
-					get_tree().create_timer(4.0, true).timeout.connect(func(): message.emit("NEW CARS UNLOCKED: tier %s - visit your garage" % tier, 4.0, ""))
+					var sid: int = game.session_id
+					get_tree().create_timer(4.0, false).timeout.connect(func():
+						if sid == game.session_id:
+							message.emit("NEW CARS UNLOCKED: tier %s · visit your garage" % tier, 4.0, ""))
 			if not Save.data.contracts_done.has(c.title):
 				Save.data.contracts_done.append(c.title)
 		Save.save_game()
@@ -803,8 +823,9 @@ func _complete_contract(ok: bool, why := "") -> void:
 		call_timer = 50.0
 		if story_idx >= 0 and FLAVOR.has(story_idx):
 			var lines: Array = FLAVOR[story_idx]
+			var fsid: int = game.session_id
 			get_tree().create_timer(24.0, false).timeout.connect(func():
-				if idle():
+				if idle() and fsid == game.session_id:
 					message.emit("New message from %s" % lines[0].split(":")[0], 2.5, "")
 					game.audio.play_oneshot("beep", 1.6)
 					dialogue.emit(lines))
@@ -814,7 +835,10 @@ func _complete_contract(ok: bool, why := "") -> void:
 		last_failed = c
 		dialogue_clear.emit()
 		var who: String = c.get("caller", "Mara")
-		dialogue.emit(["%s: %s. Call me when you're ready to go again." % [who, why if why != "" else "That fell apart"]])
+		if who.begins_with("Unknown"):
+			dialogue.emit(["Unknown: Too slow. Find me when you've got something."])
+		else:
+			dialogue.emit(["%s: %s. Call me when you're ready to go again." % [who, why.get_slice("  ·  ", 0) if why != "" else "That fell apart"]])
 		call_timer = 20.0
 	res.story = story_idx >= 0
 	if ok:
@@ -823,6 +847,9 @@ func _complete_contract(ok: bool, why := "") -> void:
 
 func retry() -> void:
 	if last_failed.is_empty() or not idle():
+		return
+	if game.police.pursuit:
+		message.emit("Lose the cops first", 2.5, "")
 		return
 	var c := last_failed
 	last_failed = {}
@@ -866,6 +893,7 @@ func start_race(id: String, need_place := 1, boss := "") -> void:
 	race_boss_key = boss
 	if drift_zone >= 0:
 		_end_drift_zone()
+	ringing = 0.0 # a call still ringing becomes a missed call
 	race = RaceSession.new()
 	race.need_place = need_place
 	if boss != "":

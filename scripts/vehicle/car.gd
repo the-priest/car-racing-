@@ -495,6 +495,8 @@ func reset_to(t: Transform3D) -> void:
 	last_vel = Vector3.ZERO
 	nitro_on = false
 	drift_mode = false
+	_hb_t = 0.0
+	_tap_armed = 0.0
 	for w in wheels:
 		w.comp = SAG
 		w.prev_comp = SAG
@@ -541,6 +543,8 @@ func _physics_step(dt: float) -> void:
 		_vel_heading = vh
 	else:
 		path_rate = 0.0
+	if float(input.handbrake) <= 0.1:
+		_hb_t = maxf(0.0, _hb_t - dt)
 	# --- Drift mode: only entered on purpose, NFS-style: while steering, lift off
 	# the throttle and stab it again. The handbrake is for tight turns, not drifts.
 	var steer_in := absf(float(input.steer))
@@ -817,8 +821,6 @@ func _physics_step(dt: float) -> void:
 			var excess2 := maxf(0.0, absf(beta) - 0.06)
 			if hb > 0.1:
 				_hb_t = 0.9
-			else:
-				_hb_t = maxf(0.0, _hb_t - dt)
 			if _hb_t > 0.0:
 				# After a handbrake turn, swing the direction of travel round to where
 				# the nose now points instead of swinging the nose back.

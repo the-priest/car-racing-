@@ -39,7 +39,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - patrols and dispatch radio chatter that names where you are and which way you're heading
   - reinforcements that cut you off from ahead, PIT rams, and roadblocks you can smash through
   - elite interceptors and **Air One**, a helicopter with a searchlight. Lose it between downtown skyscrapers, or outlast its fuel.
-  - **Lt. Kane** in her own interceptor during the finale
+  - **Lt. Kane** in her own interceptor during the final act
 
   Ram cops while you're the faster car to take them down for bounty; metal-on-metal hits throw sparks, and grinding along walls sprays them. Only buildings can stop your car; everything else gets knocked aside.
 - **Handling that grips by default.** Cars stay planted, with traction control and stability control (both toggleable). Drifts work like Need for Speed: while steering, lift off the throttle and stab it again to kick the tail out. Steering sets the drift angle and the car carves round the corner, and easing off the throttle straightens it up. The handbrake pivots the car through hairpins without starting a drift. Raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, an auto or manual gearbox, burnouts and donuts, and wheelspin on powerful cars.
@@ -60,7 +60,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 - **Atmosphere**: dynamic day/night, rain with wet reflective roads, tyre spray and thunderstorms, volumetric fog, procedural sky/clouds/stars, neon city nights. Speed blur and camera shake can be adjusted. Time of day (dynamic, day, dusk or night) and weather (dynamic, clear or rain) can be locked in Settings.
 - **Original synthwave soundtrack**: three free-roam tracks that rotate like a radio (with a now-playing card), plus a pursuit theme, a race theme, a garage theme and an end-credits song. Music crossfades as the action changes and ducks in the pause menu. The tracks are synthesized by `tools/music/gen_music.py`.
 - **Radio with your own music**: drop MP3 (or OGG/WAV) files into the `Radio` folder next to the game executable (Settings → OPEN RADIO FOLDER creates and opens it). While driving, press **Q / L3** to turn the radio on or skip to the next song; hold it to switch back to the soundtrack. Song titles come from the MP3 tags, or from file names like `Artist - Title.mp3`. Shuffle or in-order playback is in Settings. To bake songs into the build itself, put them in `assets/radio/` before exporting.
-- **Extras**: Easy/Normal/Hard difficulty, 16 achievements, a Records screen, Photo Mode (pause menu: free camera, saves PNGs to your user folder), one-time tips for new players, end credits.
+- **Extras**: Easy/Normal/Hard difficulty, 17 achievements, a Records screen, Photo Mode (pause menu: free camera, saves PNGs to your user folder), one-time tips for new players, end credits.
 - **Controller first**: full gamepad support for driving and menus, PlayStation/Xbox button prompts, analog triggers, rumble (engine, slip, ABS, impacts, landings). Every action can be remapped on keyboard and controller (Controls → Remap).
 - **Graphics settings stay exactly as you set them** - no dynamic scaling:
   - Low uses the OpenGL renderer for laptops.

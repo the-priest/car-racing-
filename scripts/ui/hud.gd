@@ -155,10 +155,9 @@ void fragment() {
 	pursuit_box.add_child(cooldown_bar)
 	tc.add_child(pursuit_box)
 
-	# Police radio ticker (top right).
+	# Police radio ticker (left column, under the cash/now-playing; clear of race standings).
 	radio_panel = PanelContainer.new()
-	radio_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	radio_panel.position = Vector2(-470, 120)
+	radio_panel.position = Vector2(24, 250)
 	radio_panel.custom_minimum_size = Vector2(440, 0)
 	radio_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rs := StyleBoxFlat.new()
@@ -271,9 +270,10 @@ void fragment() {
 
 	drift_l = _label(46, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
 	drift_m = _label(20, Color(1, 0.3, 0.7), HORIZONTAL_ALIGNMENT_CENTER)
+	# Drift score on the right, clear of the objective, the pursuit box and the car.
 	var db := VBoxContainer.new()
-	db.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	db.position = Vector2(-200, 150)
+	db.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	db.position = Vector2(-450, 500)
 	db.custom_minimum_size = Vector2(400, 0)
 	db.add_child(drift_l)
 	db.add_child(drift_m)
@@ -501,7 +501,7 @@ func _show_ach() -> void:
 	p.anchor_right = 1.0
 	p.offset_left = -470
 	p.offset_right = -30
-	p.offset_top = 250
+	p.offset_top = 390 # below the race standings, above the speedometer
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var st := StyleBoxFlat.new()
 	st.bg_color = Color(0.06, 0.05, 0.02, 0.9)
@@ -534,7 +534,13 @@ func _show_ach() -> void:
 		_show_ach())
 
 ## Tip card above the minimap.
+var tip_queue: Array[String] = []
+
 func tip(text: String) -> void:
+	if tip_t > 0.8 and tip_panel.visible:
+		if not tip_queue.has(text):
+			tip_queue.append(text)
+		return
 	tip_l.text = text
 	tip_panel.visible = true
 	tip_panel.modulate.a = 1.0
@@ -676,7 +682,12 @@ func _update(delta: float) -> void:
 		timer_l.text = ""
 	elif career.race == null and not police.pursuit:
 		free_t += delta
-		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
+		var ci := int(Save.data.contract)
+		if ci < Career.CONTRACTS.size():
+			var c: Dictionary = Career.CONTRACTS[ci]
+			obj_l.text = "NEXT  ·  CH.%d %s  ·  [%s] Call %s" % [ci + 1, str(c.title).to_upper(), Settings.glyph("phone"), c.caller]
+		else:
+			obj_l.text = "FREE ROAM  ·  drive to a race marker or wait for a call  ·  [%s] Map" % Settings.glyph("map")
 		obj_l.modulate.a = clampf((15.0 - free_t) / 1.5, 0.0, 1.0)
 		timer_l.text = ""
 	else:
@@ -733,6 +744,8 @@ func _update(delta: float) -> void:
 		tip_panel.modulate.a = clampf(tip_t * 1.5, 0.0, 1.0)
 		if tip_t <= 0.0:
 			tip_panel.visible = false
+			if not tip_queue.is_empty():
+				tip(tip_queue.pop_front())
 	if radio_t > 0.0:
 		radio_t -= delta
 		radio_panel.modulate.a = clampf(radio_t * 2.0, 0.0, 1.0)
@@ -1124,7 +1137,7 @@ class BigMap extends Control:
 		var ly := 90.0
 		draw_string(font, Vector2(lx, ly - 30), "MAP", HORIZONTAL_ALIGNMENT_LEFT, -1, 36, Color.WHITE)
 		var career: Career = game.career
-		var obj := "Free roam: wait for a phone call, or drive to a blue race marker."
+		var obj := "Free roam: wait for a phone call, or drive to a race marker."
 		if not career.active.is_empty():
 			obj = str(career.active.title) + ": " + career.waypoint_label
 		elif career.race:

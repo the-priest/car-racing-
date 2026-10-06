@@ -471,12 +471,24 @@ func _radio_load(path: String) -> AudioStream:
 		return AudioStreamWAV.load_from_file(path)
 	return null
 
-## Next song (also starts the radio if it's off). Returns false if there's no music.
+signal radio_failed
+
+## Next song (also starts the radio if it's off). Returns false if there's no music;
+## then the radio switches itself off so the soundtrack comes back.
 func radio_next() -> bool:
 	if radio_tracks.is_empty():
 		radio_scan()
-		if radio_tracks.is_empty():
-			return false
+	if radio_tracks.is_empty() or not _radio_try_next():
+		radio_scan() # files may have moved: look again next time
+		if radio_on:
+			radio_on = false
+			radio_failed.emit()
+		radio_player.stop()
+		radio_player.stream = null
+		return false
+	return true
+
+func _radio_try_next() -> bool:
 	for attempt in radio_tracks.size():
 		radio_pos += 1
 		if radio_pos >= radio_order.size():
@@ -498,13 +510,16 @@ func radio_next() -> bool:
 
 func set_radio(on: bool) -> bool:
 	if on and not radio_on:
-		radio_on = true
 		if radio_player.stream == null:
-			if not radio_next():
-				radio_on = false
+			if not radio_next(): # radio still off here, so no failure signal
 				return false
+			radio_on = true
+			now_playing.emit(radio_title, radio_artist)
 		else:
+			radio_on = true
 			radio_player.stream_paused = false
+			if not radio_player.playing:
+				return radio_next()
 			now_playing.emit(radio_title, radio_artist)
 	elif not on:
 		radio_on = false
@@ -529,7 +544,16 @@ func _read_tags(path: String) -> Array:
 	var ver := head[3]
 	var size := (head[6] << 21) | (head[7] << 14) | (head[8] << 7) | head[9]
 	var tag := f.get_buffer(mini(size, 512 * 1024))
+	if ver < 3:
+		return [title, artist] # ID3v2.2 uses 3-letter frames: fall back to the file name
 	var i := 0
+	if head[5] & 0x40 and tag.size() >= 4: # skip the extended header
+		var ext := (tag[0] << 24) | (tag[1] << 16) | (tag[2] << 8) | tag[3]
+		if ver >= 4:
+			ext = (tag[0] << 21) | (tag[1] << 14) | (tag[2] << 7) | tag[3]
+		else:
+			ext += 4
+		i = clampi(ext, 0, tag.size())
 	while i + 10 <= tag.size():
 		var id := tag.slice(i, i + 4).get_string_from_ascii()
 		if id.is_empty() or tag[i] == 0:
@@ -559,8 +583,15 @@ func _id3_text(body: PackedByteArray) -> String:
 	var raw := body.slice(1)
 	var text := ""
 	match enc:
-		1, 2:
+		1:
 			text = raw.get_string_from_utf16()
+		2: # UTF-16 big-endian without BOM: swap to little-endian
+			var sw := raw.duplicate()
+			for k in range(0, sw.size() - 1, 2):
+				var t := sw[k]
+				sw[k] = sw[k + 1]
+				sw[k + 1] = t
+			text = sw.get_string_from_utf16()
 		3:
 			text = raw.get_string_from_utf8()
 		_:

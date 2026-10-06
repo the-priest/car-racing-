@@ -328,7 +328,7 @@ func _build_loading() -> void:
 	var tips := [
 		"Cars grip by default. To drift: while steering into a corner, lift off the throttle and stab it again. Steer to set the angle, ease off to straighten. The handbrake is for tight hairpins.",
 		"Ram a cop hard while you're the faster car to take it out of the chase - it adds to your bounty.",
-		"The police helicopter can't see you between tall buildings. Head downtown to break its line of sight.",
+		"Air One can't see you between tall buildings. Head downtown to break its line of sight.",
 		"Roadblocks are just parked cars. Hit them flat out.",
 		"Air One runs out of fuel eventually. Survive long enough and it has to leave.",
 		"No call coming? Press the phone button to ring your contact yourself.",
@@ -359,6 +359,7 @@ func _rebuild(name: String) -> void:
 			"records": _screen("records", false, 760)
 			"remap": _screen("remap", false, 760)
 			"results": _screen("results")
+			"confirm": _screen("confirm")
 	var box: VBoxContainer = screens[name].box
 	_clear(box)
 	match name:
@@ -371,6 +372,7 @@ func _rebuild(name: String) -> void:
 		"story": _build_story(box)
 		"records": _build_records(box)
 		"remap": _build_remap(box)
+		"confirm": _build_confirm(box)
 
 func _build_main(box: VBoxContainer) -> void:
 	box.add_theme_constant_override("separation", 8)
@@ -409,43 +411,71 @@ func _build_main(box: VBoxContainer) -> void:
 	if FileAccess.file_exists("res://version.txt"):
 		_text(box, "Build " + FileAccess.get_file_as_string("res://version.txt").strip_edges(), 13, Color(1, 1, 1, 0.35))
 
+## "Are you sure?" screen for destructive choices. CANCEL is focused by default.
+var _ask := {}
+
+func ask(title: String, body: String, yes_text: String, cb: Callable) -> void:
+	_ask = {"title": title, "body": body, "yes": yes_text, "cb": cb}
+	show_screen("confirm")
+
+func _build_confirm(box: VBoxContainer) -> void:
+	_title(box, str(_ask.get("title", "ARE YOU SURE?")), 40)
+	if str(_ask.get("body", "")) != "":
+		_text(box, str(_ask.body), 18)
+	_button(box, "CANCEL", func(): back())
+	var cb: Callable = _ask.get("cb", Callable())
+	_button(box, str(_ask.get("yes", "YES")), func():
+		stack.clear()
+		if cb.is_valid():
+			cb.call())
+
+func _gap(box: Container, h := 10) -> void:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(0, h)
+	box.add_child(c)
+
 func _build_pause(box: VBoxContainer) -> void:
 	_title(box, "PAUSED")
 	var career: Career = game.career
+	var chasing: bool = game.police.pursuit
 	_button(box, "RESUME", func(): back())
-	if career.race != null:
-		_button(box, "RESTART RACE", func():
-			close_all()
-			game._on_resume()
-			game.police.clear()
-			career.restart_race())
-	_button(box, "STORY", func(): show_screen("story"))
-	_button(box, "RECORDS", func(): show_screen("records"))
-	if career.race != null or not career.active.is_empty():
-		_button(box, "ABANDON " + ("RACE" if career.race else "JOB"), func():
-			close_all()
-			game._on_resume()
-			career.abandon())
-	var at_home: bool = game.player_at_home()
-	_button(box, "GARAGE" + ("" if at_home else "  (drive home to use)"), func():
+	_button(box, "MAP", func():
 		close_all()
-		game._open_garage(), not at_home or game.police.pursuit)
-	if str(Settings.data.time_mode) == "dynamic":
-		_button(box, "SKIP TO " + ("DAY" if game.daynight.night > 0.5 else "NIGHT"), func():
-			game.skip_time()
-			show_screen("pause", false), game.police.pursuit)
-	_button(box, "PHOTO MODE", func(): game.enter_photo())
+		game._on_resume()
+		game.hud.big_map.open())
+	if career.race != null:
+		_button(box, "RESTART RACE" + ("  (lose the cops first)" if chasing else ""), func():
+			close_all()
+			game._on_resume()
+			career.restart_race(), chasing)
+	if career.race != null or not career.active.is_empty():
+		var what := "RACE" if career.race else "JOB"
+		_button(box, "ABANDON " + what, func():
+			ask("ABANDON %s?" % what, "You'll lose this %s's progress. Jobs can be retried from the results screen." % what.to_lower(), "ABANDON", func():
+				close_all()
+				game._on_resume()
+				career.abandon()))
+	_gap(box)
+	if game.player_at_home() and career.idle() and not chasing:
+		_button(box, "GARAGE", func():
+			close_all()
+			game._open_garage())
 	_button(box, "RESET CAR TO ROAD", func():
 		game.reset_to_road()
 		back())
+	if str(Settings.data.time_mode) == "dynamic":
+		_button(box, "SKIP TO " + ("DAY" if game.daynight.night > 0.5 else "NIGHT"), func():
+			game.skip_time()
+			show_screen("pause", false), chasing)
+	_button(box, "PHOTO MODE", func(): game.enter_photo())
+	_gap(box)
+	_button(box, "STORY", func(): show_screen("story"))
+	_button(box, "RECORDS", func(): show_screen("records"))
 	_button(box, "SETTINGS", func(): show_screen("settings"))
-	_button(box, "CONTROLS", func(): show_screen("controls"))
-	_button(box, "MAIN MENU", func():
-		close_all()
-		quit_to_menu.emit())
-	_button(box, "QUIT TO DESKTOP", func():
-		game.persist()
-		get_tree().quit())
+	_button(box, "QUIT", func():
+		ask("QUIT?", "Your progress is saved automatically.", "QUIT TO MAIN MENU", func():
+			close_all()
+			quit_to_menu.emit()))
 
 func _build_garage(box: VBoxContainer) -> void:
 	_title(box, "GARAGE")
@@ -780,9 +810,7 @@ func _build_story(box: VBoxContainer) -> void:
 		flow.add_child(chip)
 	if cur < total:
 		var c2: Dictionary = Career.CONTRACTS[cur]
-		var brief: Array = c2.brief
 		_text(box, "\nNEXT:  %s  ·  call from %s" % [c2.title.to_upper(), c2.caller], 18, ACCENT)
-		_text(box, str(brief[0]), 16, Color(1, 1, 1, 0.75))
 		_text(box, "Wait for the call in free roam, or press %s to call your contact." % Settings.glyph("phone"), 15)
 	_button(box, "BACK", func(): back())
 
@@ -872,7 +900,7 @@ func roll_credits() -> void:
 	line.call("A getaway story in Solano Bay", 22, Color(1, 1, 1, 0.7))
 	line.call("", 40, Color.WHITE)
 	line.call("THE CAST", 26, ACCENT)
-	for c in ["Mara  -  the fixer", "Dex  -  mechanic, smuggler, therapist", "Sable  -  king of the Night Kings", "Juno  -  fastest driver on the ring",
+	for c in ["Mara  -  the fixer", "Dex  -  mechanic, smuggler, therapist", "Sable  -  king of the Night Kings", "Juno  -  fastest driver on the coast",
 			"Rook  -  drives dirty", "Lt. Kane  -  Heat Task Force", "Air One  -  always watching", "You  -  the driver"]:
 		line.call(c, 22, Color(1, 1, 1, 0.85))
 	line.call("", 40, Color.WHITE)
@@ -887,7 +915,7 @@ func roll_credits() -> void:
 		line.call("%s  -  %s" % [t[1], t[2]], 20, Color(1, 1, 1, 0.85))
 	line.call("", 60, Color.WHITE)
 	line.call("Thanks for playing.", 30, Color.WHITE)
-	line.call("The city is yours.", 22, ACCENT)
+	line.call("See you on the road.", 22, ACCENT)
 	await get_tree().process_frame
 	var tw := create_tween()
 	tw.tween_property(v, "offset_top", -v.size.y - 80.0, 38.0)
