@@ -444,6 +444,8 @@ func apply_player_car() -> void:
 
 func preview_car(id: String) -> void:
 	_build_player(id)
+	if state == State.GARAGE:
+		_settle_player()
 
 ## (Re)creates the player car when the body changes, otherwise retunes it in place.
 func _build_player(id: String) -> void:
@@ -934,6 +936,17 @@ func _showroom(on: bool) -> void:
 		if on:
 			showroom.global_position = player.global_position
 
+## Puts the (paused) player car on the ground: at rest the body origin sits at road level.
+func _settle_player() -> void:
+	var p := player.global_position
+	var q := PhysicsRayQueryParameters3D.create(p + Vector3.UP * 3.0, p + Vector3.DOWN * 6.0, 1, [player.get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if not hit.is_empty():
+		var t := player.global_transform
+		t.origin.y = (hit.position as Vector3).y + 0.01
+		t.basis = Basis(Vector3.UP, player.global_rotation.y)
+		player.reset_to(t)
+
 func _open_garage() -> void:
 	tip("garage", "Your garage: buy cars, upgrades, paint, rims and underglow. Higher tiers unlock as the story moves on.")
 	_showroom(true)
@@ -943,6 +956,7 @@ func _open_garage() -> void:
 	hud.visible = false
 	player.linear_velocity = Vector3.ZERO
 	menus.garage_sel = Save.data.car
+	_settle_player()
 	menus.show_screen("garage", false)
 	persist()
 
@@ -1247,12 +1261,15 @@ func _menu_camera(delta: float) -> void:
 	cam.fov = 50.0
 
 func _garage_camera(delta: float) -> void:
+	# Slow orbit, car framed to the right of the garage panel.
 	menu_t += delta
 	var a := menu_t * 0.3
 	var p := player.global_position
 	cam.process_mode = Node.PROCESS_MODE_DISABLED
-	cam.global_position = p + Vector3(sin(a) * 6.5, 1.5, cos(a) * 6.5)
-	cam.look_at(p + Vector3(0, 0.6, 0))
+	var pos := p + Vector3(sin(a) * 7.2, 1.5, cos(a) * 7.2)
+	cam.global_position = pos
+	var right := (p - pos).normalized().cross(Vector3.UP).normalized()
+	cam.look_at(p + Vector3(0, 0.6, 0) - right * 1.9)
 	cam.fov = 50.0
 
 # ---------------------------------------------------------------- screenshots
