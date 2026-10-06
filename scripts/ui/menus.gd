@@ -18,6 +18,7 @@ var stack: Array[String] = []
 var garage_sel := "vanta"
 var confirm_new := false
 var listening := "" # action being rebound on the remap screen
+var _screen_shown_ms := 0
 var focus_hint := "" # focus the button starting with this text after the next rebuild
 var loading_bar: ProgressBar
 var loading_label: Label
@@ -198,6 +199,10 @@ func _button(box: Container, text: String, cb: Callable, disabled := false) -> B
 	b.pressed.connect(func():
 		game.audio.play_oneshot("beep", 1.4, -12.0)
 		cb.call())
+	# Soft tick when moving between buttons (not on the automatic first focus).
+	b.focus_entered.connect(func():
+		if Time.get_ticks_msec() - _screen_shown_ms > 150:
+			game.audio.play_oneshot("beep", 2.4, -24.0))
 	box.add_child(b)
 	return b
 
@@ -217,6 +222,7 @@ func show_screen(name: String, push := true) -> void:
 		if push and current != name:
 			stack.append(current)
 	var fresh := name != current
+	_screen_shown_ms = Time.get_ticks_msec()
 	current = name
 	_rebuild(name)
 	screens[name].root.visible = true
