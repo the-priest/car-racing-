@@ -61,6 +61,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--restarttest":
+			shots_spec = "RESTARTTEST"
 		if a == "--garageshot":
 			shots_spec = "GARAGESHOT"
 		if a == "--hudtest":
@@ -178,6 +180,16 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "RESTARTTEST":
+		_on_play()
+		career.start_race("summit", 1, "sable")
+		await _frames(600)
+		var p0 := career.race.p_idx
+		career.restart_race()
+		await _frames(10)
+		print("[restart] before idx=", p0, " after idx=", career.race.p_idx, " countdown=", snappedf(career.race.countdown, 0.1), " boss=", career.race.boss.get("name", ""), " rivals=", career.race.rivals.size())
 		get_tree().quit()
 		return
 	if shots_spec == "GARAGESHOT":

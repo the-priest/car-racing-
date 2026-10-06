@@ -848,7 +848,22 @@ func race_near(p: Vector2) -> String:
 			return m.id
 	return ""
 
+## Restarts the current race from the grid (same rivals setup, same story step).
+func restart_race() -> void:
+	if race == null:
+		return
+	var id := race.id
+	var need := race.need_place
+	var bk := race_boss_key
+	race.cleanup()
+	race.queue_free()
+	race = null
+	start_race(id, need, bk)
+
+var race_boss_key := ""
+
 func start_race(id: String, need_place := 1, boss := "") -> void:
+	race_boss_key = boss
 	if drift_zone >= 0:
 		_end_drift_zone()
 	race = RaceSession.new()

@@ -409,6 +409,12 @@ func _build_pause(box: VBoxContainer) -> void:
 	_title(box, "PAUSED")
 	var career: Career = game.career
 	_button(box, "RESUME", func(): back())
+	if career.race != null:
+		_button(box, "RESTART RACE", func():
+			close_all()
+			game._on_resume()
+			game.police.clear()
+			career.restart_race())
 	_button(box, "STORY", func(): show_screen("story"))
 	_button(box, "RECORDS", func(): show_screen("records"))
 	if career.race != null or not career.active.is_empty():
