@@ -213,6 +213,36 @@ func setup(g: Node, w: World) -> void:
 		m.position = pos3(world.node_pos[nid])
 		add_child(m)
 		race_markers.append({"id": id, "node": m, "pos": world.node_pos[nid]})
+	# Speed camera poles at each trap.
+	var pole_m := StandardMaterial3D.new()
+	pole_m.albedo_color = Color(0.25, 0.26, 0.28)
+	pole_m.metallic = 0.6
+	var cam_m := StandardMaterial3D.new()
+	cam_m.albedo_color = Color(0.85, 0.45, 1.0)
+	cam_m.emission_enabled = true
+	cam_m.emission = Color(0.85, 0.45, 1.0)
+	cam_m.emission_energy_multiplier = 2.5
+	for tp in SPEED_TRAPS:
+		var nid2 := world.nearest_node(tp)
+		var np: Vector2 = world.node_pos[nid2]
+		var rd: Vector2 = (world.node_pos[world.adj[nid2][0]] - np).normalized()
+		var base := pos3(tp + Vector2(-rd.y, rd.x) * (10.0 if world.in_city(tp.x, tp.y) else 12.5))
+		var pole := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.09
+		cyl.bottom_radius = 0.12
+		cyl.height = 5.0
+		pole.mesh = cyl
+		pole.material_override = pole_m
+		pole.position = base + Vector3(0, 2.5, 0)
+		add_child(pole)
+		var box := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.5, 0.4, 0.7)
+		box.mesh = bm
+		box.material_override = cam_m
+		box.position = base + Vector3(0, 5.1, 0)
+		add_child(box)
 
 func pos3(p: Vector2) -> Vector3:
 	var y := 0.05 if world.in_city(p.x, p.y) else world.ground(p.x, p.y)
@@ -422,6 +452,9 @@ func _on_target_hit(hits: int, need: int) -> void:
 	game.audio.play_oneshot("impact", 0.8)
 	game.cam.shake = maxf(game.cam.shake, 0.5)
 	game._rumble(0.9, 0.6, 0.3)
+	if hits == 2 and target.def.name == "ARMORED TRUCK" and not game.police.pursuit:
+		game.police.start_pursuit("THE GUARDS CALLED IT IN", 1)
+		game.police.say("Dispatch: Armored car under attack! All nearby units respond!", true)
 	if hits >= need:
 		big.emit("%s DISABLED" % target.def.name, 2.0)
 		game.audio.play_oneshot("reward")

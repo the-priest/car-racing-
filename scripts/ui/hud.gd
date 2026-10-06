@@ -501,6 +501,9 @@ static func map_markers(game: Node, full: bool) -> Array:
 		out.append([career.LOC.home, Color(0.3, 1.0, 0.55), "home", "HOME"])
 		for m2 in career.race_markers:
 			out.append([m2.pos, Color(0.3, 0.75, 1.0), "race", str(Career.RACES[m2.id].name)])
+	if free or full:
+		for tp in Career.SPEED_TRAPS:
+			out.append([tp, Color(0.85, 0.45, 1.0), "trap", "Speed trap" if full else ""])
 	if career.race:
 		for r in career.race.rivals:
 			out.append([Vector2(r.car.global_position.x, r.car.global_position.z), Color(1, 0.35, 0.45), "rival", ""])
@@ -528,6 +531,12 @@ static func draw_marker(ci: CanvasItem, p: Vector2, col: Color, kind: String, sz
 			ci.draw_rect(Rect2(p - Vector2(r2 + 2, r2 + 2), Vector2(r2 + 2, r2 + 2) * 2), dark)
 			ci.draw_rect(Rect2(p - Vector2(r2, r2), Vector2(r2, r2) * 2), col)
 			ci.draw_string(ThemeDB.fallback_font, p + Vector2(-r2, r2 * 0.6), "H", HORIZONTAL_ALIGNMENT_CENTER, r2 * 2, int(r2 * 1.7), dark)
+		"trap":
+			var r3 := sz * 0.8
+			var tri := PackedVector2Array([p + Vector2(0, -r3 - 2), p + Vector2(r3 + 2, r3 + 1), p + Vector2(-r3 - 2, r3 + 1)])
+			ci.draw_colored_polygon(tri, dark)
+			tri = PackedVector2Array([p + Vector2(0, -r3), p + Vector2(r3, r3 - 1), p + Vector2(-r3, r3 - 1)])
+			ci.draw_colored_polygon(tri, col)
 		"race":
 			ci.draw_circle(p, sz + 2.5, dark)
 			ci.draw_circle(p, sz, col)
@@ -717,7 +726,7 @@ class BigMap extends Control:
 			obj = "Race in progress"
 		draw_multiline_string(font, Vector2(lx, ly + 10), obj, HORIZONTAL_ALIGNMENT_LEFT, 300, 18, -1, Color(1, 0.85, 0.3))
 		ly += 110.0
-		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"]]
+		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.85, 0.45, 1.0), "Speed trap"]]
 		for e in legend:
 			HUD.draw_marker(self, Vector2(lx + 12, ly), e[1], e[0], 8.0)
 			draw_string(font, Vector2(lx + 36, ly + 6), e[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
