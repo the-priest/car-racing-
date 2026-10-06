@@ -11,6 +11,7 @@ var cars: Array = []
 var smoke_tex: Texture2D
 var rain: GPUParticles3D
 var quality := 1.0
+var wet := 0.0
 
 func setup(q: Dictionary) -> void:
 	quality = 1.0 if q.renderer == "forward_plus" else 0.5
@@ -141,8 +142,10 @@ func _tick() -> void:
 			var du: GPUParticles3D = e.dust[k]
 			sm.global_position = (w.hit_pos as Vector3) + Vector3(0, 0.25, 0)
 			du.global_position = sm.global_position
-			sm.emitting = road and skid > 0.3
-			sm.amount_ratio = clampf(skid, 0.2, 1.0)
+			# Tyre smoke when sliding; a fine spray off wet roads at speed.
+			var spray := wet > 0.35 and car.speed > 14.0 and w.contact
+			sm.emitting = road and (skid > 0.3 or spray)
+			sm.amount_ratio = clampf(maxf(skid, wet * clampf(car.speed / 60.0, 0.0, 0.6)), 0.15, 1.0)
 			du.emitting = w.contact and not road and car.speed > 6.0
 			du.amount_ratio = clampf(car.speed / 30.0, 0.2, 1.0)
 		# Skid marks on all four wheels when sliding on hard surfaces.
@@ -199,6 +202,7 @@ func _build_rain() -> void:
 	add_child(rain)
 
 func update_rain(amount: float, cam_pos: Vector3, cam_vel: Vector3) -> void:
+	wet = amount
 	rain.emitting = amount > 0.05
 	rain.amount_ratio = clampf(amount, 0.05, 1.0)
 	rain.global_position = cam_pos + Vector3(0, 18, 0) + cam_vel * 0.6

@@ -325,6 +325,7 @@ func _tire(alpha: float) -> float:
 	return sin(1.25 * atan(16.0 * alpha))
 
 static var prof_us := 0
+static var wet_grip := 1.0 # set from the weather: wet tarmac grips a little less
 
 func _physics_process(dt: float) -> void:
 	var _t0 := Time.get_ticks_usec()
@@ -476,7 +477,7 @@ func _physics_step(dt: float) -> void:
 			surf = col.get_meta("surface")
 		w.surface = surf
 		surf_counts[surf] = surf_counts.get(surf, 0) + 1
-		var grip_mul := 1.0
+		var grip_mul := wet_grip
 		var roll_res := 0.015
 		if surf == "terrain":
 			grip_mul = 0.72

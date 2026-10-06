@@ -650,6 +650,7 @@ func _process(delta: float) -> void:
 	traffic.set_night(night)
 	world.set_wetness(clampf(daynight.rain * 1.2 + night * 0.25, 0.0, 1.0))
 	effects.update_rain(daynight.rain, cam.global_position, player.linear_velocity)
+	Car.wet_grip = 1.0 - 0.12 * clampf(daynight.rain, 0.0, 1.0)
 	var lights := night > 0.25 or daynight.rain > 0.4
 	if lights_override >= 0:
 		lights = lights_override == 1
