@@ -825,7 +825,9 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 		Save.add_cash(-fine)
 		hud.big("BUSTED", 2.5)
 		hud.message("Fine -$%s" % HUD._fmt(fine), 3.0)
-		if not career.active.is_empty():
+		if not career.active.is_empty() or career.race:
+			if career.race and career.active.is_empty():
+				hud.message("Race over - you got busted", 3.0)
 			career.abandon("You got busted")
 	persist()
 
