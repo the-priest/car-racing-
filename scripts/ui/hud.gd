@@ -718,6 +718,14 @@ void fragment() {
 		var rim := half - 14.0
 		var to_map := func(w: Vector2) -> Vector2:
 			return center + (w - pos).rotated(-yaw) * scale
+		# Police search zone while evading.
+		var pol: Police = game.police
+		if pol.pursuit and pol.cooldown > 0.0 and pol.last_seen != Vector2.INF:
+			var zc: Vector2 = to_map.call(pol.last_seen)
+			var zr := Police.SEARCH_RADIUS * scale
+			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			ci.draw_circle(zc, zr, Color(1, 0.1, 0.15, 0.12 + 0.06 * pulse))
+			ci.draw_arc(zc, zr, 0, TAU, 64, Color(1, 0.2, 0.25, 0.7), 2.0, true)
 		# GPS route: dark casing + bright line
 		var route: PackedVector2Array = game.gps_route
 		var pts := PackedVector2Array()
@@ -833,6 +841,12 @@ class BigMap extends Control:
 		draw_rect(rect.grow(2), Color(1, 1, 1, 0.4), false, 2.0)
 		var to_map := func(w: Vector2) -> Vector2:
 			return origin + (w + Vector2(world.HALF, world.HALF)) / (world.HALF * 2.0) * side
+		var pol: Police = game.police
+		if pol.pursuit and pol.cooldown > 0.0 and pol.last_seen != Vector2.INF:
+			var zc: Vector2 = to_map.call(pol.last_seen)
+			var zr := Police.SEARCH_RADIUS / (world.HALF * 2.0) * side
+			draw_circle(zc, zr, Color(1, 0.1, 0.15, 0.18))
+			draw_arc(zc, zr, 0, TAU, 48, Color(1, 0.2, 0.25, 0.8), 2.0, true)
 		var route: PackedVector2Array = game.gps_route
 		for i in range(route.size() - 1):
 			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), Color(0, 0, 0, 0.85), 8.0, true)

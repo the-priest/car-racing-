@@ -28,6 +28,8 @@ var night := 0.0
 var takedowns := 0
 var bonus := 0 # extra bounty (Kane)
 var last_stats := {} # summary of the pursuit that just ended
+var last_seen := Vector2.INF # where cops last had eyes on you (search zone)
+const SEARCH_RADIUS := 260.0
 var roadblock_timer := 25.0
 var heli: Node3D
 var heli_light: SpotLight3D
@@ -643,6 +645,7 @@ func update(dt: float) -> void:
 	var spotted := nearest < 260.0 or heli_sees
 	if spotted:
 		engaged = true
+		last_seen = Vector2(p.global_position.x, p.global_position.z)
 	# Units are still converging: you can't "evade" cops that haven't arrived yet.
 	if not engaged and pursuit_time < 30.0:
 		spotted = true
