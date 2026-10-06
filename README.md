@@ -2,6 +2,8 @@
 
 Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hire in Solano Bay. Chill at your garage, cruise the city, and when the phone rings, take the contract: bank-job getaways, armored-truck takedowns, hot deliveries, boss races and police escapes. The cops are always ready to chase.
 
+![Rainy night downtown: wet reflections, neon underglow, GT wing](docs/screenshots/rain_night.png)
+
 ![Highway at dusk](docs/screenshots/highway_dusk.png)
 
 | | |
