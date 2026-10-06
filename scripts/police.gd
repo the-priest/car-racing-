@@ -122,7 +122,8 @@ func spawn_kane() -> void:
 	car.stats.accel = float(car.stats.accel) * 1.15
 	car.stats.top = float(car.stats.top) * 1.1
 	car._setup_engine()
-	car.set_paint(Color(0.92, 0.92, 0.95))
+	car.police_livery = 2
+	car.set_paint(Color.WHITE)
 	var tag := Label3D.new()
 	tag.text = "LT. KANE"
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -139,6 +140,7 @@ func spawn_kane() -> void:
 
 func _make_cop(t: Transform3D, mode: String, elite := false) -> Dictionary:
 	var car := Car.new()
+	car.police_livery = 1 if elite else 0
 	add_child(car)
 	var st := Data.stats_for("vanta", {}).merged(Data.POLICE, true)
 	if elite:

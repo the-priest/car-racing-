@@ -68,6 +68,13 @@ var pop_flash := 0.0 # brief exhaust flame on backfire pops
 var police_lights: Array[OmniLight3D] = []
 var police_mats: Array[StandardMaterial3D] = []
 var is_police := false
+var police_livery := 0 # 0 patrol, 1 interceptor, 2 Lt. Kane
+const POLICE_LIVERIES := [
+	# [accent, main body]
+	[Color(0.85, 0.86, 0.88), Color(0.02, 0.02, 0.025)], # black patrol car, white accents
+	[Color(0.05, 0.12, 0.45), Color(0.88, 0.89, 0.92)], # white interceptor, blue accents
+	[Color(0.75, 0.55, 0.12), Color(0.9, 0.9, 0.93)], # Kane: white with gold
+]
 var cast_light_shadows := false
 
 func setup(car_stats: Dictionary, paint: Color, police := false, detail := true, light_shadows := false) -> void:
@@ -387,7 +394,8 @@ func set_paint(c: Color) -> void:
 	for i in paint_mats.size():
 		var m := paint_mats[i]
 		if is_police:
-			m.albedo_color = Color(0.02, 0.02, 0.025) if i % 2 == 0 else Color(0.85, 0.86, 0.88)
+			var lv: Array = POLICE_LIVERIES[clampi(police_livery, 0, POLICE_LIVERIES.size() - 1)]
+			m.albedo_color = lv[0] if i % 2 == 0 else lv[1]
 		else:
 			m.albedo_color = c if i % 2 == 0 else c.darkened(0.55)
 		m.metallic = 0.35
