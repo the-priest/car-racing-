@@ -21,6 +21,18 @@ const THEMES := {
 
 signal now_playing(title: String, artist: String)
 
+# ---------------------------------------------------------------- radio (your MP3s)
+## Folders scanned for MP3/OGG/WAV files: "Radio" next to the game executable,
+## the user data folder, and res://radio (bundled into the build).
+var radio_tracks: Array[String] = []
+var radio_order: Array[int] = []
+var radio_pos := -1
+var radio_on := false
+var radio_player: AudioStreamPlayer
+var radio_level := 0.0
+var radio_title := ""
+var radio_artist := ""
+
 var streams := {}
 var eng_on: AudioStreamPlayer
 var eng_off: AudioStreamPlayer
@@ -90,6 +102,9 @@ func setup() -> void:
 			st.loop = mode != "credits"
 			mp.stream = st
 	music.cruise.finished.connect(_next_cruise)
+	radio_player = _player(null, "Music")
+	radio_player.finished.connect(radio_next)
+	radio_scan()
 	cruise_idx = randi() % CRUISE.size()
 	_load_cruise()
 	apply_volumes()
@@ -404,12 +419,164 @@ func _next_cruise() -> void:
 		music.cruise.play()
 		now_playing.emit(CRUISE[cruise_idx][1], CRUISE[cruise_idx][2])
 
+static func radio_dirs() -> Array[String]:
+	var dirs: Array[String] = []
+	if not OS.has_feature("editor"):
+		dirs.append(OS.get_executable_path().get_base_dir().path_join("Radio"))
+	else:
+		dirs.append(ProjectSettings.globalize_path("res://").path_join("Radio"))
+	dirs.append(ProjectSettings.globalize_path("user://radio"))
+	dirs.append("res://radio")
+	return dirs
+
+## Folder shown to the player (and opened from Settings).
+static func radio_folder() -> String:
+	return radio_dirs()[0]
+
+func radio_scan() -> void:
+	radio_tracks.clear()
+	for dir in radio_dirs():
+		var files := DirAccess.get_files_at(dir) if DirAccess.dir_exists_absolute(dir) else PackedStringArray()
+		for f in files:
+			var ext := f.get_extension().to_lower()
+			# Bundled files appear as name.mp3.import in exports; load by original name.
+			if ext == "import":
+				f = f.get_basename()
+				ext = f.get_extension().to_lower()
+			if ext in ["mp3", "ogg", "wav"] and not radio_tracks.has(dir.path_join(f)):
+				radio_tracks.append(dir.path_join(f))
+	radio_tracks.sort()
+	_radio_shuffle()
+
+func _radio_shuffle() -> void:
+	radio_order.clear()
+	for i in radio_tracks.size():
+		radio_order.append(i)
+	if bool(Settings.data.get("radio_shuffle", true)):
+		radio_order.shuffle()
+	radio_pos = -1
+
+func _radio_load(path: String) -> AudioStream:
+	if path.begins_with("res://"):
+		return load(path) as AudioStream
+	var ext := path.get_extension().to_lower()
+	if ext == "mp3":
+		var mp := AudioStreamMP3.new()
+		mp.data = FileAccess.get_file_as_bytes(path)
+		return mp if mp.data.size() > 0 else null
+	if ext == "ogg":
+		return AudioStreamOggVorbis.load_from_file(path)
+	if ext == "wav":
+		return AudioStreamWAV.load_from_file(path)
+	return null
+
+## Next song (also starts the radio if it's off). Returns false if there's no music.
+func radio_next() -> bool:
+	if radio_tracks.is_empty():
+		radio_scan()
+		if radio_tracks.is_empty():
+			return false
+	for attempt in radio_tracks.size():
+		radio_pos += 1
+		if radio_pos >= radio_order.size():
+			_radio_shuffle()
+			radio_pos = 0
+		var path := radio_tracks[radio_order[radio_pos]]
+		var st := _radio_load(path)
+		if st == null:
+			continue
+		radio_player.stream = st
+		radio_player.play()
+		var tags := _read_tags(path)
+		radio_title = tags[0]
+		radio_artist = tags[1]
+		if radio_on:
+			now_playing.emit(radio_title, radio_artist)
+		return true
+	return false
+
+func set_radio(on: bool) -> bool:
+	if on and not radio_on:
+		radio_on = true
+		if radio_player.stream == null:
+			if not radio_next():
+				radio_on = false
+				return false
+		else:
+			radio_player.stream_paused = false
+			now_playing.emit(radio_title, radio_artist)
+	elif not on:
+		radio_on = false
+	return radio_on
+
+## Title and artist from ID3v2 tags, falling back to "Artist - Title" file names.
+func _read_tags(path: String) -> Array:
+	var name := path.get_file().get_basename()
+	var title := name
+	var artist := ""
+	if " - " in name:
+		artist = name.get_slice(" - ", 0).strip_edges()
+		title = name.substr(name.find(" - ") + 3).strip_edges()
+	if path.get_extension().to_lower() != "mp3":
+		return [title, artist]
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return [title, artist]
+	var head := f.get_buffer(10)
+	if head.size() < 10 or head.slice(0, 3).get_string_from_ascii() != "ID3":
+		return [title, artist]
+	var ver := head[3]
+	var size := (head[6] << 21) | (head[7] << 14) | (head[8] << 7) | head[9]
+	var tag := f.get_buffer(mini(size, 512 * 1024))
+	var i := 0
+	while i + 10 <= tag.size():
+		var id := tag.slice(i, i + 4).get_string_from_ascii()
+		if id.is_empty() or tag[i] == 0:
+			break
+		var fs := 0
+		if ver >= 4:
+			fs = (tag[i + 4] << 21) | (tag[i + 5] << 14) | (tag[i + 6] << 7) | tag[i + 7]
+		else:
+			fs = (tag[i + 4] << 24) | (tag[i + 5] << 16) | (tag[i + 6] << 8) | tag[i + 7]
+		if fs <= 0 or i + 10 + fs > tag.size():
+			break
+		if id == "TIT2" or id == "TPE1":
+			var body := tag.slice(i + 10, i + 10 + fs)
+			var text := _id3_text(body)
+			if not text.is_empty():
+				if id == "TIT2":
+					title = text
+				else:
+					artist = text
+		i += 10 + fs
+	return [title, artist]
+
+func _id3_text(body: PackedByteArray) -> String:
+	if body.size() < 2:
+		return ""
+	var enc := body[0]
+	var raw := body.slice(1)
+	var text := ""
+	match enc:
+		1, 2:
+			text = raw.get_string_from_utf16()
+		3:
+			text = raw.get_string_from_utf8()
+		_:
+			text = raw.get_string_from_ascii()
+	return text.replace(char(0), "").strip_edges()
+
 ## mode: "cruise", "chase", "race" or "menu". duck < 1 lowers everything (pause menu).
+## With the radio on, your music plays instead of the soundtrack whenever you drive.
 func update_music(mode: String, delta: float, duck := 1.0) -> void:
 	music_duck = move_toward(music_duck, duck, delta * 2.0)
+	var radio_live := radio_on and mode in ["cruise", "chase", "race"]
+	radio_level = move_toward(radio_level, 1.0 if radio_live else 0.0, delta * (0.8 if radio_live else 0.6))
+	radio_player.volume_db = _db(radio_level * music_duck)
+	radio_player.stream_paused = radio_level <= 0.0 and radio_player.stream != null
 	for m in music:
 		var mp: AudioStreamPlayer = music[m]
-		var target := 1.0 if m == mode else 0.0
+		var target := 1.0 if m == mode and not (radio_live and m != "menu") else 0.0
 		# Quick fade in for action themes, slower fade out so transitions overlap.
 		var rate := (1.2 if m in ["chase", "race", "credits"] else 0.5) if target > music_level[m] else 0.45
 		music_level[m] = move_toward(music_level[m], target, delta * rate)

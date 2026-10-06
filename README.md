@@ -42,7 +42,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - **Lt. Kane** in her own interceptor during the finale
 
   Ram cops while you're the faster car to take them down for bounty; metal-on-metal hits throw sparks, and grinding along walls sprays them. Only buildings can stop your car; everything else gets knocked aside.
-- **Handling that grips by default.** Cars stay planted, with traction control and stability control (both toggleable). Drifts only start when you throw the car in with the handbrake, then they're easy to hold. Raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, an auto or manual gearbox, burnouts and donuts, and wheelspin on powerful cars.
+- **Handling that grips by default.** Cars stay planted, with traction control and stability control (both toggleable). Drifts work like Need for Speed: while steering, lift off the throttle and stab it again to kick the tail out. Steering sets the drift angle and the car carves round the corner, and easing off the throttle straightens it up. The handbrake pivots the car through hairpins without starting a drift. Raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, an auto or manual gearbox, burnouts and donuts, and wheelspin on powerful cars.
 - **Cars**:
   - modern Vanta builds (realistic scanned-quality model)
   - procedural classics: Stallion '69 muscle, Kestrel Rally '85 (AWD turbo hatch), Wedge '78, Raiden GT '94 (twin-turbo coupe) and a 900 hp Stallion restomod
@@ -87,7 +87,8 @@ World data and audio are pre-baked in `assets/`. To regenerate them: `node bake/
 |---|---|---|
 | Throttle / Brake-Reverse | W / S | RT / LT |
 | Steer | A / D | Left stick |
-| Handbrake (start a drift) | Space | X / Square |
+| Handbrake (hairpins) | Space | X / Square |
+| Drift | tap W while steering | tap RT / R2 while steering |
 | Nitrous | Shift | A / Cross |
 | Burnout | W + S stopped | RT + LT |
 | Camera / Look back | C / B | Y / R3 |

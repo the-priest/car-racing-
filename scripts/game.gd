@@ -70,6 +70,8 @@ func _ready() -> void:
 			shots_spec = "HUDTEST"
 		if a == "--phototest":
 			shots_spec = "PHOTOTEST"
+		if a == "--probe":
+			shots_spec = "PROBE"
 		if a == "--sparktest":
 			shots_spec = "SPARKTEST"
 		if a == "--musictest":
@@ -239,6 +241,61 @@ func _ready() -> void:
 		hud.tip("Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching.")
 		await _frames(40)
 		await _snap("hud_elements")
+		get_tree().quit()
+		return
+	if shots_spec == "PROBE":
+		# Surface heights along lines across road joins (debug for snags).
+		var space := get_world_3d().direct_space_state
+		var lines := [[Vector2(0, -600), Vector2(0, -625)], [Vector2(5, -1480), Vector2(5, -1500)], [Vector2(-770, -1440), Vector2(-745, -1465)], [Vector2(-1595, -350), Vector2(-1620, -350)], [Vector2(600, 5), Vector2(625, 5)]]
+		for ln in lines:
+			var out := []
+			for k in 26:
+				var p2: Vector2 = (ln[0] as Vector2).lerp(ln[1], k / 25.0)
+				var q := PhysicsRayQueryParameters3D.create(Vector3(p2.x, 200, p2.y), Vector3(p2.x, -50, p2.y))
+				var hit := space.intersect_ray(q)
+				out.append("%.2f%s" % [hit.position.y, str(hit.collider.get_meta("surface", "?")).substr(0, 1)] if not hit.is_empty() else "-")
+			print("[probe] ", ln, " ", " ".join(out))
+		# Full scan: every road, across its width, every 2 m. Compares the first
+		# surface a ray from above hits against the deck height the road should have.
+		var total := 0
+		var bad := 0
+		for ri in world.d.roads.size():
+			var r: Dictionary = world.d.roads[ri]
+			var pts: Array = r.pts
+			var hw: float = r.hw
+			var bank: PackedFloat32Array = world.road_bank[ri]
+			var n := pts.size() / 3
+			var last := n if r.closed else n - 1
+			var worst := []
+			for i in last:
+				var j := (i + 1) % n
+				var a := Vector3(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2])
+				var b := Vector3(pts[j * 3], pts[j * 3 + 1], pts[j * 3 + 2])
+				var dirv := Vector3(b.x - a.x, 0, b.z - a.z)
+				var L := dirv.length()
+				if L < 0.01:
+					continue
+				var left := Vector3(-dirv.z, 0, dirv.x) / L
+				var steps := maxi(1, int(L / 2.0))
+				for k in steps:
+					var f := float(k) / steps
+					var c := a.lerp(b, f)
+					for o in [-0.95, -0.6, -0.3, 0.0, 0.3, 0.6, 0.95]:
+						var off: float = hw * float(o)
+						var pp: Vector3 = Vector3(c.x, 0, c.z) + left * off
+						var expect := c.y + 0.07 + lerpf(bank[i], bank[j], f) * off
+						var q := PhysicsRayQueryParameters3D.create(Vector3(pp.x, expect + 40.0, pp.z), Vector3(pp.x, expect - 40.0, pp.z))
+						q.collision_mask = 1
+						var hit := space.intersect_ray(q)
+						total += 1
+						var dev := 99.0 if hit.is_empty() else float(hit.position.y) - expect
+						var surf := "none" if hit.is_empty() else str(hit.collider.get_meta("surface", "?"))
+						if dev > 0.1 or dev < -0.3:
+							bad += 1
+							worst.append([absf(dev), snappedf(dev, 0.01), surf, Vector3(pp.x, expect, pp.z).round()])
+			worst.sort_custom(func(x, y): return x[0] > y[0])
+			print("[scan] ", r.name, " issues=", worst.size(), " ", worst.slice(0, 6))
+		print("[scan] total samples=", total, " issues=", bad)
 		get_tree().quit()
 		return
 	if shots_spec == "SPARKTEST":
@@ -427,7 +484,7 @@ func _ready() -> void:
 			var path := RacePath.new(pts, false, world)
 			var p0 := path.at(2)
 			var d0 := path.dir(2)
-			var y0 := (0.6 if world.in_city(p0.x, p0.y) else world.ground(p0.x, p0.y) + 0.8)
+			var y0 := world.drive_y(p0.x, p0.y) + 0.8
 			player.reset_to(Transform3D(Basis.looking_at(Vector3(d0.x, 0, d0.y), Vector3.UP), Vector3(p0.x, y0, p0.y)))
 			autopilot = true
 			var bot := AIDriver.new(player, path, 0.8, 0.0)
@@ -593,6 +650,7 @@ func _build_player(id: String) -> void:
 			add_child(player)
 			old.queue_free()
 		player.setup(stats, paint, false, true, bool(Settings.preset().head_shadows))
+		player.tap_drift = true
 		player.process_mode = Node.PROCESS_MODE_PAUSABLE
 		player.assists = bool(Settings.data.assists)
 		player.manual = bool(Settings.data.manual)
@@ -654,6 +712,34 @@ func on_settings_changed() -> void:
 		player.assists = bool(Settings.data.assists)
 		player.manual = bool(Settings.data.manual)
 	cam.mode = int(Settings.data.camera) as CameraRig.Mode
+	if bool(Settings.data.radio) != audio.radio_on:
+		if not audio.set_radio(bool(Settings.data.radio)):
+			Settings.data.radio = false
+
+var radio_hold := -1.0
+
+## Radio button: tap turns your music on or skips to the next song; hold turns it off.
+func _update_radio_button(delta: float) -> void:
+	if radio_hold < 0.0:
+		return
+	if Input.is_action_pressed("radio"):
+		radio_hold += delta
+		if radio_hold > 0.6:
+			radio_hold = -1.0
+			if audio.radio_on:
+				audio.set_radio(false)
+				Settings.data.radio = false
+				Settings.save_settings()
+				hud.message("Radio off", 1.8)
+		return
+	radio_hold = -1.0
+	if audio.radio_on:
+		audio.radio_next()
+	elif audio.set_radio(true):
+		Settings.data.radio = true
+		Settings.save_settings()
+	else:
+		hud.message("No music found. Put MP3 files in: %s" % AudioManager.radio_folder(), 7.0)
 
 ## Moves the clock toward a locked hour the short way round midnight.
 func _hour_toward(target: float, delta: float) -> float:
@@ -677,7 +763,7 @@ func reset_to_road() -> void:
 		var r: RaceSession = career.race
 		var c := r.path.at(r.p_idx)
 		var d := r.path.dir(r.p_idx)
-		var y := 0.6 if world.in_city(c.x, c.y) else world.ground(c.x, c.y) + 0.9
+		var y := world.drive_y(c.x, c.y) + 0.9
 		if not r.path.heights.is_empty() and not world.in_city(c.x, c.y):
 			y = maxf(y, r.path.heights[r.path.idx(r.p_idx)] + 0.9)
 		player.reset_to(Transform3D(Basis.looking_at(Vector3(d.x, 0, d.y), Vector3.UP), Vector3(c.x, y, c.y)))
@@ -740,7 +826,7 @@ func _on_play() -> void:
 		hud.show_dialogue(Career.PROLOGUE)
 		career.call_timer = 16.0
 		var g := func(k: String) -> String: return Settings.glyph(k)
-		hud.message("%s Throttle   %s Brake   %s Handbrake / drift   %s Nitrous" % [g.call("throttle"), g.call("brake"), g.call("handbrake"), g.call("nitro")], 9.0)
+		hud.message("%s Throttle   %s Brake   %s Handbrake (hairpins)   %s Nitrous   Drift: tap %s while steering" % [g.call("throttle"), g.call("brake"), g.call("handbrake"), g.call("nitro"), g.call("throttle")], 9.0)
 		hud.message("%s Camera   %s Map   %s Phone   %s Reset to road" % [g.call("camera"), g.call("map"), g.call("phone"), g.call("reset")], 9.0)
 
 func _on_resume() -> void:
@@ -1056,6 +1142,8 @@ func _input(event: InputEvent) -> void:
 			hud.skip_line()
 	elif event.is_action_pressed("headlights"):
 		lights_override = 0 if player.lights_on else 1
+	elif event.is_action_pressed("radio"):
+		radio_hold = 0.0
 	elif event.is_action_pressed("shift_up"):
 		player.input.shift_up = true
 	elif event.is_action_pressed("shift_down"):
@@ -1140,6 +1228,7 @@ func _physics_process(delta: float) -> void:
 			audio.update_scrape(0.0)
 		return
 	_update_scrape()
+	player.tap_drift = not autopilot
 	if not autopilot:
 		_read_driving_input(delta)
 	var others: Array = []
@@ -1270,6 +1359,7 @@ func _process(delta: float) -> void:
 	world.set_wetness(clampf(daynight.rain * 1.2 + night * 0.25, 0.0, 1.0))
 	effects.update_rain(daynight.rain, cam.global_position, player.linear_velocity)
 	Car.wet_grip = 1.0 - 0.12 * clampf(daynight.rain, 0.0, 1.0)
+	_update_radio_button(delta)
 	audio.update_music(_music_mode(), delta, 1.0 if menus.rolling_credits() else (0.45 if state == State.PAUSED else (0.65 if state == State.PHOTO or hud.big_map.visible else 1.0)))
 	audio.update_rain(daynight.rain if state == State.PLAY or state == State.MENU or state == State.GARAGE else 0.0)
 	var lights := night > 0.25 or daynight.rain > 0.4
@@ -1488,7 +1578,7 @@ func _run_shots(spec: String) -> void:
 		# name:x:z:yaw:hour:cammode:rain:speed
 		var x := float(p[1])
 		var z := float(p[2])
-		var y := 0.6 if world.in_city(x, z) else world.ground(x, z) + 0.8
+		var y := world.drive_y(x, z) + 0.8
 		player.reset_to(Transform3D(Basis(Vector3.UP, deg_to_rad(float(p[3]))), Vector3(x, y, z)))
 		daynight.hour = float(p[4])
 		cam.mode = int(p[5]) as CameraRig.Mode

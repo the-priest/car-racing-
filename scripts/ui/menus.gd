@@ -326,7 +326,7 @@ func _build_loading() -> void:
 	box.add_child(loading_bar)
 	loading_label = _text(box, "Loading...")
 	var tips := [
-		"Cars grip by default. Tap the handbrake while steering to throw them into a drift.",
+		"Cars grip by default. To drift: while steering into a corner, lift off the throttle and stab it again. Steer to set the angle, ease off to straighten. The handbrake is for tight hairpins.",
 		"Ram a cop hard while you're the faster car to take it out of the chase - it adds to your bounty.",
 		"The police helicopter can't see you between tall buildings. Head downtown to break its line of sight.",
 		"Roadblocks are just parked cars. Hit them flat out.",
@@ -587,6 +587,8 @@ const SETTINGS := [
 	["traffic", "Traffic density", [0.0, 0.5, 1.0, 1.5], ["Off", "Light", "Normal", "Heavy"]],
 	["music", "Music volume", [0.0, 0.25, 0.5, 0.75, 1.0], ["Off", "25%", "50%", "75%", "100%"]],
 	["sfx", "Effects volume", [0.0, 0.25, 0.5, 0.85, 1.0], ["Off", "25%", "50%", "85%", "100%"]],
+	["radio", "Radio (your music)", [false, true], ["Off - soundtrack", "On"]],
+	["radio_shuffle", "Radio order", [true, false], ["Shuffle", "In order"]],
 	["difficulty", "Difficulty", ["easy", "normal", "hard"], ["Easy", "Normal", "Hard"]],
 	["time_mode", "Time of day", ["dynamic", "day", "dusk", "night"], ["Dynamic cycle", "Always day", "Always dusk", "Always night"]],
 	["weather", "Weather", ["dynamic", "clear", "rain"], ["Dynamic", "Always clear", "Always rain"]],
@@ -622,6 +624,12 @@ func _build_settings(box: VBoxContainer) -> void:
 			Settings.set_value(key, values[i])
 			update_text.call(i)
 			game.on_settings_changed()
+			if key == "radio" and Settings.data.radio != values[i]:
+				b.text = "Radio: no MP3s found - use OPEN RADIO FOLDER below"
+				return
+			if key == "radio_shuffle":
+				game.audio._radio_shuffle()
+			update_text.call(maxi(values.find(Settings.data[key]), 0))
 			if key == "quality":
 				show_screen("settings", false)
 		b.pressed.connect(func(): cycle.call(1))
@@ -632,6 +640,12 @@ func _build_settings(box: VBoxContainer) -> void:
 			elif ev.is_action_pressed("ui_right"):
 				cycle.call(1)
 				b.accept_event())
+	_button(box, "OPEN RADIO FOLDER", func():
+		var dir := AudioManager.radio_folder()
+		DirAccess.make_dir_recursive_absolute(dir)
+		OS.shell_open(dir)
+		game.audio.radio_scan())
+	_text(box, "Radio: drop MP3 files into %s, then press %s while driving (tap: on / next song, hold: off)." % [AudioManager.radio_folder(), Settings.glyph("radio")], 14)
 	if not Input.get_connected_joypads().is_empty():
 		_button(box, "TEST VIBRATION", func():
 			var g := float(Settings.data.vibration)

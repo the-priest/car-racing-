@@ -46,6 +46,15 @@ var landing_impact := 0.0
 var wheelspin := 0.0
 var slip_angle := 0.0 # body side-slip
 var drift_mode := false # true only once the driver deliberately kicks the car sideways
+## Gas-tap drift (player only): lift off and stab the throttle again while steering.
+var tap_drift := false
+var _tap_armed := 0.0
+var _prev_thr := 0.0
+var _drift_lift_t := 0.0
+var _drift_low_t := 0.0
+var _vel_heading := 0.0
+var path_rate := 0.0 # how fast the direction of travel is turning (rad/s)
+var _hb_t := 0.0 # handbrake turn: the car keeps the new heading after release
 var surface := "road"
 var power_mul := 1.0
 var gear_top: Array[float] = []
@@ -87,7 +96,7 @@ func setup(car_stats: Dictionary, paint: Color, police := false, detail := true,
 	collision_mask = 1
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0, 0.46, 0.08)
-	inertia = Vector3(mass * (0.9 * 0.9 + 4.3 * 4.3) / 12.0 * 0.9, mass * (2.0 * 2.0 + 4.3 * 4.3) / 12.0 * 1.05, mass * (2.0 * 2.0 + 0.9 * 0.9) / 12.0 * 1.1)
+	inertia = Vector3(mass * (0.9 * 0.9 + 4.3 * 4.3) / 12.0 * 0.9, mass * (2.0 * 2.0 + 4.3 * 4.3) / 12.0 * 0.82, mass * (2.0 * 2.0 + 0.9 * 0.9) / 12.0 * 1.1)
 	# Replace the project-default damping: drag and tyre forces model resistance explicitly.
 	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
 	angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
@@ -516,6 +525,8 @@ func _physics_step(dt: float) -> void:
 	lateral_speed = v.dot(right)
 	var abs_u := absf(forward_speed)
 	var mu_base: float = stats.grip / G
+	if tap_drift:
+		mu_base *= 1.12 # player arcade grip: lighter, more eager than the AI's cars
 
 	# Local acceleration (for weight transfer telemetry and camera/visual cues)
 	var acc := (v - last_vel) / dt
@@ -524,26 +535,44 @@ func _physics_step(dt: float) -> void:
 
 	var beta := atan2(lateral_speed, maxf(abs_u, 0.5)) if speed > 3.0 else 0.0
 	slip_angle = beta
-	# --- Drift mode: only entered on purpose (handbrake, or brake-flick while
-	# steering on throttle). Without it the car grips and ESC keeps it straight.
+	if speed > 3.0:
+		var vh := atan2(v.x, v.z)
+		path_rate = lerpf(path_rate, wrapf(vh - _vel_heading, -PI, PI) / dt, 0.25)
+		_vel_heading = vh
+	else:
+		path_rate = 0.0
+	# --- Drift mode: only entered on purpose, NFS-style: while steering, lift off
+	# the throttle and stab it again. The handbrake is for tight turns, not drifts.
 	var steer_in := absf(float(input.steer))
-	if speed > 11.0 and forward_speed > 0.0:
-		if float(input.handbrake) > 0.3 and steer_in > 0.2:
-			drift_mode = true
-		elif float(input.brake) > 0.4 and float(input.throttle) > 0.4 and steer_in > 0.5:
-			drift_mode = true
-	if drift_mode and (speed < 8.0 or forward_speed < 0.0 or (absf(beta) < 0.1 and float(input.handbrake) < 0.1) or (steer_in < 0.15 and float(input.handbrake) < 0.1) or (float(input.throttle) < 0.1 and absf(beta) < 0.25 and float(input.handbrake) < 0.1)):
-		drift_mode = false
+	var thr_in := float(input.throttle)
+	_tap_armed = maxf(0.0, _tap_armed - dt)
+	if _prev_thr >= 0.45 and thr_in < 0.25:
+		_tap_armed = 0.55
+	if tap_drift and not drift_mode and _tap_armed > 0.0 and _prev_thr < 0.65 and thr_in >= 0.7 \
+			and speed > 12.0 and forward_speed > 0.0 and steer_in > 0.3 and wheels_on_ground >= 3:
+		drift_mode = true
+		_tap_armed = 0.0
+		# Kick the tail out toward the corner.
+		angular_velocity += up * -signf(float(input.steer)) * (0.55 + 0.1 * float(stats.drift))
+	_prev_thr = thr_in
+	if drift_mode:
+		_drift_lift_t = _drift_lift_t + dt if thr_in < 0.15 else 0.0
+		_drift_low_t = _drift_low_t + dt if absf(beta) < 0.08 else 0.0
+		if speed < 8.0 or forward_speed < 0.0 or _drift_lift_t > 0.45 or _drift_low_t > 0.35 or wheels_on_ground < 2:
+			drift_mode = false
+	else:
+		_drift_lift_t = 0.0
+		_drift_low_t = 0.0
 	if not assists:
 		drift_mode = absf(beta) > 0.15
 	# --- Steering: lock limited to what the front tyres can actually use at speed
 	var lock := 0.6 / (1.0 + maxf(0.0, abs_u - 5.0) / 15.0)
 	if not drift_mode and abs_u > 8.0:
-		lock = minf(lock, atan(wheelbase * mu_base * G / (abs_u * abs_u)) + 0.13)
+		lock = minf(lock, atan(wheelbase * mu_base * G / (abs_u * abs_u)) + 0.2)
 	var target := -float(input.steer) * lock
 	if assists and speed > 6.0 and forward_speed > 0.0:
 		target -= clampf(beta, -0.5, 0.5) * 0.6 * smoothstep(0.04, 0.25, absf(beta))
-	var steer_rate := lerpf(5.0, 2.6, smoothstep(10.0, 50.0, abs_u)) * (1.6 if drift_mode else 1.0)
+	var steer_rate := lerpf(7.5, 4.0, smoothstep(10.0, 50.0, abs_u)) * (1.5 if drift_mode else 1.0)
 	steer_angle = move_toward(steer_angle, clampf(target, -0.75, 0.75), dt * steer_rate)
 
 	# --- Engine & gearbox
@@ -596,6 +625,8 @@ func _physics_step(dt: float) -> void:
 		drive = throttle * minf(drive_f, power / maxf(abs_u, 1.0)) * shape * limiter * power_mul
 		if shift_cut > 0.0:
 			drive *= 0.2
+		if drift_mode and assists:
+			drive *= 0.7 # drifting trades speed for style; full power would just spin the rears
 		if reverse:
 			drive = 0.0 if abs_u > 15.0 else -drive * 0.55
 
@@ -759,20 +790,47 @@ func _physics_step(dt: float) -> void:
 	if assists and on_ground and speed > 8.0 and forward_speed > 0.0:
 		var yaw_rate := angular_velocity.dot(up)
 		if drift_mode:
-			var hold := lerpf(0.2, 0.45, smoothstep(0.1, 0.6, steer_in))
-			var excess := maxf(0.0, absf(beta) - hold)
-			apply_torque(up * (-signf(beta) * excess * 22.0 - yaw_rate * minf(excess * 6.0, 2.0)) * inertia.y)
+			# Steering sets the drift angle (into the turn = deeper, counter-steer =
+			# shallower); the car is held there and carves round the corner without
+			# bleeding speed, like an arcade racer.
+			var sd := signf(beta) if absf(beta) > 0.03 else signf(-float(input.steer))
+			var into := clampf(float(input.steer) * -sd, -1.0, 1.0)
+			var target_beta := sd * (0.36 + 0.24 * into)
+			apply_torque(up * ((target_beta - beta) * 40.0 - (yaw_rate - path_rate) * 6.0) * inertia.y)
+			var vdir := v.normalized()
+			var perp := fwd - vdir * fwd.dot(vdir)
+			perp.y = 0.0
+			if perp.length() > 0.01:
+				var carve := minf(1.5 * absf(beta) * (0.4 + 0.6 * throttle) * speed, 9.0)
+				apply_central_force(perp.normalized() * mass * carve)
 		else:
 			var r_des := forward_speed * tan(steer_angle) / wheelbase
-			var r_max := mu_base * G / maxf(abs_u, 1.0)
+			var r_max := mu_base * G / maxf(abs_u, 1.0) * 1.15
 			r_des = clampf(r_des, -r_max, r_max)
 			var err := r_des - yaw_rate
-			# Strong against over-rotation, gentle help on turn-in.
+			# Strong against over-rotation, eager on turn-in. The handbrake relaxes it
+			# so the car can pivot through hairpins, then it catches the car again.
 			var over := absf(yaw_rate) > absf(r_des) or signf(yaw_rate) != signf(r_des)
-			var gain := (6.0 if over else 1.5) * smoothstep(8.0, 16.0, speed)
+			var hb_relax := 1.0 - 0.85 * hb
+			var gain := (5.0 if over else 3.0) * smoothstep(8.0, 16.0, speed) * hb_relax
 			apply_torque(up * err * gain * inertia.y)
 			var excess2 := maxf(0.0, absf(beta) - 0.06)
-			apply_torque(up * (-signf(beta) * excess2 * 10.0) * inertia.y)
+			if hb > 0.1:
+				_hb_t = 0.9
+			else:
+				_hb_t = maxf(0.0, _hb_t - dt)
+			if _hb_t > 0.0:
+				# After a handbrake turn, swing the direction of travel round to where
+				# the nose now points instead of swinging the nose back.
+				var vdir2 := v.normalized()
+				var perp2 := fwd - vdir2 * fwd.dot(vdir2)
+				perp2.y = 0.0
+				if perp2.length() > 0.01:
+					apply_central_force(perp2.normalized() * mass * minf(2.6 * absf(beta) * speed, 13.0) * (1.0 - hb * 0.5))
+			else:
+				apply_torque(up * (-signf(beta) * excess2 * 14.0 * hb_relax) * inertia.y)
+			if hb > 0.1 and speed > 5.0:
+				apply_torque(up * -float(input.steer) * hb * 5.0 * inertia.y)
 
 	if burnout and on_ground:
 		apply_torque(up * -float(input.steer) * inertia.y * 2.2)

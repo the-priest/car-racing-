@@ -44,18 +44,19 @@ var data := {
 	"show_fps": false, "traffic": 1.0, "camera": 0, "sensitivity": 1.0,
 	"vibration": 1.0, "steer_sens": 1.0, "deadzone": 0.08, "steer_curve": 1.3,
 	"speed_fx": true, "cam_shake": 1.0, "time_mode": "dynamic", "weather": "dynamic", "difficulty": "normal",
+	"radio": false, "radio_shuffle": true,
 	"bindings": {}, # action -> {"key": physical keycode, "pad": joy button} overrides
 }
 
 ## Actions the player can rebind (keyboard: all; controller: button actions).
 const REBINDABLE := ["throttle", "brake", "steer_left", "steer_right", "handbrake", "nitro", "camera", "look_back",
-	"reset", "interact", "phone", "map", "shift_up", "shift_down", "horn", "headlights"]
+	"reset", "interact", "phone", "map", "shift_up", "shift_down", "horn", "headlights", "radio"]
 const PAD_REBINDABLE := ["handbrake", "nitro", "camera", "look_back", "reset", "interact", "phone", "map",
-	"shift_up", "shift_down", "horn", "headlights"]
+	"shift_up", "shift_down", "horn", "headlights", "radio"]
 const ACTION_NAMES := {"throttle": "Accelerate", "brake": "Brake / reverse", "steer_left": "Steer left", "steer_right": "Steer right",
 	"handbrake": "Handbrake", "nitro": "Nitrous", "camera": "Change camera", "look_back": "Look back", "reset": "Reset to road",
 	"interact": "Interact / next line", "phone": "Phone", "map": "Map", "shift_up": "Shift up", "shift_down": "Shift down",
-	"horn": "Horn", "headlights": "Headlights"}
+	"horn": "Horn", "headlights": "Headlights", "radio": "Radio"}
 const PAD_NAMES_XBOX := {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y", JOY_BUTTON_LEFT_SHOULDER: "LB",
 	JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3", JOY_BUTTON_BACK: "View",
 	JOY_BUTTON_START: "Menu", JOY_BUTTON_DPAD_UP: "D-pad ↑", JOY_BUTTON_DPAD_DOWN: "D-pad ↓", JOY_BUTTON_DPAD_LEFT: "D-pad ←",
@@ -128,13 +129,13 @@ func binding_text(action: String, pad: bool) -> String:
 # ---------------------------------------------------------------- controller glyphs
 const XBOX := {"handbrake": "X", "nitro": "A", "camera": "Y", "reset": "B (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
 	"pause": "Menu", "map": "View", "throttle": "RT", "brake": "LT", "shift_up": "RB", "shift_down": "LB", "look_back": "R3",
-	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "A", "back": "B"}
+	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "A", "back": "B", "radio": "L3"}
 const PLAYSTATION := {"handbrake": "□", "nitro": "✕", "camera": "△", "reset": "○ (hold)", "interact": "D-pad ↑", "phone": "D-pad ↓",
 	"pause": "Options", "map": "Touchpad", "throttle": "R2", "brake": "L2", "shift_up": "R1", "shift_down": "L1", "look_back": "R3",
-	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "✕", "back": "○"}
+	"headlights": "D-pad →", "horn": "D-pad ←", "accept": "✕", "back": "○", "radio": "L3"}
 const KEYS := {"handbrake": "Space", "nitro": "Shift", "camera": "C", "reset": "R", "interact": "E", "phone": "Tab",
 	"pause": "Esc", "map": "M", "throttle": "W", "brake": "S", "shift_up": "X", "shift_down": "Z", "look_back": "B",
-	"headlights": "L", "horn": "H", "accept": "Enter", "back": "Esc"}
+	"headlights": "L", "horn": "H", "accept": "Enter", "back": "Esc", "radio": "Q"}
 
 var using_pad := false
 
@@ -306,7 +307,7 @@ func _default_map() -> Dictionary:
 		"steer_left": [_key(KEY_A), _key(KEY_LEFT), _axis(JOY_AXIS_LEFT_X, -1.0)],
 		"steer_right": [_key(KEY_D), _key(KEY_RIGHT), _axis(JOY_AXIS_LEFT_X, 1.0)],
 		"handbrake": [_key(KEY_SPACE), _btn(JOY_BUTTON_X)],
-		"nitro": [_key(KEY_SHIFT), _key(KEY_N), _btn(JOY_BUTTON_A), _btn(JOY_BUTTON_LEFT_STICK)],
+		"nitro": [_key(KEY_SHIFT), _key(KEY_N), _btn(JOY_BUTTON_A)],
 		"camera": [_key(KEY_C), _btn(JOY_BUTTON_Y)],
 		"look_back": [_key(KEY_B), _btn(JOY_BUTTON_RIGHT_STICK)],
 		"look_left": [_axis(JOY_AXIS_RIGHT_X, -1.0)],
@@ -320,6 +321,7 @@ func _default_map() -> Dictionary:
 		"shift_down": [_key(KEY_Z), _btn(JOY_BUTTON_LEFT_SHOULDER)],
 		"horn": [_key(KEY_H), _btn(JOY_BUTTON_DPAD_LEFT)],
 		"headlights": [_key(KEY_L), _btn(JOY_BUTTON_DPAD_RIGHT)],
+		"radio": [_key(KEY_Q), _btn(JOY_BUTTON_LEFT_STICK)],
 	}
 
 func _key(k: Key) -> InputEventKey:
