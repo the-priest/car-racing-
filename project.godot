@@ -10,7 +10,10 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 config/project_settings_override="user://override.cfg"
 boot_splash/bg_color=Color(0.02, 0.025, 0.04, 1)
-boot_splash/show_image=false
+boot_splash/show_image=true
+boot_splash/image="res://assets/splash.png"
+boot_splash/fullsize=false
+boot_splash/use_filter=true
 
 [autoload]
 
