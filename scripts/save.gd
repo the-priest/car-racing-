@@ -21,15 +21,22 @@ func load_game() -> void:
 	if not FileAccess.file_exists(PATH):
 		return
 	var f := FileAccess.open(PATH, FileAccess.READ)
+	if f == null:
+		return
 	var parsed = JSON.parse_string(f.get_as_text())
 	if parsed is Dictionary:
 		for k in parsed:
 			data[k] = parsed[k]
 
 func save_game() -> void:
-	var f := FileAccess.open(PATH, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(data))
+	# Write to a temp file then swap it in, so a crash mid-write can't corrupt the career.
+	var tmp := PATH + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_string(JSON.stringify(data))
+	f.close()
+	DirAccess.rename_absolute(tmp, PATH)
 
 func wipe() -> void:
 	data = defaults()

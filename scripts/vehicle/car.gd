@@ -309,6 +309,11 @@ func reset_to(t: Transform3D) -> void:
 	angular_velocity = Vector3.ZERO
 	reverse = false
 	gear = 0
+	air_time = 0.0
+	landing_impact = 0.0
+	last_vel = Vector3.ZERO
+	nitro_on = false
+	drift_mode = false
 	for w in wheels:
 		w.comp = SAG
 		w.prev_comp = SAG
@@ -662,8 +667,8 @@ func set_police_active(on: bool) -> void:
 		m.emission_enabled = on
 
 func _on_body_entered(b: Node) -> void:
-	var s := linear_velocity.length()
-	impact.emit(s)
+	# Impact strength = velocity change from the hit, not the car's speed.
+	impact.emit((last_vel - linear_velocity).length())
 
 var kmh: float:
 	get:

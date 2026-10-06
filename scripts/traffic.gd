@@ -6,6 +6,7 @@ extends Node3D
 signal hit(strength: float)
 
 const SPEED := {"city": 13.0, "link": 20.0, "hwy": 27.0, "pass": 14.0, "country": 16.0, "runway": 18.0}
+const MAX_POOL := 45
 const COLORS := [Color(0.85, 0.85, 0.84), Color(0.05, 0.05, 0.06), Color(0.45, 0.05, 0.05), Color(0.08, 0.16, 0.35),
 	Color(0.4, 0.42, 0.45), Color(0.55, 0.48, 0.32), Color(0.12, 0.25, 0.15), Color(0.95, 0.95, 0.95)]
 
@@ -34,7 +35,8 @@ func setup(w: World, count: int) -> void:
 	light_mat.albedo_color = Color(0.9, 0.9, 0.85)
 	light_mat.emission_enabled = true
 	light_mat.emission = Color(1, 0.95, 0.85)
-	for i in count:
+	# Pool enough cars for Ultra + heavy density; set_count activates a subset.
+	for i in maxi(count, MAX_POOL):
 		var vis := CarMesh.instance(paints[i % paints.size()], light_mat)
 		add_child(vis)
 		vis.visible = false
@@ -175,6 +177,8 @@ func collide(car: Car, report := true) -> void:
 		if rel <= 0.0 and c.knock > 0.0:
 			continue
 		c.knock = 3.0
+		c.near = false
+		c.missed = true
 		c.vel = car.linear_velocity * 0.85 + n * (4.0 + maxf(rel, 0.0) * 0.4)
 		c.vel.y = 0.0
 		c.spin = randf_range(-6.0, 6.0)
@@ -191,10 +195,15 @@ func near_misses(car: Car) -> int:
 		if not c.active or c.knock > 0.0:
 			continue
 		var d := (c.pos as Vector3).distance_to(car.global_position)
+		# A near miss only counts once you're clear of the car without hitting it.
 		if d < 4.8 and d > 3.2 and car.speed > 25.0:
 			if not c.missed:
+				c.near = true
+		elif d > 6.0:
+			if c.get("near", false) and not c.missed:
 				c.missed = true
 				count += 1
-		elif d > 12.0:
-			c.missed = false
+			c.near = false
+			if d > 12.0:
+				c.missed = false
 	return count

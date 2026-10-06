@@ -337,7 +337,9 @@ func _build_main(box: VBoxContainer) -> void:
 			Save.wipe()
 			game.reset_career()
 			show_screen("main", false))
-	_button(box, "QUIT", func(): get_tree().quit())
+	_button(box, "QUIT", func():
+		Save.save_game()
+		get_tree().quit())
 	_text(box, "\nBank  $%s   ·   Story %d / %d" % [HUD._fmt(int(Save.data.cash)), mini(int(Save.data.contract), Career.CONTRACTS.size()), Career.CONTRACTS.size()], 18)
 
 func _build_pause(box: VBoxContainer) -> void:

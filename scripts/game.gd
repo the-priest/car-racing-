@@ -277,6 +277,9 @@ func on_race_start() -> void:
 	cam.snap = true
 	effects.clear_skids()
 	drift.chain = 0.0
+	drift.mult = 1
+	drift.time = 0.0
+	drift.idle = 0.0
 
 func on_settings_changed() -> void:
 	Settings.apply_graphics(daynight.env, daynight.sun, get_viewport(), cam)
@@ -320,6 +323,8 @@ func _notification(what: int) -> void:
 
 # ---------------------------------------------------------------- states
 func _to_menu() -> void:
+	if state == State.PAUSED or state == State.PLAY:
+		persist()
 	state = State.MENU
 	hud.visible = false
 	# The world stays frozen behind menus; cameras/day-night are driven from here.
@@ -409,6 +414,8 @@ func _on_impact(strength: float) -> void:
 			hud.message("DRIFT CHAIN LOST", 1.2)
 			drift.chain = 0.0
 			drift.mult = 1
+			drift.time = 0.0
+			drift.idle = 0.0
 
 func _on_traffic_hit(strength: float) -> void:
 	_on_impact(strength * 0.5 + 4.0)
@@ -487,7 +494,7 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("camera"):
 		cam.cycle()
-		Settings.data.camera = cam.mode
+		Settings.set_value("camera", cam.mode)
 	elif event.is_action_pressed("phone"):
 		var lines := career.answer_phone()
 		if not lines.is_empty():
@@ -648,7 +655,12 @@ func _process(delta: float) -> void:
 		audio.update_player(player, false, delta)
 		return
 	if hud.big_map.visible:
-		return # full-screen map: gameplay frozen
+		# Full-screen map: gameplay frozen, loops muted.
+		audio.update_player(player, false, delta)
+		audio.update_siren(0.0)
+		audio.update_rotor(INF)
+		audio.set_horn(false)
+		return
 	cam.process_mode = Node.PROCESS_MODE_INHERIT
 	t0 = _pt("world/fx", t0)
 	traffic.update(delta, player, police.cars())

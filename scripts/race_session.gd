@@ -26,6 +26,7 @@ var need_place := 1
 var boss: Dictionary = {} # named story rival (takes grid slot 0)
 var wrong := 0.0
 var order: Array = [] # [{me, name, boss}] in race order
+var back_wraps := 0
 var gates: Array[Node3D] = []
 var _last_count := 4
 
@@ -192,15 +193,19 @@ func update(dt: float) -> void:
 	var pp := Vector2(player.global_position.x, player.global_position.z)
 	var prev := p_idx
 	p_idx = path.nearest(pp, p_idx, 12, 60)
-	if path.closed and prev > path.n * 0.85 and p_idx < path.n * 0.15:
-		if next_cp >= cps.size():
+	if path.closed and prev < path.n * 0.15 and p_idx > path.n * 0.85:
+		back_wraps += 1 # reversed over the line
+	elif path.closed and prev > path.n * 0.85 and p_idx < path.n * 0.15:
+		if back_wraps > 0:
+			back_wraps -= 1 # crossing forward again after reversing over it
+		elif next_cp >= cps.size():
 			lap += 1
 			next_cp = 0
 			if lap < laps:
 				game.hud.message("LAP %d / %d" % [lap + 1, laps], 2.0)
 		else:
 			p_idx = prev
-	progress = lap * path.length + path.cum[p_idx]
+	progress = (lap - back_wraps) * path.length + path.cum[p_idx]
 	if next_cp < cps.size():
 		var ci: int = cps[next_cp]
 		if pp.distance_to(path.at(ci)) < 24.0 or (p_idx >= ci and p_idx - ci < 40):

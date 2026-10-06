@@ -207,7 +207,8 @@ func setup_input() -> void:
 	}
 	for action in map:
 		if not InputMap.has_action(action):
-			InputMap.add_action(action, 0.12)
+			# Steering uses the player's own deadzone setting only.
+			InputMap.add_action(action, 0.0 if action.begins_with("steer_") else 0.12)
 		for ev in map[action]:
 			InputMap.action_add_event(action, ev)
 	# Gamepad confirm/back in menus (A / Cross, B / Circle) and D-pad navigation.

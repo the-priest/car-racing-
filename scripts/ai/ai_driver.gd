@@ -90,7 +90,8 @@ func update(dt: float, others: Array, frozen: bool) -> void:
 	car.input.nitro = nitro
 	# Recover when stuck or lost
 	var dist_off := path.at(idx).distance_to(p2)
-	if not frozen and (spd < 2.0 or dist_off > 30.0):
+	var at_finish := not path.closed and idx >= path.n - 5
+	if not frozen and not at_finish and (spd < 2.0 or dist_off > 30.0):
 		stuck += dt
 	else:
 		stuck = maxf(0.0, stuck - dt)
