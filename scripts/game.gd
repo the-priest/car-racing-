@@ -43,6 +43,7 @@ var welcomed := false
 var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
 var ach_timer := 2.0
 var credits_pending := false
+var tip_test := false
 var credits_roll_after_results := false
 var session_id := 0 # bumped when leaving to the menu / new career; stale awaits bail out
 var photo := {"yaw": 0.0, "pitch": 0.25, "dist": 7.0, "fov": 55.0}
@@ -60,6 +61,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--hudtest":
+			shots_spec = "HUDTEST"
 		if a == "--phototest":
 			shots_spec = "PHOTOTEST"
 		if a == "--creditstest":
@@ -173,6 +176,27 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "HUDTEST":
+		_on_play()
+		traffic.set_count(0)
+		daynight.hour = 14.0
+		await _frames(30)
+		police.start_pursuit("TEST", 2)
+		await _frames(60)
+		police.last_seen = Vector2(player.global_position.x, player.global_position.z)
+		player.reset_to(Transform3D(Basis(), player.global_position + Vector3(150, 0.5, 0)))
+		for c in police.cops.duplicate():
+			police._remove(c)
+		police.engaged = true
+		police.cooldown = 3.0
+		hud.achievement("Untouchable", "Escape a heat 5 pursuit.")
+		Save.data.tips = []
+		tip_test = true
+		hud.tip("Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching.")
+		await _frames(40)
+		await _snap("hud_elements")
 		get_tree().quit()
 		return
 	if shots_spec == "PHOTOTEST":

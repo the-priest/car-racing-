@@ -813,8 +813,18 @@ void fragment() {
 			var zc: Vector2 = to_map.call(pol.last_seen)
 			var zr := Police.SEARCH_RADIUS * scale
 			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-			ci.draw_circle(zc, zr, Color(1, 0.1, 0.15, 0.12 + 0.06 * pulse))
-			ci.draw_arc(zc, zr, 0, TAU, 64, Color(1, 0.2, 0.25, 0.7), 2.0, true)
+			# Clip the zone to the round minimap: points outside are pulled onto the rim.
+			var poly := PackedVector2Array()
+			for k in 48:
+				var q := zc + Vector2(cos(TAU * k / 48.0), sin(TAU * k / 48.0)) * zr
+				if q.distance_to(center) > half - 2.0:
+					q = center + (q - center).normalized() * (half - 2.0)
+				poly.append(q)
+			if Geometry2D.triangulate_polygon(poly).size() > 0:
+				ci.draw_colored_polygon(poly, Color(1, 0.1, 0.15, 0.12 + 0.06 * pulse))
+			var ring := poly.duplicate()
+			ring.append(poly[0])
+			ci.draw_polyline(ring, Color(1, 0.2, 0.25, 0.7), 2.0, true)
 		# GPS route: dark casing + bright line
 		var route: PackedVector2Array = game.gps_route
 		var pts := PackedVector2Array()

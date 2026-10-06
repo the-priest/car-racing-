@@ -422,7 +422,7 @@ func _build_billboards() -> void:
 		panel_m.emission = col
 		panel_m.emission_energy_multiplier = 1.4
 		for spec in [[Vector3(-1.6, 2.2, 0), Vector3(0.18, 4.4, 0.18), frame_m], [Vector3(1.6, 2.2, 0), Vector3(0.18, 4.4, 0.18), frame_m],
-				[Vector3(0, 4.6, 0), Vector3(4.6, 2.2, 0.2), panel_m], [Vector3(0, 4.6, 0.12), Vector3(3.6, 0.35, 0.05), frame_m]]:
+				[Vector3(0, 4.6, 0), Vector3(4.6, 2.2, 0.2), panel_m], [Vector3(0, 3.42, 0.12), Vector3(4.6, 0.16, 0.05), frame_m]]:
 			var mi := MeshInstance3D.new()
 			var bm := BoxMesh.new()
 			bm.size = spec[1]
