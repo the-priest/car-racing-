@@ -108,6 +108,7 @@ func _ready() -> void:
 		hud.radio(t)
 		audio.play_oneshot("radio", randf_range(0.95, 1.05), -8.0))
 	police.cop_down.connect(func(bonus):
+		slowmo(0.45 if bonus < 5000 else 0.9)
 		hud.big("TAKEDOWN", 1.2)
 		hud.message("Cop taken out  +$%d bounty" % bonus, 2.0)
 		audio.play_oneshot("impact", 0.7)
@@ -390,6 +391,13 @@ func _on_career_finished(res: Dictionary) -> void:
 	get_tree().paused = true
 	menus.show_results(res)
 	persist()
+
+## Brief slow motion for big moments (takedowns). Real-time timer restores it.
+func slowmo(secs: float) -> void:
+	if profiling or shots_spec != "":
+		return
+	Engine.time_scale = 0.35
+	get_tree().create_timer(secs, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
 
 func _on_story_complete() -> void:
 	hud.big("THE END", 4.0)
