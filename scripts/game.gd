@@ -41,6 +41,8 @@ var showroom: Node3D
 var custom_wp := Vector2.INF # waypoint pinned on the full map
 var welcomed := false
 var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
+var ach_timer := 2.0
+var top_kmh := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -124,6 +126,9 @@ func _ready() -> void:
 		hud.radio(t)
 		audio.play_oneshot("radio", randf_range(0.95, 1.05), -8.0))
 	police.cop_down.connect(func(bonus):
+		Save.data.cop_takedowns = int(Save.data.get("cop_takedowns", 0)) + 1
+		if bonus >= Police.KANE_BONUS:
+			_award("kane")
 		slowmo(0.45 if bonus < 5000 else 0.9)
 		hud.big("TAKEDOWN", 1.2)
 		hud.message("Cop taken out  +$%d bounty" % bonus, 2.0)
@@ -557,6 +562,21 @@ func _on_career_finished(res: Dictionary) -> void:
 	menus.show_results(res)
 	persist()
 
+func _award(key: String) -> void:
+	var info := Achievements.unlock(key)
+	if not info.is_empty():
+		hud.achievement(info[0], info[1])
+		audio.play_oneshot("reward", 1.2)
+
+func _check_achievements(delta: float) -> void:
+	ach_timer -= delta
+	top_kmh = maxf(top_kmh, player.kmh)
+	if ach_timer > 0.0:
+		return
+	ach_timer = 1.0
+	for k in Achievements.check(top_kmh):
+		_award(k)
+
 ## One-time contextual hint (remembered in the save).
 func tip(key: String, text: String) -> void:
 	if shots_spec != "":
@@ -584,6 +604,8 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 	if escaped:
 		Save.add_cash(bounty)
 		Save.data.heat_escapes = int(Save.data.heat_escapes) + 1
+		if int(police.last_stats.get("heat", 0)) >= 5:
+			_award("escape5")
 		hud.big("ESCAPED", 2.0)
 		var st: Dictionary = police.last_stats
 		hud.message("Bounty +$%s" % HUD._fmt(bounty), 4.0)
@@ -930,6 +952,8 @@ func _process(delta: float) -> void:
 	audio.update_ai(ai_cars, cam.global_position)
 	t0 = _pt("audio", t0)
 	_update_haptics(delta)
+	if shots_spec == "" or shots_spec == "FUZZ":
+		_check_achievements(delta)
 	if player.landing_impact > 0.0:
 		_rumble(clampf(player.landing_impact / 8.0, 0.2, 1.0), 0.4, 0.18)
 		cam.shake = maxf(cam.shake, clampf(player.landing_impact / 15.0, 0.0, 0.8))

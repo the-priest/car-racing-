@@ -352,7 +352,7 @@ func _rebuild(name: String) -> void:
 			"controls": _screen("controls")
 			"credits": _screen("credits")
 			"story": _screen("story")
-			"records": _screen("records")
+			"records": _screen("records", false, 760)
 			"remap": _screen("remap", false, 760)
 			"results": _screen("results")
 	var box: VBoxContainer = screens[name].box
@@ -774,6 +774,19 @@ func _build_records(box: VBoxContainer) -> void:
 	row.call("Police escapes", str(int(Save.data.heat_escapes)))
 	row.call("Time played", HUD._time(float(Save.data.playtime)).split(".")[0])
 	box.add_child(grid)
+	var got: Array = Save.data.get("ach", [])
+	_text(box, "\nACHIEVEMENTS  %d / %d" % [got.size(), Achievements.LIST.size()], 18, ACCENT)
+	var ag := GridContainer.new()
+	ag.columns = 2
+	ag.add_theme_constant_override("h_separation", 30)
+	for a in Achievements.LIST:
+		var l := Label.new()
+		var done: bool = got.has(a[0])
+		l.text = ("★ " if done else "☆ ") + str(a[1]) + "  -  " + str(a[2])
+		l.add_theme_font_size_override("font_size", 14)
+		l.add_theme_color_override("font_color", Color(1.0, 0.82, 0.3) if done else Color(1, 1, 1, 0.4))
+		ag.add_child(l)
+	box.add_child(ag)
 	_button(box, "BACK", func(): back())
 
 func _build_credits(box: VBoxContainer) -> void:

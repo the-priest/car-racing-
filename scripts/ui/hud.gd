@@ -23,6 +23,7 @@ var radio_t := 0.0
 var tip_panel: PanelContainer
 var tip_l: Label
 var tip_t := 0.0
+var ach_queue: Array = []
 var cooldown_bar: ProgressBar
 var race_box: VBoxContainer
 var pos_l: Label
@@ -379,6 +380,53 @@ func title_card(top: String, title: String, sub: String) -> void:
 	tw.tween_callback(box.queue_free)
 	big_t = 0.0
 	big_l.text = ""
+
+## Gold achievement card that slides in at the top right; queued if several unlock at once.
+func achievement(title: String, desc: String) -> void:
+	ach_queue.append([title, desc])
+	if ach_queue.size() == 1:
+		_show_ach()
+
+func _show_ach() -> void:
+	if ach_queue.is_empty():
+		return
+	var a: Array = ach_queue[0]
+	var p := PanelContainer.new()
+	p.anchor_left = 1.0
+	p.anchor_right = 1.0
+	p.offset_left = -470
+	p.offset_right = -30
+	p.offset_top = 250
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.06, 0.05, 0.02, 0.9)
+	st.border_width_left = 5
+	st.border_color = Color(1.0, 0.78, 0.2)
+	st.content_margin_left = 16
+	st.content_margin_right = 14
+	st.content_margin_top = 8
+	st.content_margin_bottom = 10
+	p.add_theme_stylebox_override("panel", st)
+	var v := VBoxContainer.new()
+	p.add_child(v)
+	var h := _label(13, Color(1.0, 0.78, 0.2))
+	h.text = "★  ACHIEVEMENT UNLOCKED"
+	var t := _label(22, Color.WHITE)
+	t.text = a[0]
+	var d := _label(15, Color(1, 1, 1, 0.7))
+	d.text = a[1]
+	for n in [h, t, d]:
+		v.add_child(n)
+	root.add_child(p)
+	p.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(p, "modulate:a", 1.0, 0.3)
+	tw.tween_interval(3.5)
+	tw.tween_property(p, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(func():
+		p.queue_free()
+		ach_queue.pop_front()
+		_show_ach())
 
 ## Tip card above the minimap.
 func tip(text: String) -> void:
