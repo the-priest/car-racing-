@@ -39,6 +39,7 @@ var prof := {} # perftest: accumulated usec per system
 var profiling := false
 var showroom: Node3D
 var custom_wp := Vector2.INF # waypoint pinned on the full map
+var welcomed := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -485,6 +486,11 @@ func _on_play() -> void:
 	state = State.PLAY
 	hud.visible = true
 	cam.snap = true
+	if float(Save.data.playtime) >= 1.0 and not welcomed:
+		welcomed = true
+		var ci := int(Save.data.contract)
+		if ci < Career.CONTRACTS.size():
+			hud.message("Next up: chapter %d, %s - %s will call soon (or ring them with %s)" % [ci + 1, Career.CONTRACTS[ci].title, Career.CONTRACTS[ci].caller, Settings.glyph("phone")], 6.0)
 	if float(Save.data.playtime) < 1.0:
 		hud.show_dialogue(Career.PROLOGUE)
 		career.call_timer = 16.0
