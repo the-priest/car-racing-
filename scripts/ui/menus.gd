@@ -298,6 +298,7 @@ func _rebuild(name: String) -> void:
 			"controls": _screen("controls")
 			"credits": _screen("credits")
 			"story": _screen("story")
+			"records": _screen("records")
 			"results": _screen("results")
 	var box: VBoxContainer = screens[name].box
 	_clear(box)
@@ -309,21 +310,23 @@ func _rebuild(name: String) -> void:
 		"controls": _build_controls(box)
 		"credits": _build_credits(box)
 		"story": _build_story(box)
+		"records": _build_records(box)
 
 func _build_main(box: VBoxContainer) -> void:
-	box.add_theme_constant_override("separation", 12)
+	box.add_theme_constant_override("separation", 8)
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 30)
+	spacer.custom_minimum_size = Vector2(0, 6)
 	box.add_child(spacer)
 	_title(box, "VELOCITY\nHEAT", 68)
 	_text(box, "GETAWAY DRIVER  ·  OPEN WORLD", 18, ACCENT)
 	var sp2 := Control.new()
-	sp2.custom_minimum_size = Vector2(0, 14)
+	sp2.custom_minimum_size = Vector2(0, 6)
 	box.add_child(sp2)
 	var started: bool = int(Save.data.contract) > 0 or float(Save.data.playtime) > 30.0
 	_button(box, "CONTINUE" if started else "START CAREER", func(): play_pressed.emit())
 	if started:
 		_button(box, "STORY", func(): show_screen("story"))
+		_button(box, "RECORDS", func(): show_screen("records"))
 	_button(box, "SETTINGS", func(): show_screen("settings"))
 	_button(box, "CONTROLS", func(): show_screen("controls"))
 	_button(box, "CREDITS", func(): show_screen("credits"))
@@ -340,13 +343,14 @@ func _build_main(box: VBoxContainer) -> void:
 	_button(box, "QUIT", func():
 		Save.save_game()
 		get_tree().quit())
-	_text(box, "\nBank  $%s   ·   Story %d / %d" % [HUD._fmt(int(Save.data.cash)), mini(int(Save.data.contract), Career.CONTRACTS.size()), Career.CONTRACTS.size()], 18)
+	_text(box, "Bank  $%s   ·   Story %d / %d" % [HUD._fmt(int(Save.data.cash)), mini(int(Save.data.contract), Career.CONTRACTS.size()), Career.CONTRACTS.size()], 18)
 
 func _build_pause(box: VBoxContainer) -> void:
 	_title(box, "PAUSED")
 	var career: Career = game.career
 	_button(box, "RESUME", func(): back())
 	_button(box, "STORY", func(): show_screen("story"))
+	_button(box, "RECORDS", func(): show_screen("records"))
 	if career.race != null or not career.active.is_empty():
 		_button(box, "ABANDON " + ("RACE" if career.race else "JOB"), func():
 			close_all()
@@ -615,6 +619,34 @@ func _build_story(box: VBoxContainer) -> void:
 		_text(box, "\nNEXT:  %s  ·  call from %s" % [c2.title.to_upper(), c2.caller], 18, ACCENT)
 		_text(box, str(brief[0]), 16, Color(1, 1, 1, 0.75))
 		_text(box, "Wait for the call in free roam, or press %s to call your contact." % Settings.glyph("phone"), 15)
+	_button(box, "BACK", func(): back())
+
+func _build_records(box: VBoxContainer) -> void:
+	_title(box, "RECORDS")
+	var best: Dictionary = Save.data.best
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 40)
+	var row := func(a: String, b: String, col := Color.WHITE) -> void:
+		for t in [a, b]:
+			var l := Label.new()
+			l.text = t
+			l.add_theme_font_size_override("font_size", 17)
+			l.add_theme_color_override("font_color", Color(1, 1, 1, 0.6) if t == a else col)
+			grid.add_child(l)
+	for id in Career.RACES:
+		var t: float = float(best.get(id, INF))
+		row.call(str(Career.RACES[id].name), HUD._time(t) if t < INF else "-", ACCENT if t < INF else Color(1, 1, 1, 0.35))
+	for i in Career.DRIFT_ZONES.size():
+		var v := int(best.get("drift%d" % i, 0))
+		row.call("Drift: " + str(Career.DRIFT_ZONES[i].name), (HUD._fmt(v) + " pts") if v > 0 else "-", ACCENT if v > 0 else Color(1, 1, 1, 0.35))
+	for i in Career.SPEED_TRAPS.size():
+		var k := int(best.get("trap%d" % i, 0))
+		row.call("Speed trap %d" % (i + 1), ("%d km/h" % k) if k > 0 else "-", ACCENT if k > 0 else Color(1, 1, 1, 0.35))
+	row.call("Races won", str(int(Save.data.races_won)))
+	row.call("Police escapes", str(int(Save.data.heat_escapes)))
+	row.call("Time played", HUD._time(float(Save.data.playtime)).split(".")[0])
+	box.add_child(grid)
 	_button(box, "BACK", func(): back())
 
 func _build_credits(box: VBoxContainer) -> void:

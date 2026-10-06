@@ -1191,6 +1191,11 @@ func _review() -> void:
 	menus.show_screen("story")
 	await _snap("r02_story")
 	menus.back()
+	menus.show_screen("records")
+	await _snap("r02b_records")
+	menus.back()
+	if OS.has_environment("REVIEW_MENU_ONLY"):
+		return
 	_on_play()
 	traffic.set_count(0)
 	# Armored Run: skip to the takedown, look at the truck.
