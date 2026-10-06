@@ -306,6 +306,10 @@ func _beam(c: Color, radius: float) -> MeshInstance3D:
 	gt.fill_to = Vector2(0, 0)
 	m.albedo_texture = gt
 	m.disable_fog = true
+	# Fade out up close so standing in a beam doesn't tint the whole screen.
+	m.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	m.distance_fade_min_distance = radius + 3.0
+	m.distance_fade_max_distance = radius + 30.0
 	cyl.material = m
 	var mi := MeshInstance3D.new()
 	mi.mesh = cyl
@@ -815,6 +819,15 @@ func _complete_contract(ok: bool, why := "") -> void:
 					get_tree().create_timer(4.0, false).timeout.connect(func():
 						if sid == game.session_id:
 							message.emit("NEW CARS UNLOCKED: tier %s · visit your garage" % tier, 4.0, ""))
+			# Cars with their own unlock chapter (the Vespera RSR) get a word from Dex.
+			for id in Data.CARS:
+				if Data.CARS[id].has("unlock") and Data.unlock_chapter(id) == story_idx + 1:
+					var sid2: int = game.session_id
+					var cname: String = Data.CARS[id].name
+					get_tree().create_timer(9.0, false).timeout.connect(func():
+						if sid2 == game.session_id and idle():
+							dialogue.emit(["Dex: Kane's raid missed one thing. I had it under a tarp at my cousin's: the %s. Endurance racer with plates, wing like a dining table." % cname,
+								"Dex: Fastest thing in Solano Bay and it turns like it's on rails. If you're doing the Reserve, do it in that. It's in your garage list. Bring money."]))
 			if not Save.data.contracts_done.has(c.title):
 				Save.data.contracts_done.append(c.title)
 		Save.save_game()

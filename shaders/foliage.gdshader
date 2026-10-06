@@ -19,7 +19,12 @@ void vertex() {
 void fragment() {
 	vec4 t = texture(leaf_tex, UV);
 	ALBEDO = t.rgb * tint;
-	ALPHA = t.a;
+	// Mipmapping averages leaf coverage away, so distant canopies would thin out to
+	// bare branches. Scale alpha up with the mip level to keep their silhouette.
+	vec2 px = UV * vec2(textureSize(leaf_tex, 0));
+	vec2 ddx = dFdx(px), ddy = dFdy(px);
+	float lod = max(0.5 * log2(max(dot(ddx, ddx), dot(ddy, ddy))), 0.0);
+	ALPHA = t.a * (1.0 + lod * 0.3);
 	ALPHA_SCISSOR_THRESHOLD = 0.42;
 	ROUGHNESS = 0.75;
 	SPECULAR = 0.3;

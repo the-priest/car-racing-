@@ -124,7 +124,7 @@ void fragment() {
 	ground_layer(L_GRASS, wpos.xz, 3.0, mixer, alb, nr);
 	// Dry / lush variation across the hills.
 	float dry = smoothstep(0.5, 0.95, macro * 0.7 + mid * 0.5);
-	vec3 col = alb * mix(vec3(1.2, 1.35, 1.05), vec3(1.7, 1.4, 0.85), dry);
+	vec3 col = alb * mix(vec3(0.95, 1.0, 0.85), vec3(1.4, 1.15, 0.72), dry);
 	vec4 det = nr;
 	vec3 a2; vec4 n2;
 	if (dirtw > 0.01) {

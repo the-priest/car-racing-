@@ -100,13 +100,13 @@ func update(delta: float) -> void:
 		sun.light_energy = maxf(lerpf(0.0, 2.6, smoothstep(-0.05, 0.25, elev)), 0.55 * dusk) * (1.0 - rain * 0.6)
 	else:
 		sun.light_color = Color(0.6, 0.7, 1.0)
-		sun.light_energy = 0.5 * (1.0 - rain * 0.6)
+		sun.light_energy = 0.7 * (1.0 - rain * 0.6)
 	sun.light_volumetric_fog_energy = 1.0 + golden * 2.0
 	# Night ambient: moonlit blue city glow instead of the near-black sky.
 	env.ambient_light_color = Color(0.5, 0.55, 0.65).lerp(Color(0.16, 0.19, 0.3), night)
 	env.ambient_light_sky_contribution = lerpf(0.85, 0.3, night)
 	flash = maxf(0.0, flash - delta * 7.0)
-	env.ambient_light_energy = lerpf(1.25, 0.9, night) + flash * 3.0
+	env.ambient_light_energy = lerpf(1.25, 1.05, night) + flash * 3.0
 	env.background_energy_multiplier = lerpf(1.0, 0.9, night) + flash * 2.0
 	env.tonemap_exposure = lerpf(0.92, 1.45, night) * (1.0 + golden * 0.1)
 	var fog_day := Color(0.66, 0.74, 0.84)

@@ -510,7 +510,7 @@ func message(text: String, secs := 2.5, key := "") -> void:
 		old.queue_free()
 
 func _toast_timer(l: Label, secs: float) -> void:
-	var prev = l.get_meta("tw", null)
+	var prev = l.get_meta("tw") if l.has_meta("tw") else null
 	if prev is Tween and (prev as Tween).is_valid():
 		(prev as Tween).kill()
 	var tw := create_tween()
@@ -753,6 +753,9 @@ func _update(delta: float) -> void:
 		timer_l.text = _time(career.drift_zone_t)
 	elif career.race == null and not police.pursuit and game.custom_wp != Vector2.INF:
 		obj_l.text = "WAYPOINT  ·  %s" % dist_text(game.custom_wp.distance_to(pp2))
+		timer_l.text = ""
+	elif game.tutorial and career.idle():
+		obj_l.text = "" # the tutorial card says what to do
 		timer_l.text = ""
 	elif career.race == null and not police.pursuit:
 		free_t += delta

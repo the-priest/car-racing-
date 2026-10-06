@@ -979,14 +979,14 @@ func _on_play() -> void:
 	hud.visible = true
 	cam.snap = true
 	var first := float(Save.data.playtime) < 1.0
-	if not first and not Save.data.has("tutorial_done"):
-		Save.data.tutorial_done = true # careers from before the tutorial existed
+	# Careers from before the intro existed still get it once, if the story hasn't begun.
+	var intro_due := first or (not bool(Save.data.get("intro_seen", false)) and int(Save.data.contract) == 0)
 	if not first and not welcomed:
 		welcomed = true
 		hud.free_t = 0.0 # show the "NEXT" objective again
-	if first and shots_spec == "":
+	if intro_due and shots_spec == "":
 		_play_intro()
-	elif not bool(Save.data.get("tutorial_done", true)) and tutorial == null and shots_spec == "":
+	elif not bool(Save.data.get("tutorial_done", false)) and tutorial == null and shots_spec == "":
 		start_tutorial()
 
 ## Opening cinematic for a new career, then straight into the tutorial.
@@ -1002,6 +1002,7 @@ func _play_intro() -> void:
 	rain_target = 0.0
 	intro = Intro.new()
 	add_child(intro)
+	Save.data.intro_seen = true
 	intro.finished.connect(func():
 		intro = null
 		if state != State.INTRO:
@@ -2597,6 +2598,8 @@ func _tutorialtest() -> void:
 			last = st
 			for k in acts:
 				Input.action_release(k)
+			if OS.has_environment("SHOT_DIR") and st < 8:
+				await _snap("tut_%d" % st)
 		var name: String = tutorial._steps()[st][0] if st < 8 else ""
 		var ft := float(frames % 600) / 60.0
 		match name:

@@ -6,6 +6,9 @@ render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_sc
 uniform sampler2D noise_a : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D noise_b : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D noise_n : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+// Surface texture arrays (raw sample, sRGB decoded in srgb()).
+uniform sampler2DArray surf_albedo : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2DArray surf_nrh : filter_linear_mipmap_anisotropic, repeat_enable;
 
 global uniform float night;
 global uniform float wetness;
@@ -13,6 +16,10 @@ global uniform float wetness;
 varying vec3 wpos;
 varying vec3 wnrm;
 varying vec4 cust;
+
+vec3 srgb(vec3 c) {
+	return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
+}
 
 float h21(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -37,10 +44,12 @@ void fragment() {
 	vec3 albedo; float rough = 0.85; float metal = 0.0; vec3 emis = vec3(0.0);
 	vec3 nmap = vec3(0.5, 0.5, 1.0);
 	if (roof) {
-		float g = texture(noise_a, wpos.xz * 0.4).r;
-		albedo = vec3(0.16, 0.16, 0.17) * (0.7 + g * 0.5);
-		rough = mix(0.9, 0.2, wetness);
-		nmap = texture(noise_n, wpos.xz * 0.5).rgb;
+		// Gravel-ballast roofs.
+		float g = texture(noise_a, wpos.xz * 0.05).r;
+		albedo = srgb(texture(surf_albedo, vec3(wpos.xz / 3.0, 5.0)).rgb) * (0.7 + g * 0.5);
+		vec3 t = texture(surf_nrh, vec3(wpos.xz / 3.0, 5.0)).rgb;
+		rough = mix(t.b, 0.2, wetness);
+		nmap = vec3(t.rg, 1.0);
 	} else {
 		float floor_h = style == 2 ? 3.4 : 3.8;
 		float col_w = style == 0 ? 1.55 : (style == 1 ? 2.7 : 3.1);
@@ -52,6 +61,7 @@ void fragment() {
 
 		// Wall material
 		vec3 wall;
+		vec3 wall_t = vec3(0.5, 0.5, 0.85);
 		if (style == 2) {
 			// Brick courses with mortar
 			vec2 b = vec2(u / 0.25 + step(1.0, mod(floor(v / 0.075), 2.0)) * 0.5, v / 0.075);
@@ -60,7 +70,13 @@ void fragment() {
 			vec3 brick = mix(vec3(0.33, 0.13, 0.08), vec3(0.47, 0.23, 0.15), h21(floor(b) + seed)) * mix(0.8, 1.0, pal);
 			wall = mix(brick, vec3(0.42, 0.40, 0.36), clamp(mortar, 0.0, 1.0));
 		} else if (style == 1) {
-			wall = mix(vec3(0.46, 0.45, 0.42), vec3(0.62, 0.6, 0.55), pal) * (0.82 + grime * 0.3);
+			// Precast concrete panels: real concrete texture, panel seams per floor.
+			vec3 conc = srgb(texture(surf_albedo, vec3(vec2(u, v) / 4.0 + seed, 6.0)).rgb) / 0.33;
+			// Palette: cream, sandstone, warm grey, terracotta, blue-grey.
+			int pi = int(pal * 4.99);
+			vec3 pc = pi == 0 ? vec3(0.62, 0.57, 0.47) : (pi == 1 ? vec3(0.55, 0.47, 0.36) : (pi == 2 ? vec3(0.5, 0.49, 0.46) : (pi == 3 ? vec3(0.48, 0.29, 0.21) : vec3(0.37, 0.41, 0.45))));
+			wall = pc * conc * (0.82 + grime * 0.3);
+			wall_t = texture(surf_nrh, vec3(vec2(u, v) / 4.0 + seed, 6.0)).rgb;
 		} else {
 			wall = vec3(0.16, 0.17, 0.18) * (0.9 + grime * 0.2);
 		}
@@ -92,14 +108,40 @@ void fragment() {
 		float aa = clamp(1.6 - max(fwidth(cell.x), fwidth(cell.y)) * 3.0, 0.0, 1.0);
 		win = mix(style == 0 ? 0.75 : 0.3, win, aa);
 		float pane = h21(id + seed);
-		vec3 tint = style == 0 ? mix(vec3(0.05, 0.09, 0.12), vec3(0.09, 0.12, 0.13), pal) : vec3(0.05, 0.06, 0.07);
+		vec3 tint = style == 0 ? mix(vec3(0.05, 0.09, 0.12), vec3(0.09, 0.12, 0.13), pal) : vec3(0.08, 0.09, 0.1);
 		// Slight per-pane normal tilt gives imperfect, believable reflections.
 		vec3 glass_n = normalize(vec3(0.5 + (pane - 0.5) * 0.025, 0.5 + (h21(id + seed + 3.1) - 0.5) * 0.025, 1.0));
 
-		albedo = mix(wall, tint, win);
-		rough = mix(mix(0.85, 0.35, wetness), 0.04 + pane * 0.05, win);
-		metal = mix(style == 0 ? 0.3 : 0.0, style == 0 ? 0.85 : 0.5, win);
-		nmap = mix(nmap, glass_n, win);
+		// Floor ledges: a lighter band with a bevelled top on every storey.
+		if (style != 0 && !ground) {
+			float ledge = (1.0 - step(0.07, f.y)) * aa;
+			wall = mix(wall, wall * 1.18 + 0.02, ledge);
+			if (ledge > 0.5) nmap = vec3(0.5, mix(0.5, 0.85, smoothstep(0.03, 0.07, f.y)), 1.0);
+		}
+		// Glass: unlit rooms show a hint of curtains/furniture behind a reflective pane.
+		vec3 inside = mix(vec3(0.04, 0.045, 0.05), vec3(0.14, 0.11, 0.08), h21(id + seed + 7.0) * step(0.5, h21(id + seed + 8.0)));
+		vec3 glass = mix(tint, inside, style == 0 ? 0.15 : 0.5);
+		// Mullions and transoms split each window; frame colour per building.
+		float mull = 0.0;
+		if (!ground && style != 2) {
+			float fx = style == 0 ? fract(f.x * 2.0) : f.x;
+			mull = max(1.0 - smoothstep(0.0, 0.025 * (style == 0 ? 2.0 : 1.0), abs(fx - 0.5)), 1.0 - smoothstep(0.0, 0.03, abs(f.y - 0.72)));
+		}
+		vec3 frame = h21(vec2(seed, 2.0)) > 0.5 ? vec3(0.06, 0.06, 0.065) : vec3(0.55, 0.55, 0.53);
+		glass = mix(glass, frame, mull * aa);
+		albedo = mix(wall, glass, win);
+		if (style == 1 && nmap.x == 0.5 && nmap.y == 0.5) nmap = vec3(wall_t.rg, 1.0);
+		rough = mix(mix(wall_t.b, 0.35, wetness), mix(0.03 + pane * 0.05, 0.5, mull), win);
+		metal = mix(style == 0 ? 0.3 : 0.0, mix(0.9, 0.3, mull), win);
+		nmap = mix(nmap, glass_n, win * (1.0 - mull));
+		// Shop fronts: a coloured fascia sign over the ground floor windows.
+		if (ground && style != 0) {
+			float fascia = step(0.86, f.y) * step(0.1, f.x) * step(f.x, 0.9);
+			vec3 sc = vec3(h21(vec2(id.x, seed)), h21(vec2(id.x + 3.0, seed)), h21(vec2(id.x + 7.0, seed)));
+			sc = normalize(sc + 0.05) * 0.6;
+			albedo = mix(albedo, sc, fascia);
+			emis += sc * fascia * night * 0.7;
+		}
 
 		// Interior lights at night: random rooms, warm/cool, with ceiling falloff.
 		float lit_chance = ground ? 0.8 : mix(0.18, 0.42, h21(vec2(id.y, seed)));
@@ -107,8 +149,10 @@ void fragment() {
 		vec3 room = mix(vec3(1.0, 0.62, 0.3), vec3(0.62, 0.78, 1.0), step(0.8, h21(id + seed + 5.0))) * (0.5 + 0.5 * h21(id + seed + 2.0));
 		if (ground) room = mix(vec3(1.0, 0.8, 0.55), vec3(0.6, 0.9, 1.0), step(0.5, h21(vec2(id.x, seed))));
 		float falloff = 0.55 + 0.45 * smoothstep(0.2, 0.95, f.y);
-		float blinds = (style == 1 && h21(id + seed + 9.0) > 0.7) ? (0.6 + 0.4 * step(0.5, fract(f.y * 14.0))) : 1.0;
-		emis = room * lit * falloff * blinds * night * (ground ? 1.4 : 0.75) * (0.6 + pane * 0.6);
+		// Half-drawn blinds in some rooms (soft, not stripes) and furniture silhouettes low down.
+		float blinds = (style == 1 && h21(id + seed + 9.0) > 0.7) ? mix(0.35, 1.0, smoothstep(0.55, 0.6, 1.0 - f.y)) : 1.0;
+		blinds *= mix(0.55, 1.0, clamp(smoothstep(0.3, 0.45, f.y) + step(0.5, h21(id + seed + 4.0)) * 0.5, 0.0, 1.0));
+		emis += room * lit * falloff * blinds * night * (ground ? 0.2 : 0.12) * (0.55 + pane * 0.6) * (1.0 - mull);
 	}
 	ALBEDO = albedo;
 	ROUGHNESS = rough;

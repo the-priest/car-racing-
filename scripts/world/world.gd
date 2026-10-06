@@ -687,6 +687,8 @@ func _build_buildings(root: Node3D) -> void:
 	mat.set_shader_parameter("noise_a", noise_a)
 	mat.set_shader_parameter("noise_b", noise_b)
 	mat.set_shader_parameter("noise_n", noise_n)
+	mat.set_shader_parameter("surf_albedo", SURF_ALBEDO)
+	mat.set_shader_parameter("surf_nrh", SURF_NRH)
 	var box := BoxMesh.new()
 	box.size = Vector3.ONE
 	box.material = mat

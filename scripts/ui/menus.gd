@@ -709,7 +709,7 @@ func _build_settings(box: VBoxContainer) -> void:
 	match settings_tab:
 		0:
 			if game.tutorial == null and (game.state == game.State.PAUSED or game.state == game.State.MENU):
-				var queued: bool = game.state == game.State.MENU and not bool(Save.data.get("tutorial_done", true))
+				var queued: bool = game.state == game.State.MENU and not bool(Save.data.get("tutorial_done", false))
 				_button(box, "REPLAY TUTORIAL" + ("  ·  starts when you drive" if queued else ""), func():
 					if game.state == game.State.PAUSED:
 						close_all()
