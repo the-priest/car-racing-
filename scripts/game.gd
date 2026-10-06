@@ -543,6 +543,15 @@ func skip_time() -> void:
 	persist()
 
 func reset_to_road() -> void:
+	if career.race and career.race.countdown <= 0.0:
+		# Back onto the race line, facing the right way.
+		var r: RaceSession = career.race
+		var c := r.path.at(r.p_idx)
+		var d := r.path.dir(r.p_idx)
+		var y := 0.6 if world.in_city(c.x, c.y) else world.ground(c.x, c.y) + 0.9
+		player.reset_to(Transform3D(Basis.looking_at(Vector3(d.x, 0, d.y), Vector3.UP), Vector3(c.x, y, c.y)))
+		cam.snap = true
+		return
 	player.reset_to(world.respawn_at(player.global_position))
 	cam.snap = true
 

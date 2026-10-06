@@ -109,18 +109,20 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		var ai := AIDriver.new(car, path, skill, float(k % 3 - 1) * 2.2)
 		ai.idx = path.nearest(Vector2(car.global_position.x, car.global_position.z), start_idx, 12, 12)
 		var rname: String = boss.name if is_boss else RIVAL_NAMES[k % RIVAL_NAMES.size()]
-		if is_boss:
-			var tag := Label3D.new()
-			tag.text = rname
-			tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			tag.no_depth_test = true
-			tag.fixed_size = true
-			tag.pixel_size = 0.0022
-			tag.font_size = 30
-			tag.outline_size = 10
-			tag.modulate = Color(1.0, 0.4, 0.6)
-			tag.position = Vector3(0, 2.6, 0)
-			car.add_child(tag)
+		# Name tags: bosses stand out; regular rivals get a small tag that fades out with distance.
+		var tag := Label3D.new()
+		tag.text = rname.to_upper()
+		tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		tag.no_depth_test = true
+		tag.fixed_size = true
+		tag.pixel_size = 0.0022
+		tag.font_size = 30 if is_boss else 18
+		tag.outline_size = 10 if is_boss else 6
+		tag.modulate = Color(1.0, 0.4, 0.6) if is_boss else Color(1, 1, 1, 0.75)
+		tag.position = Vector3(0, 2.6 if is_boss else 2.2, 0)
+		if not is_boss:
+			tag.visibility_range_end = 140.0
+		car.add_child(tag)
 		rivals.append({"car": car, "ai": ai, "name": rname, "finished": false, "time": INF, "boss": is_boss})
 		game.on_car_spawned(car)
 	game.on_race_start()
