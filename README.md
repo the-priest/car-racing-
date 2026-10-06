@@ -35,6 +35,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 - **Cars**:
   - modern Vanta builds (realistic scanned-quality model)
   - procedural classics: Stallion '69 muscle, Wedge '78, and a 900 hp Stallion restomod
+  - higher tiers unlock as the story progresses (C after chapter 1, B after 3, A after 6, S after 9)
   - **9 upgrade categories** up to 5 levels; a fully built Vanta Zero does 0-100 km/h in about 1 second and tops out around 500 km/h
 
   The garage has stat bars, paint, and studio lighting.
@@ -61,7 +62,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
    godot --headless --path . --export-release "Linux" build/linux/VelocityHeat.x86_64
    ./build/linux/VelocityHeat.x86_64
    ```
-   Windows: `mkdir -p build/windows` then `godot --headless --path . --export-release "Windows" build/windows/VelocityHeat.exe`
+   Windows: `mkdir -p build/windows` then `godot --headless --path . --export-release "Windows" build/windows/VelocityHeat.exe` (a single self-contained .exe)
    (Export templates must match your Godot version exactly, e.g. 4.7.2.)
 4. Or just open the project in the Godot editor and press **F5**.
 
