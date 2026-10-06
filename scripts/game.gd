@@ -489,6 +489,21 @@ func _on_career_finished(res: Dictionary) -> void:
 	if res.get("contract_next", false):
 		hud.big("VICTORY", 2.0)
 		return
+	if shots_spec == "":
+		# A beat to enjoy the finish before the results card.
+		var t: String
+		if res.kind == "race":
+			t = "VICTORY" if int(res.place) == 1 else ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH"][clampi(int(res.place) - 1, 0, 5)] + " PLACE"
+		else:
+			t = "JOB DONE" if res.ok else "JOB FAILED"
+		hud.big(t, 1.8)
+		if res.ok:
+			slowmo(0.9)
+		await get_tree().create_timer(1.7, true, false, true).timeout
+		while state != State.PLAY:
+			if state == State.MENU:
+				return
+			await get_tree().process_frame
 	state = State.RESULTS
 	get_tree().paused = true
 	menus.show_results(res)
