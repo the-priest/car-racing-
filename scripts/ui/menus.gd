@@ -99,6 +99,15 @@ func _screen(name: String, side := false, scroll_h := 0) -> VBoxContainer:
 	gt.fill_from = Vector2(0.0, 0.5)
 	gt.fill_to = Vector2(0.75, 0.5)
 	shade.texture = gt
+	if not side:
+		# Centred menus blur and darken the game behind them.
+		var blur := ColorRect.new()
+		blur.set_anchors_preset(Control.PRESET_FULL_RECT)
+		blur.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		blur.material = _blur_material()
+		bg.add_child(blur)
+		g.set_color(0, Color(0.01, 0.012, 0.025, 0.45))
+		g.set_color(1, Color(0.01, 0.012, 0.025, 0.45))
 	bg.add_child(shade)
 	var panel := PanelContainer.new()
 	var holder: Control
@@ -139,6 +148,31 @@ func _screen(name: String, side := false, scroll_h := 0) -> VBoxContainer:
 	add_child(bg)
 	screens[name] = {"root": bg, "box": box, "scroll": scroll}
 	return box
+
+var _blur_mat: ShaderMaterial
+
+func _blur_material() -> ShaderMaterial:
+	if _blur_mat:
+		return _blur_mat
+	var sh := Shader.new()
+	sh.code = """shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
+void fragment() {
+	vec2 px = SCREEN_PIXEL_SIZE * 7.0;
+	vec3 acc = vec3(0.0);
+	float w = 0.0;
+	for (int x = -3; x <= 3; x++) {
+		for (int y = -3; y <= 3; y++) {
+			float k = exp(-float(x * x + y * y) / 8.0);
+			acc += texture(screen_tex, SCREEN_UV + vec2(float(x), float(y)) * px).rgb * k;
+			w += k;
+		}
+	}
+	COLOR = vec4(acc / w, 1.0);
+}"""
+	_blur_mat = ShaderMaterial.new()
+	_blur_mat.shader = sh
+	return _blur_mat
 
 func _title(box: Container, text: String, size := 44) -> void:
 	var l := Label.new()
