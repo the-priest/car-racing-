@@ -3,7 +3,7 @@ extends Camera3D
 ## Chase / far chase / bumper / cockpit cameras with drift-follow, speed FOV and shake.
 
 enum Mode { CHASE, FAR, BUMPER, COCKPIT }
-const MODE_NAMES := ["Chase", "Far Chase", "Bumper", "Cockpit"]
+const MODE_NAMES := ["Chase", "Far Chase", "Bumper", "Hood"]
 
 var target: Car
 var world: World
@@ -90,11 +90,13 @@ func _process(delta: float) -> void:
 				desired = xf * Vector3(0, 0.9, 2.6)
 				look_at_pt = xf * Vector3(0, 0.6, 30.0)
 		Mode.COCKPIT:
-			var o2 := Vector3(-0.37, 1.0, 0.02)
+			# Hood camera: over the bonnet, looking slightly down the road.
+			var o2 := target.hood_cam()
 			desired = xf * o2
-			look_at_pt = xf * (o2 + Vector3(sin(orbit) * -10.0, -0.15, -10.0 * cos(orbit)))
+			look_at_pt = xf * (o2 + Vector3(sin(orbit) * -10.0, -0.5, -10.0 * cos(orbit)))
 			if look_back:
-				look_at_pt = xf * (o2 + Vector3(0, 0, 10.0))
+				desired = xf * Vector3(0, 0.9, 2.6)
+				look_at_pt = xf * Vector3(0, 0.6, 30.0)
 	if snap or mode >= Mode.BUMPER:
 		_pos = desired
 		_look = look_at_pt
@@ -114,7 +116,7 @@ func _process(delta: float) -> void:
 		up_vec = b.y
 	if not global_position.is_equal_approx(_look):
 		look_at(_look, up_vec)
-	var tf := base_fov + sp * 16.0 + (9.0 if target.nitro_on else 0.0) + (4.0 if mode == Mode.COCKPIT else 0.0)
+	var tf := base_fov + sp * 16.0 + (9.0 if target.nitro_on else 0.0) + (6.0 if mode == Mode.COCKPIT else 0.0)
 	_fov = lerpf(_fov, tf, 1.0 - exp(-3.0 * delta))
 	fov = _fov
 	RenderingServer.global_shader_parameter_set("cam_pos", global_position)

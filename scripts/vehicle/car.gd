@@ -203,6 +203,40 @@ func _setup_model(paint: Color, detail: bool) -> void:
 	set_paint(paint)
 	_setup_lamps()
 
+var _hood_cam := Vector3.INF
+
+## Hood camera mount in car space: over the middle of the bonnet, just clear of the
+## bodywork, measured from the actual mesh so every body gets a clear view.
+func hood_cam() -> Vector3:
+	if _hood_cam != Vector3.INF:
+		return _hood_cam
+	var pts := PackedVector3Array()
+	var front := -2.0
+	for n in body_root.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if not mi.visible or mi.mesh == null or String(mi.name).begins_with("Interior"):
+			continue
+		var xf := mi.transform
+		var p: Node = mi.get_parent()
+		while p != null and p != self:
+			if p is Node3D:
+				xf = (p as Node3D).transform * xf
+			p = p.get_parent()
+		for si in mi.mesh.get_surface_count():
+			var verts: PackedVector3Array = mi.mesh.surface_get_arrays(si)[Mesh.ARRAY_VERTEX]
+			for v in verts:
+				var w := xf * v
+				front = minf(front, w.z)
+				if absf(w.x) < 0.55:
+					pts.append(w)
+	var cz := front * 0.46
+	var top := 0.9
+	for w in pts:
+		if w.z > cz - 0.45 and w.z < cz + 0.3:
+			top = maxf(top, w.y)
+	_hood_cam = Vector3(0, top + 0.3, cz)
+	return _hood_cam
+
 func _setup_generated(body_id: String, paint: Color) -> void:
 	var pm := StandardMaterial3D.new()
 	paint_mats.append(pm)
