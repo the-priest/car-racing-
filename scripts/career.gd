@@ -456,6 +456,7 @@ func _update_billboards() -> void:
 			continue
 		if p.global_position.distance_to(b.pos + Vector3(0, 1.0, 0)) < 5.0:
 			b.node.visible = false
+			_shatter(b.node, p.linear_velocity)
 			var found: Array = Save.data.get("billboards", []).map(func(x): return int(x))
 			if not found.has(b.i):
 				found.append(b.i)
@@ -467,6 +468,29 @@ func _update_billboards() -> void:
 			game.cam.shake = maxf(game.cam.shake, 0.4)
 			big.emit("BILLBOARD  %d / %d" % [found.size(), BILLBOARD_COUNT], 1.8)
 			message.emit("+$2,000", 2.0)
+
+## Debris burst: copies of the billboard panel pieces fly off and fade.
+func _shatter(node: Node3D, vel: Vector3) -> void:
+	var mat: Material = null
+	for c in node.get_children():
+		if c is MeshInstance3D and (c as MeshInstance3D).material_override is StandardMaterial3D and ((c as MeshInstance3D).material_override as StandardMaterial3D).emission_enabled:
+			mat = (c as MeshInstance3D).material_override
+	for i in 10:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(randf_range(0.5, 1.4), randf_range(0.4, 1.0), 0.08)
+		mi.mesh = bm
+		mi.material_override = mat
+		add_child(mi)
+		var start := node.global_position + Vector3(randf_range(-2.0, 2.0), randf_range(3.6, 5.6), 0)
+		mi.global_position = start
+		var fly := vel * randf_range(0.25, 0.5) + Vector3(randf_range(-6, 6), randf_range(4, 9), randf_range(-6, 6))
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(mi, "global_position", start + fly * 0.6 + Vector3(0, -2.0, 0), 0.6).set_ease(Tween.EASE_OUT)
+		tw.tween_property(mi, "rotation", Vector3(randf() * 8.0, randf() * 8.0, randf() * 8.0), 1.4)
+		tw.chain().tween_property(mi, "global_position", start + fly * 0.9 + Vector3(0, -start.y + node.global_position.y, 0), 0.8).set_ease(Tween.EASE_IN)
+		tw.chain().tween_callback(mi.queue_free)
 
 func drift_zone_score() -> int:
 	return int(game.drift.total + game.drift.chain - drift_zone_base)
