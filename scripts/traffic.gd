@@ -37,7 +37,15 @@ func setup(w: World, count: int) -> void:
 	light_mat.emission = Color(1, 0.95, 0.85)
 	# Pool enough cars for Ultra + heavy density; set_count activates a subset.
 	for i in maxi(count, MAX_POOL):
-		var vis := CarMesh.instance(paints[i % paints.size()], light_mat)
+		# Mix of body styles: mostly modern cars, plus vans and classics.
+		var style: String = ["concept", "concept", "delivery", "concept", "stallion", "concept", "delivery", "wedge"][i % 8]
+		var vis: Node3D
+		if style == "concept":
+			vis = CarMesh.instance(paints[i % paints.size()], light_mat)
+		else:
+			vis = BodyGen.build(style, paints[(i * 3 + 1) % paints.size()])
+			for n in vis.find_children("*", "MeshInstance3D", true, false):
+				(n as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if String(n.name).ends_with("Rim") else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(vis)
 		vis.visible = false
 		cars.append({"node": vis, "a": 0, "b": 0, "t": 0.0, "speed": 0.0, "yaw": 0.0, "pos": Vector3.ZERO,
