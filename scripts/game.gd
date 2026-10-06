@@ -348,6 +348,7 @@ func _build_player(id: String) -> void:
 		player.set_paint(paint)
 	player.set_kit(int(stats.get("aero_lvl", 0)))
 	player.set_rims(int(Save.data.get("rims", {}).get(id, 0)))
+	player.set_underglow(int(Save.data.get("glow", {}).get(id, 0)))
 	_player_car_id = id
 
 func reset_career() -> void:

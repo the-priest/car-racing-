@@ -37,6 +37,10 @@ const POLICE := {"name": "Interceptor", "tier": "-", "price": 0, "mass": 1500.0,
 const RIMS := [["Stock", Color.WHITE, 0.0, 0.0], ["Chrome", Color(0.93, 0.93, 0.95), 1.0, 0.06], ["Gloss black", Color(0.03, 0.03, 0.035), 0.5, 0.2],
 	["Gold", Color(0.85, 0.66, 0.24), 1.0, 0.14], ["Gunmetal", Color(0.24, 0.25, 0.27), 0.9, 0.25], ["Bronze", Color(0.55, 0.36, 0.2), 1.0, 0.2]]
 
+## Underglow: [name, colour]; index 0 = off.
+const GLOWS := [["Off", Color.BLACK], ["Cyan", Color(0.1, 0.85, 1.0)], ["Magenta", Color(1.0, 0.15, 0.7)], ["Lime", Color(0.45, 1.0, 0.2)],
+	["Purple", Color(0.6, 0.25, 1.0)], ["Red", Color(1.0, 0.12, 0.1)], ["White", Color(0.95, 0.95, 1.0)]]
+
 const PAINTS := [
 	Color(0.55, 0.04, 0.06), Color(0.85, 0.12, 0.02), Color(0.95, 0.42, 0.02), Color(0.9, 0.75, 0.05),
 	Color(0.1, 0.5, 0.15), Color(0.02, 0.45, 0.45), Color(0.05, 0.12, 0.55), Color(0.3, 0.08, 0.5),

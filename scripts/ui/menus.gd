@@ -528,6 +528,14 @@ func _build_garage(box: VBoxContainer) -> void:
 			Save.save_game()
 			game.preview_car(garage_sel)
 			show_screen("garage", false))
+		var gi := int(Save.data.get("glow", {}).get(garage_sel, 0))
+		_button(box, "Underglow:  ‹ %s ›" % Data.GLOWS[gi][0], func():
+			var ng: Dictionary = Save.data.get("glow", {}).duplicate()
+			ng[garage_sel] = (gi + 1) % Data.GLOWS.size()
+			Save.data.glow = ng
+			Save.save_game()
+			game.preview_car(garage_sel)
+			show_screen("garage", false))
 	_button(box, "BACK", func(): back())
 
 ## Stat bar: stock value in white, upgrade gain in accent colour.

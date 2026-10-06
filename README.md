@@ -45,7 +45,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - higher tiers unlock as the story progresses (C after chapter 1, B after 3, A after 6, S after 9)
   - **9 upgrade categories** up to 5 levels; a fully built Vanta Zero does 0-100 km/h in about 1 second and tops out around 500 km/h
 
-  The garage has stat bars, paint, rim finishes (chrome, gold, black, gunmetal, bronze) and studio lighting. Aero upgrades add visible rear wings, and turbo upgrades add whistle and blow-off sounds.
+  The garage has stat bars, paint, rim finishes (chrome, gold, black, gunmetal, bronze), neon underglow and studio lighting. Aero upgrades add visible rear wings, and turbo upgrades add whistle and blow-off sounds.
 - **6 × 6 km open world**:
   - downtown grid with skyscrapers and tree-lined streets
   - coastal highway ring

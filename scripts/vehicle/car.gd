@@ -313,6 +313,41 @@ func set_rims(idx: int) -> void:
 				if info.rim:
 					m.set_surface_override_material(i, mat if mat else info.orig)
 
+## Neon underglow (Data.GLOWS index; 0 = off): a light under the car plus a glowing strip.
+func set_underglow(idx: int) -> void:
+	var old := get_node_or_null("Underglow")
+	if old:
+		old.queue_free()
+	if idx <= 0 or idx >= Data.GLOWS.size():
+		return
+	var c: Color = Data.GLOWS[idx][1]
+	var root := Node3D.new()
+	root.name = "Underglow"
+	add_child(root)
+	for z in [-1.0, 1.0]:
+		var l := OmniLight3D.new()
+		l.light_color = c
+		l.light_energy = 3.4
+		l.omni_range = 3.8
+		l.omni_attenuation = 1.4
+		l.shadow_enabled = false
+		l.position = Vector3(0, 0.12, z)
+		root.add_child(l)
+	var strip := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(1.5, 0.02, 3.4)
+	strip.mesh = bm
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = c
+	m.emission_enabled = true
+	m.emission = c
+	m.emission_energy_multiplier = 3.0
+	strip.material_override = m
+	strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	strip.position = Vector3(0, 0.2, 0.05)
+	root.add_child(strip)
+
 ## Visual body kit from upgrades: Aero 2 adds a low lip wing, Aero 3 a tall GT wing.
 func set_kit(aero_lvl: int) -> void:
 	var old := get_node_or_null("KitWing")
