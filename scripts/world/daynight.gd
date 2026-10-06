@@ -87,18 +87,23 @@ func update(delta: float) -> void:
 	var golden := (1.0 - smoothstep(0.05, 0.35, elev)) * (1.0 - night)
 	var moon := Vector3(-0.35, 0.62, -0.7).normalized()
 	var light_dir := sd if night < 0.5 else moon
+	if night < 0.5:
+		# Lift the low dusk sun toward the moon so roads don't fall into grazing light.
+		light_dir = sd.slerp(moon, smoothstep(0.05, 0.5, night) * 0.8).normalized()
 	sun.look_at_from_position(Vector3.ZERO, -light_dir, Vector3.UP if absf(light_dir.y) < 0.99 else Vector3.FORWARD)
 	if night < 0.5:
 		var warm := Color(1.0, 0.55, 0.28).lerp(Color(1.0, 0.96, 0.9), smoothstep(0.02, 0.4, elev))
-		sun.light_color = warm
-		sun.light_energy = lerpf(0.0, 2.6, smoothstep(-0.05, 0.25, elev)) * (1.0 - rain * 0.6)
+		# Twilight fill: blend toward the moonlight so dusk never goes pitch black.
+		var dusk := smoothstep(0.05, 0.5, night)
+		sun.light_color = warm.lerp(Color(0.6, 0.7, 1.0), dusk)
+		sun.light_energy = maxf(lerpf(0.0, 2.6, smoothstep(-0.05, 0.25, elev)), 0.55 * dusk) * (1.0 - rain * 0.6)
 	else:
 		sun.light_color = Color(0.6, 0.7, 1.0)
 		sun.light_energy = 0.5 * (1.0 - rain * 0.6)
 	sun.light_volumetric_fog_energy = 1.0 + golden * 2.0
 	# Night ambient: moonlit blue city glow instead of the near-black sky.
-	env.ambient_light_color = Color(0.16, 0.19, 0.3)
-	env.ambient_light_sky_contribution = lerpf(1.0, 0.3, night)
+	env.ambient_light_color = Color(0.5, 0.55, 0.65).lerp(Color(0.16, 0.19, 0.3), night)
+	env.ambient_light_sky_contribution = lerpf(0.85, 0.3, night)
 	env.ambient_light_energy = lerpf(1.25, 0.9, night)
 	env.background_energy_multiplier = lerpf(1.0, 0.9, night)
 	env.tonemap_exposure = lerpf(0.92, 1.45, night) * (1.0 + golden * 0.1)

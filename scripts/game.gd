@@ -877,7 +877,7 @@ func _run_shots(spec: String) -> void:
 	if OS.has_environment("SHOT_MISSION"):
 		career.call_timer = 0.0
 		await _frames(3)
-		career.answer_phone()
+		hud.show_dialogue(career.answer_phone())
 	for item in spec.split(";"):
 		var p := item.split(":")
 		# name:x:z:yaw:hour:cammode:rain:speed
@@ -900,7 +900,11 @@ func _run_shots(spec: String) -> void:
 		if showcase:
 			cam.mode = CameraRig.Mode.CHASE
 			menu_t = 2.2
-		for i in 90:
+		var nframes := 90
+		if OS.has_environment("SHOT_CARD"):
+			hud.title_card("ACT II  ·  THE CREW", "ARMORED RUN", "CHAPTER 5  ·  MARA")
+			nframes = 25
+		for i in nframes:
 			if spd > 0.0:
 				player.linear_velocity = -player.global_transform.basis.z * spd
 			player.input.throttle = 0.6 if spd > 0.0 else 0.0

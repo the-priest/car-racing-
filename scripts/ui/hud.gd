@@ -309,9 +309,15 @@ func message(text: String, secs := 2.5) -> void:
 ## Cinematic title card for a new job: act line, big title, subtitle; fades out.
 func title_card(top: String, title: String, sub: String) -> void:
 	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.position = Vector2(-500, -190)
-	box.custom_minimum_size = Vector2(1000, 0)
+	# Created at runtime: anchor to the centre with explicit offsets.
+	box.anchor_left = 0.5
+	box.anchor_right = 0.5
+	box.anchor_top = 0.5
+	box.anchor_bottom = 0.5
+	box.offset_left = -500
+	box.offset_right = 500
+	box.offset_top = -200
+	box.offset_bottom = -40
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var a := _label(20, ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
 	a.text = top
@@ -402,7 +408,7 @@ func _update(delta: float) -> void:
 	else:
 		heat_l.text = ""
 	var h: float = game.daynight.hour
-	clock_l.text = "%02d:%02d  %s%s" % [int(h), int(fmod(h, 1.0) * 60.0), "NIGHT" if game.daynight.night > 0.5 else "DAY", "  RAIN" if game.daynight.rain > 0.3 else ""]
+	clock_l.text = "%02d:%02d  %s%s" % [int(h), int(fmod(h, 1.0) * 60.0), ("NIGHT" if game.daynight.night > 0.75 else ("DUSK" if h > 12.0 else "DAWN") if game.daynight.night > 0.15 else "DAY"), "  RAIN" if game.daynight.rain > 0.3 else ""]
 	pursuit_box.visible = police.pursuit
 	if police.pursuit:
 		pursuit_l.text = ("BUSTED IN %.1f" % maxf(0.0, 4.0 - police.bust)) if police.bust > 0.3 else ("EVADING..." if police.cooldown > 0.0 else "PURSUIT")
