@@ -226,8 +226,10 @@ func _fit_terrain_to_roads() -> void:
 	var cap := PackedFloat32Array()
 	cap.resize(count)
 	cap.fill(INF)
-	const REACH := 16.0
+	const REACH := 48.0 # how far from a road edge the shoulders reshape the ground
 	const CAP_REACH := 12.0 # > one heightmap cell diagonal (8 m * sqrt 2)
+	const VERGE := 12.0 # flat verge, level with the road, beyond each edge
+	const BANK := 0.4 # steepest shoulder slope after the verge (about 22 degrees)
 	for ri in d.roads.size():
 		var r: Dictionary = d.roads[ri]
 		var pts: Array = r.pts
@@ -251,7 +253,8 @@ func _fit_terrain_to_roads() -> void:
 				var z := -HALF + gj * CELL
 				for gi in range(i0, i1 + 1):
 					var x := -HALF + gi * CELL
-					var t := clampf(((x - a.x) * tx + (z - a.z) * tz) / l2, 0.0, 1.0)
+					var t_raw := ((x - a.x) * tx + (z - a.z) * tz) / l2
+					var t := clampf(t_raw, 0.0, 1.0)
 					var dd := Vector2(x - (a.x + tx * t), z - (a.z + tz * t)).length()
 					var e := dd - hw
 					if e > REACH:
@@ -263,7 +266,10 @@ func _fit_terrain_to_roads() -> void:
 					if e < best_e[v]:
 						best_e[v] = e
 						best_h[v] = rh
-					if e <= CAP_REACH and rh < cap[v]:
+					# Only cap against the stretch of road this point actually sits beside;
+					# a neighbouring segment further down a slope would drag the ground
+					# under the road far too low.
+					if e <= CAP_REACH and t_raw > -0.02 and t_raw < 1.02 and rh < cap[v]:
 						cap[v] = rh
 	height_delta = PackedFloat32Array()
 	height_delta.resize(count)
@@ -274,7 +280,13 @@ func _fit_terrain_to_roads() -> void:
 		if city:
 			continue
 		var orig := heights[v]
-		var h := lerpf(best_h[v], orig, smoothstep(3.0, REACH, best_e[v]))
+		# Level verge next to the road, then a gentle bank up or down to the natural
+		# ground: no cliffs off the road edge and no roads perched on ridges.
+		var e := best_e[v]
+		var room := maxf(e - VERGE, 0.0) * BANK
+		var h := best_h[v] + clampf(orig - best_h[v], -room, room)
+		# Ease back into the untouched hillside so cuts never end in a sheer wall.
+		h = lerpf(h, orig, smoothstep(REACH * 0.45, REACH, e))
 		h = minf(h, cap[v])
 		heights[v] = h
 		height_delta[v] = h - orig

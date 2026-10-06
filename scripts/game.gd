@@ -326,6 +326,45 @@ func _ready() -> void:
 				var hit := space.intersect_ray(q)
 				out.append("%.2f%s" % [hit.position.y, str(hit.collider.get_meta("surface", "?")).substr(0, 1)] if not hit.is_empty() else "-")
 			print("[probe] ", ln, " ", " ".join(out))
+		# Shoulders: how far the ground drops (or rises) just outside each road edge.
+		for ri in world.d.roads.size():
+			var r: Dictionary = world.d.roads[ri]
+			var pts: Array = r.pts
+			var hw: float = r.hw
+			var n := pts.size() / 3
+			var cnt := 0
+			var bad1 := 0
+			var bad2 := 0
+			var worst := 0.0
+			var worst_at := Vector2.ZERO
+			for i in (n if r.closed else n - 1):
+				var j := (i + 1) % n
+				var a := Vector3(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2])
+				var b := Vector3(pts[j * 3], pts[j * 3 + 1], pts[j * 3 + 2])
+				var dv := Vector2(b.x - a.x, b.z - a.z)
+				if dv.length() < 0.01:
+					continue
+				var left := Vector2(-dv.y, dv.x).normalized()
+				for side in [-1.0, 1.0]:
+					for off in [1.0, 3.0, 6.0]:
+						var p2: Vector2 = Vector2(a.x, a.z) + left * float(side) * (hw + float(off))
+						if absf(p2.x) < 680 and absf(p2.y) < 680:
+							continue
+						var deck := a.y + 0.07
+						var g := world.ground(p2.x, p2.y)
+						var drop := deck - g
+						cnt += 1
+						if absf(drop) > 0.35 * float(off) + 0.15:
+							bad1 += 1
+						if drop > 0.6:
+							bad2 += 1
+						if absf(drop) > absf(worst):
+							worst = drop
+							worst_at = p2
+			print("[shoulder] %s samples=%d steep=%d drops>0.6m=%d worst=%.2f at %s" % [r.name, cnt, bad1, bad2, worst, worst_at.round()])
+		if OS.has_environment("NO_SCAN"):
+			get_tree().quit()
+			return
 		# Full scan: every road, across its width, every 2 m. Compares the first
 		# surface a ray from above hits against the deck height the road should have.
 		var total := 0
