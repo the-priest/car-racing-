@@ -401,6 +401,9 @@ func _random_contract(seed_idx: int) -> Dictionary:
 			"steps": [{"goto": a, "label": "Collect the package at " + LOC_NAMES[a]}, {"goto": b, "label": "Deliver it to " + LOC_NAMES[b], "time": int(45 + d / 22.0), "heat_mid": 1 + randi() % 2}],
 			"outro": ["Dex: Right on time. You're spoiling me."]}
 	elif kind == 2:
+		var far: Array = keys.filter(func(k): return pos_of(k).distance_to(pos_of(a)) > 1200.0)
+		if not far.is_empty():
+			b = far[randi() % far.size()]
 		return {"title": "Cash Truck", "caller": "Mara", "reward": 20000 + randi() % 10000,
 			"brief": ["Mara: Cash truck rolling out of %s. Stop it, the crew does the rest." % LOC_NAMES[a]],
 			"steps": [{"goto": a, "label": "Get to " + LOC_NAMES[a]}, {"takedown": "armored", "from": a, "to": b, "hits": 5, "label": "Ram the armored truck"},
