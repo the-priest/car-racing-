@@ -97,6 +97,7 @@ func _physics_process(dt: float) -> void:
 			if hits >= need:
 				disabled = true
 	contact = touching
+	tag.visible = d > 28.0 or disabled
 	if disabled:
 		car.input.throttle = 0.0
 		car.input.brake = 1.0

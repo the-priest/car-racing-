@@ -4,6 +4,7 @@ extends CanvasLayer
 
 const ACCENT := Color(1.0, 0.48, 0.1)
 const CYAN := Color(0.1, 0.78, 1.0)
+const ROUTE_COL := Color(0.62, 0.45, 1.0) # GPS route: violet, distinct from the orange highway
 const MAP_TEX := preload("res://assets/world/map.png")
 
 var game: Node
@@ -518,7 +519,7 @@ static func map_markers(game: Node, full: bool) -> Array:
 			out.append([m2.pos, Color(0.3, 0.75, 1.0), "race", str(Career.RACES[m2.id].name)])
 	if free or full:
 		for tp in Career.SPEED_TRAPS:
-			out.append([tp, Color(0.85, 0.45, 1.0), "trap", "Speed trap" if full else ""])
+			out.append([tp, Color(0.95, 0.95, 0.95), "trap", "Speed trap" if full else ""])
 	if career.race:
 		for r in career.race.rivals:
 			out.append([Vector2(r.car.global_position.x, r.car.global_position.z), Color(1, 0.35, 0.45), "rival", ""])
@@ -648,7 +649,7 @@ void fragment() {
 				if b.distance_to(center) > rim:
 					b = center + (b - center).limit_length(rim)
 				ci.draw_line(a, b, Color(0, 0, 0, 0.85), 9.0, true)
-				ci.draw_line(a, b, Color(1.0, 0.78, 0.1), 5.0, true)
+				ci.draw_line(a, b, ROUTE_COL, 5.0, true)
 		for mk in HUD.map_markers(game, false):
 			var p: Vector2 = to_map.call(mk[0])
 			var clamped := p.distance_to(center) > rim
@@ -710,7 +711,7 @@ class BigMap extends Control:
 		for i in range(route.size() - 1):
 			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), Color(0, 0, 0, 0.85), 8.0, true)
 		for i in range(route.size() - 1):
-			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), Color(1.0, 0.78, 0.1), 4.0, true)
+			draw_line(to_map.call(route[i]), to_map.call(route[i + 1]), ROUTE_COL, 4.0, true)
 		var car: Car = game.player
 		var pos := Vector2(car.global_position.x, car.global_position.z)
 		for mk in HUD.map_markers(game, true):
@@ -722,14 +723,14 @@ class BigMap extends Control:
 				if mk[2] == "mission":
 					txt += "  (" + HUD.dist_text((mk[0] as Vector2).distance_to(pos)) + ")"
 				var fs := 20 if mk[2] == "mission" else 16
-				var tp := p + Vector2(sz + 8, 6)
+				var tp := p + Vector2(sz + 8, -12 if mk[2] == "mission" else 6)
 				draw_string_outline(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color.BLACK)
 				draw_string(font, tp, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, mk[1])
 		var fwd := -car.global_transform.basis.z
 		var pp: Vector2 = to_map.call(pos)
 		HUD.draw_player(self, pp, atan2(fwd.x, -fwd.z), 14.0)
-		draw_string_outline(font, pp + Vector2(20, -14), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color.BLACK)
-		draw_string(font, pp + Vector2(20, -14), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.15, 0.9, 1.0))
+		draw_string_outline(font, pp + Vector2(-20, 36), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 5, Color.BLACK)
+		draw_string(font, pp + Vector2(-20, 36), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(0.15, 0.9, 1.0))
 		# Legend
 		var lx := size.x - 330.0
 		var ly := 90.0
@@ -742,7 +743,7 @@ class BigMap extends Control:
 			obj = "Race in progress"
 		draw_multiline_string(font, Vector2(lx, ly + 10), obj, HORIZONTAL_ALIGNMENT_LEFT, 300, 18, -1, Color(1, 0.85, 0.3))
 		ly += 110.0
-		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.85, 0.45, 1.0), "Speed trap"]]
+		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.95, 0.95, 0.95), "Speed trap"]]
 		for e in legend:
 			HUD.draw_marker(self, Vector2(lx + 12, ly), e[1], e[0], 8.0)
 			draw_string(font, Vector2(lx + 36, ly + 6), e[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
@@ -750,7 +751,7 @@ class BigMap extends Control:
 		HUD.draw_player(self, Vector2(lx + 12, ly), 0.0, 9.0)
 		draw_string(font, Vector2(lx + 36, ly + 6), "You", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 		ly += 34.0
-		draw_line(Vector2(lx + 2, ly), Vector2(lx + 24, ly), Color(1.0, 0.78, 0.1), 4.0)
+		draw_line(Vector2(lx + 2, ly), Vector2(lx + 24, ly), ROUTE_COL, 4.0)
 		draw_string(font, Vector2(lx + 36, ly + 6), "GPS route", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 		ly += 60.0
 		draw_string(font, Vector2(lx, ly), "[%s] Close" % Settings.glyph("map"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.7))

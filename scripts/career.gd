@@ -220,9 +220,9 @@ func setup(g: Node, w: World) -> void:
 	pole_m.albedo_color = Color(0.25, 0.26, 0.28)
 	pole_m.metallic = 0.6
 	var cam_m := StandardMaterial3D.new()
-	cam_m.albedo_color = Color(0.85, 0.45, 1.0)
+	cam_m.albedo_color = Color(0.95, 0.95, 1.0)
 	cam_m.emission_enabled = true
-	cam_m.emission = Color(0.85, 0.45, 1.0)
+	cam_m.emission = Color(0.9, 0.95, 1.0)
 	cam_m.emission_energy_multiplier = 2.5
 	for tp in SPEED_TRAPS:
 		var nid2 := world.nearest_node(tp)
