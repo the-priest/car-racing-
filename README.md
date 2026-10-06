@@ -10,6 +10,13 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 | ![Stallion '69](docs/screenshots/stallion69.png) | ![Mountain pass](docs/screenshots/mountain_pass.png) |
 | ![Countryside](docs/screenshots/countryside.png) | ![Downtown](docs/screenshots/city_day.png) |
 
+| | |
+|---|---|
+| ![Heat 4 pursuit with Air One's searchlight](docs/screenshots/pursuit_night.png) | ![Boss race against Sable over Summit Pass](docs/screenshots/boss_race.png) |
+| ![Armored truck takedown](docs/screenshots/takedown.png) | ![Full-screen map with GPS route](docs/screenshots/map.png) |
+
+![Story chapters](docs/screenshots/story.png)
+
 *Screenshots are from development builds rendered with a software GPU; real hardware looks better.*
 
 ## Features
