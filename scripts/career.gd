@@ -160,9 +160,9 @@ const FLAVOR := {
 
 ## Named rivals for story races.
 const BOSSES := {
-	"rook": {"name": "ROOK", "car": "stallion", "paint": Color(0.85, 0.65, 0.1), "skill": 0.02},
-	"juno": {"name": "JUNO", "car": "vanta_r", "paint": Color(0.95, 0.2, 0.55), "skill": 0.04},
-	"sable": {"name": "SABLE", "car": "wedge", "paint": Color(0.22, 0.04, 0.36), "skill": 0.06},
+	"rook": {"name": "ROOK", "car": "stallion", "paint": Color(0.85, 0.65, 0.1), "skill": 0.02, "taunt": "Rook: Ha! Go home, tourist."},
+	"juno": {"name": "JUNO", "car": "vanta_r", "paint": Color(0.95, 0.2, 0.55), "skill": 0.04, "taunt": "Juno: Cute. Come back when you're serious."},
+	"sable": {"name": "SABLE", "car": "wedge", "paint": Color(0.22, 0.04, 0.36), "skill": 0.06, "taunt": "Sable: This city's mine. It always was."},
 }
 
 const RACES := {
@@ -682,6 +682,10 @@ func _race_finished(r: Dictionary) -> void:
 				_next_step()
 				return
 			else:
+				var boss: String = s.get("boss", "")
 				_complete_contract(false, "You lost the race (%s)" % ["1st", "2nd", "3rd", "4th", "5th", "6th"][clampi(place - 1, 0, 5)])
+				if boss != "":
+					dialogue_clear.emit()
+					dialogue.emit([BOSSES[boss].taunt, "Mara: Shake it off. Call me when you want a rematch."])
 				return
 	finished.emit(res)
