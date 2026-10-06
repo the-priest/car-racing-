@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--readme":
+			shots_spec = "README"
 		if a == "--review":
 			shots_spec = "REVIEW"
 		if a == "--perftest":
@@ -135,6 +137,11 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "README":
+		_to_menu()
+		await _readme_shots()
 		get_tree().quit()
 		return
 	if shots_spec == "REVIEW":
@@ -511,6 +518,7 @@ func _read_driving_input(delta: float) -> void:
 	else:
 		reset_hold = 0.0
 	cam.look_back = Input.is_action_pressed("look_back")
+	audio.set_horn(Input.is_action_pressed("horn"))
 
 # ---------------------------------------------------------------- frame
 func _physics_process(delta: float) -> void:
@@ -581,6 +589,7 @@ func _process(delta: float) -> void:
 	if not playing:
 		audio.update_siren(0.0)
 		audio.update_rotor(INF)
+		audio.set_horn(false)
 	if state == State.MENU:
 		_menu_camera(delta)
 		audio.update_player(player, false, delta)
@@ -906,6 +915,68 @@ func _storytest() -> void:
 		print("[story] done contract=", Save.data.contract, " cash=", Save.data.cash)
 		await _frames(10)
 	print("[story] COMPLETE story_done=", career.story_done())
+
+## Marketing screenshots for the README (saved to SHOT_DIR).
+func _readme_shots() -> void:
+	Save.wipe()
+	Save.data.contract = 4
+	Save.data.playtime = 100.0
+	Save.data.contracts_done = ["Wheels", "Proving Ground", "Hot Plates", "Harbor Savings"]
+	menus.show_screen("story", false)
+	await _snap("story")
+	menus.close_all()
+	_on_play()
+	# Dusk pursuit on the ring highway, far chase camera.
+	daynight.hour = 18.4
+	career.start_race("ring")
+	var path: RacePath = career.race.path
+	var start := career.race.p_idx
+	career.race.cleanup()
+	career.race.queue_free()
+	career.race = null
+	autopilot = true
+	var bot := AIDriver.new(player, path, 0.75, 0.0)
+	bot.idx = start
+	police.start_pursuit("TEST", 4)
+	cam.mode = CameraRig.Mode.FAR
+	var best_n := -1
+	for t in 60 * 40:
+		bot.update(1.0 / 60.0, [player], false)
+		await get_tree().physics_frame
+		if t > 60 * 15 and t % 30 == 0:
+			var n := 0
+			for c in police.cops:
+				if c.car.global_position.distance_to(player.global_position) < 45.0:
+					n += 1
+			if n > best_n and n >= 2:
+				best_n = n
+				daynight.hour = 18.4
+				await _snap("pursuit")
+				if n >= 3:
+					break
+	autopilot = false
+	police.clear()
+	cam.mode = CameraRig.Mode.CHASE
+	# Takedown at sunset.
+	career.pending_call = 4
+	career.ringing = 5.0
+	hud.show_dialogue(career.answer_phone())
+	player.reset_to(Transform3D(Basis(), career.pos3(career.waypoint) + Vector3(0, 0.8, 0)))
+	await _frames(40)
+	var tg: MissionTarget = career.target
+	if tg:
+		for i in 160:
+			if is_instance_valid(tg.car):
+				var f := -tg.car.global_transform.basis.z
+				player.reset_to(Transform3D(tg.car.global_transform.basis, tg.car.global_position - f * 14.0 + Vector3(0, 0.25, 0)))
+				player.linear_velocity = tg.car.linear_velocity
+			await get_tree().physics_frame
+		await _snap("takedown")
+	hud.big_map.open()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _snap("map")
+	hud.big_map.close()
 
 ## Screenshot tour of menus and new gameplay moments for visual review.
 func _review() -> void:

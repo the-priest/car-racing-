@@ -17,6 +17,7 @@ var music_a: AudioStreamPlayer
 var music_b: AudioStreamPlayer
 var ring: AudioStreamPlayer
 var rotor: AudioStreamPlayer
+var horn: AudioStreamPlayer
 var cyl := -1
 var last_throttle := 0.0
 var pop_timer := 0.0
@@ -47,6 +48,8 @@ func setup() -> void:
 	ring.volume_db = -80.0
 	streams["rotor"] = _gen_rotor()
 	streams["radio"] = _gen_radio()
+	streams["horn"] = _gen_horn()
+	horn = _player(streams.horn)
 	rotor = _player(streams.rotor)
 	music_a = _player(streams.music_night, "Music")
 	music_b = _player(streams.music_chase, "Music")
@@ -184,6 +187,30 @@ func _gen_radio() -> AudioStreamWAV:
 	s.mix_rate = rate
 	s.data = data
 	return s
+
+## Two-tone car horn loop (slightly detuned square waves, softened).
+func _gen_horn() -> AudioStreamWAV:
+	var rate := 22050
+	var n := rate / 2
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / rate
+		var a := 1.0 if fmod(t * 420.0, 1.0) < 0.5 else -1.0
+		var b := 1.0 if fmod(t * 524.0, 1.0) < 0.5 else -1.0
+		lp += ((a + b) * 0.5 - lp) * 0.35
+		data.encode_s16(i * 2, int(clampf(lp * 0.55, -1.0, 1.0) * 30000.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = rate
+	s.data = data
+	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	s.loop_end = n
+	return s
+
+func set_horn(on: bool) -> void:
+	horn.volume_db = -6.0 if on else -80.0
 
 func update_rotor(dist: float) -> void:
 	rotor.volume_db = _db(clampf(1.0 - dist / 260.0, 0.0, 1.0) * 0.8)

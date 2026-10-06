@@ -538,7 +538,7 @@ func _build_controls(box: VBoxContainer) -> void:
 		["Accelerate / Brake-Reverse", "W / S", G.throttle + " / " + G.brake], ["Steer", "A / D", "Left stick"], ["Handbrake (start a drift)", "Space", G.handbrake],
 		["Nitrous", "Shift / N", G.nitro + " or L3"], ["Burnout / donuts", "W + S while stopped", G.throttle + " + " + G.brake], ["Camera", "C", G.camera],
 		["Look back / around", "B", "R3 / right stick"], ["Answer / make call", "Tab", G.phone], ["Full map", "M", G.map], ["Start race / garage", "E / Enter", G.interact],
-		["Reset to road", "R", G.reset], ["Shift up / down (manual)", "X / Z", G.shift_up + " / " + G.shift_down], ["Headlights", "L", G.headlights],
+		["Reset to road", "R", G.reset], ["Shift up / down (manual)", "X / Z", G.shift_up + " / " + G.shift_down], ["Headlights", "L", G.headlights], ["Horn", "H", G.horn],
 		["Pause", "Esc", G.pause], ["Menu select / back", "Enter / Esc", G.accept + " / " + G.back],
 	]
 	var grid := GridContainer.new()
@@ -656,7 +656,14 @@ func show_results(res: Dictionary) -> void:
 		screens[current].root.visible = false
 	current = "results"
 	screens.results.root.visible = true
-	await get_tree().process_frame
+	# Ignore input briefly so a held/tapped nitrous (A / Cross) doesn't skip the results.
+	var btns := _buttons(box)
+	for b in btns:
+		(b as Button).disabled = true
+	await get_tree().create_timer(0.6, true, false, true).timeout
+	for b in btns:
+		if is_instance_valid(b):
+			(b as Button).disabled = false
 	var f := _first_focus(box)
 	if f:
 		f.grab_focus()
