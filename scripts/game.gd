@@ -70,6 +70,8 @@ func _ready() -> void:
 			shots_spec = "HUDTEST"
 		if a == "--phototest":
 			shots_spec = "PHOTOTEST"
+		if a == "--radiotest":
+			shots_spec = "RADIOTEST"
 		if a == "--probe":
 			shots_spec = "PROBE"
 		if a == "--sparktest":
@@ -241,6 +243,31 @@ func _ready() -> void:
 		hud.tip("Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching.")
 		await _frames(40)
 		await _snap("hud_elements")
+		get_tree().quit()
+		return
+	if shots_spec == "RADIOTEST":
+		_on_play()
+		await _frames(30)
+		print("[radio] folder=", AudioManager.radio_folder(), " tracks=", audio.radio_tracks.size())
+		radio_hold = 0.0
+		await get_tree().process_frame
+		await _frames(120)
+		print("[radio] on=", audio.radio_on, " playing=", audio.radio_player.playing, " level=", snappedf(audio.radio_level, 0.01), " title=", audio.radio_title, " artist=", audio.radio_artist, " card=", hud.np_title.text, " cruise=", snappedf(audio.music_level.cruise, 0.01), " saved=", Settings.data.radio)
+		radio_hold = 0.0
+		await get_tree().process_frame
+		await _frames(10)
+		print("[radio] next title=", audio.radio_title, " artist=", audio.radio_artist)
+		police.start_pursuit("TEST", 2)
+		await _frames(120)
+		print("[radio] in chase: radio=", snappedf(audio.radio_level, 0.01), " chase=", snappedf(audio.music_level.chase, 0.01))
+		# Hold the button to switch off.
+		Input.action_press("radio")
+		radio_hold = 0.0
+		for i in 100:
+			await get_tree().process_frame
+		Input.action_release("radio")
+		await _frames(240)
+		print("[radio] after hold: on=", audio.radio_on, " level=", snappedf(audio.radio_level, 0.01), " chase=", snappedf(audio.music_level.chase, 0.01), " saved=", Settings.data.radio)
 		get_tree().quit()
 		return
 	if shots_spec == "PROBE":

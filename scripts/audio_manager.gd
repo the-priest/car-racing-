@@ -22,8 +22,9 @@ const THEMES := {
 signal now_playing(title: String, artist: String)
 
 # ---------------------------------------------------------------- radio (your MP3s)
-## Folders scanned for MP3/OGG/WAV files: "Radio" next to the game executable,
-## the user data folder, and res://radio (bundled into the build).
+## Folders scanned for MP3/OGG/WAV files: "Radio" next to the game executable
+## (the project folder when run from the editor), the user data folder, and
+## res://assets/radio (bundled into the build).
 var radio_tracks: Array[String] = []
 var radio_order: Array[int] = []
 var radio_pos := -1
@@ -426,7 +427,7 @@ static func radio_dirs() -> Array[String]:
 	else:
 		dirs.append(ProjectSettings.globalize_path("res://").path_join("Radio"))
 	dirs.append(ProjectSettings.globalize_path("user://radio"))
-	dirs.append("res://radio")
+	dirs.append("res://assets/radio")
 	return dirs
 
 ## Folder shown to the player (and opened from Settings).

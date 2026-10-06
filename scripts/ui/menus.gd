@@ -643,6 +643,10 @@ func _build_settings(box: VBoxContainer) -> void:
 	_button(box, "OPEN RADIO FOLDER", func():
 		var dir := AudioManager.radio_folder()
 		DirAccess.make_dir_recursive_absolute(dir)
+		if not FileAccess.file_exists(dir.path_join(".gdignore")):
+			var gi := FileAccess.open(dir.path_join(".gdignore"), FileAccess.WRITE)
+			if gi:
+				gi.close()
 		OS.shell_open(dir)
 		game.audio.radio_scan())
 	_text(box, "Radio: drop MP3 files into %s, then press %s while driving (tap: on / next song, hold: off)." % [AudioManager.radio_folder(), Settings.glyph("radio")], 14)
