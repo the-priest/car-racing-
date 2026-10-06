@@ -448,6 +448,9 @@ func _update(delta: float) -> void:
 	elif career.drift_zone >= 0:
 		obj_l.text = "▶ DRIFT ZONE  ·  %s\n%s pts   %s" % [Career.DRIFT_ZONES[career.drift_zone].name.to_upper(), _fmt(career.drift_zone_score()), dist_text(career.waypoint.distance_to(pp2))]
 		timer_l.text = _time(career.drift_zone_t)
+	elif career.race == null and not police.pursuit and game.custom_wp != Vector2.INF:
+		obj_l.text = "WAYPOINT  ·  %s" % dist_text(game.custom_wp.distance_to(pp2))
+		timer_l.text = ""
 	elif career.race == null and not police.pursuit:
 		obj_l.text = "FREE ROAM  ·  wait for a call or hit a blue race marker  ·  [%s] Map" % Settings.glyph("map")
 		timer_l.text = ""
@@ -591,6 +594,8 @@ static func map_markers(game: Node, full: bool) -> Array:
 	var blink := int(Time.get_ticks_msec() / 250) % 2 == 0
 	for c in game.police.cars():
 		out.append([Vector2(c.global_position.x, c.global_position.z), Color(1, 0.15, 0.2) if blink else Color(0.25, 0.45, 1), "cop", ""])
+	if game.custom_wp != Vector2.INF:
+		out.append([game.custom_wp, Color(1.0, 0.3, 0.85), "pin", "Your waypoint" if full else ""])
 	if career.waypoint != Vector2.INF:
 		var lbl: String = career.waypoint_label if career.waypoint_label != "" else "OBJECTIVE"
 		out.append([career.waypoint, Color(1.0, 0.82, 0.1), "mission", lbl])
@@ -612,6 +617,11 @@ static func draw_marker(ci: CanvasItem, p: Vector2, col: Color, kind: String, sz
 			ci.draw_rect(Rect2(p - Vector2(r2 + 2, r2 + 2), Vector2(r2 + 2, r2 + 2) * 2), dark)
 			ci.draw_rect(Rect2(p - Vector2(r2, r2), Vector2(r2, r2) * 2), col)
 			ci.draw_string(ThemeDB.fallback_font, p + Vector2(-r2, r2 * 0.6), "H", HORIZONTAL_ALIGNMENT_CENTER, r2 * 2, int(r2 * 1.7), dark)
+		"pin":
+			ci.draw_line(p, p + Vector2(0, -sz * 2.2), dark, 4.0)
+			ci.draw_line(p, p + Vector2(0, -sz * 2.2), col, 2.0)
+			ci.draw_circle(p + Vector2(0, -sz * 2.2), sz * 0.9 + 2.0, dark)
+			ci.draw_circle(p + Vector2(0, -sz * 2.2), sz * 0.9, col)
 		"trap":
 			var r3 := sz * 0.8
 			var tri := PackedVector2Array([p + Vector2(0, -r3 - 2), p + Vector2(r3 + 2, r3 + 1), p + Vector2(-r3 - 2, r3 + 1)])
@@ -743,10 +753,30 @@ class BigMap extends Control:
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		visible = false
+	var map_origin := Vector2.ZERO
+	var map_side := 1.0
+	var cursor := Vector2(-1, -1)
 	func open() -> void:
 		visible = true
 		get_tree().paused = true
+		cursor = Vector2(-1, -1)
 		queue_redraw()
+	func _to_world(sp: Vector2) -> Vector2:
+		var world: World = game.world
+		return (sp - map_origin) / map_side * (world.HALF * 2.0) - Vector2(world.HALF, world.HALF)
+	func _set_pin() -> void:
+		if cursor.x < 0.0:
+			return
+		var wp := _to_world(cursor)
+		var world: World = game.world
+		if absf(wp.x) > world.HALF or absf(wp.y) > world.HALF:
+			return
+		if game.custom_wp != Vector2.INF and game.custom_wp.distance_to(wp) < 120.0:
+			game.custom_wp = Vector2.INF # clicking the pin again removes it
+		else:
+			game.custom_wp = world.node_pos[world.nearest_node(wp)]
+		game.gps_timer = 0.0
+		game.audio.play_oneshot("beep", 1.7, -10.0)
 	func close() -> void:
 		visible = false
 		if game.is_playing():
@@ -757,9 +787,30 @@ class BigMap extends Control:
 		if event.is_action_pressed("map") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
 			close()
 			get_viewport().set_input_as_handled()
-	func _process(_d: float) -> void:
-		if visible:
-			queue_redraw()
+		elif event is InputEventMouseMotion:
+			cursor = get_local_mouse_position()
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			cursor = get_local_mouse_position()
+			_set_pin()
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_accept"):
+			_set_pin()
+			get_viewport().set_input_as_handled()
+	func _process(d: float) -> void:
+		if not visible:
+			return
+		# Left stick / D-pad moves the waypoint cursor.
+		var v := Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
+		if v.length() < 0.2:
+			v = Vector2.ZERO
+		v += Vector2(Input.get_axis("ui_left", "ui_right"), Input.get_axis("ui_up", "ui_down")) if v == Vector2.ZERO else Vector2.ZERO
+		if v != Vector2.ZERO:
+			if cursor.x < 0.0:
+				var car: Car = game.player
+				cursor = map_origin + (Vector2(car.global_position.x, car.global_position.z) + Vector2(game.world.HALF, game.world.HALF)) / (game.world.HALF * 2.0) * map_side
+			cursor += v.limit_length(1.0) * 520.0 * d
+			cursor = cursor.clamp(map_origin, map_origin + Vector2(map_side, map_side))
+		queue_redraw()
 	func _draw() -> void:
 		if game == null or game.player == null:
 			return
@@ -767,6 +818,8 @@ class BigMap extends Control:
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.01, 0.02, 0.04, 0.92))
 		var side := minf(size.x - 380.0, size.y - 80.0)
 		var origin := Vector2((size.x - 340.0 - side) * 0.5, (size.y - side) * 0.5)
+		map_origin = origin
+		map_side = side
 		var rect := Rect2(origin, Vector2(side, side))
 		draw_texture_rect(MAP_TEX, rect, false, Color(0.85, 0.85, 0.85))
 		draw_rect(rect.grow(2), Color(1, 1, 1, 0.4), false, 2.0)
@@ -820,3 +873,8 @@ class BigMap extends Control:
 		draw_string(font, Vector2(lx + 36, ly + 6), "GPS route", HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)
 		ly += 60.0
 		draw_string(font, Vector2(lx, ly), "[%s] Close" % Settings.glyph("map"), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.7))
+		draw_string(font, Vector2(lx, ly + 28), "[%s / click] Set or clear waypoint" % ("✕" if Settings.pad_style() == "playstation" else "A") if Settings.using_pad else "[Click] Set or clear waypoint", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.6))
+		if cursor.x >= 0.0:
+			draw_line(cursor + Vector2(-14, 0), cursor + Vector2(14, 0), Color.WHITE, 2.0)
+			draw_line(cursor + Vector2(0, -14), cursor + Vector2(0, 14), Color.WHITE, 2.0)
+			draw_arc(cursor, 9.0, 0, TAU, 24, Color(1, 1, 1, 0.8), 2.0)

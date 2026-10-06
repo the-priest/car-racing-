@@ -38,6 +38,7 @@ var haptics_on := false
 var prof := {} # perftest: accumulated usec per system
 var profiling := false
 var showroom: Node3D
+var custom_wp := Vector2.INF # waypoint pinned on the full map
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -50,6 +51,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--pintest":
+			shots_spec = "PINTEST"
 		if a == "--billboardtest":
 			shots_spec = "BILLBOARDS"
 		if a == "--balancetest":
@@ -151,6 +154,24 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "PINTEST":
+		_on_play()
+		await _frames(30)
+		hud.big_map.open()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var bm = hud.big_map
+		bm.cursor = bm.map_origin + Vector2(bm.map_side * 0.8, bm.map_side * 0.3)
+		bm._set_pin()
+		await get_tree().process_frame
+		await _snap("pin_map")
+		bm.close()
+		gps_timer = 0.0
+		await _frames(10)
+		print("[pin] custom=", custom_wp, " route points=", gps_route.size())
+		await _snap("pin_hud")
 		get_tree().quit()
 		return
 	if shots_spec == "BILLBOARDS":
@@ -907,6 +928,12 @@ func _update_gps(delta: float) -> void:
 		return
 	gps_timer = 1.0
 	var target: Vector2 = career.waypoint
+	var pp0 := Vector2(player.global_position.x, player.global_position.z)
+	if custom_wp != Vector2.INF and pp0.distance_to(custom_wp) < 30.0:
+		custom_wp = Vector2.INF
+		hud.message("Waypoint reached", 1.5)
+	if target == Vector2.INF and career.race == null:
+		target = custom_wp
 	if target == Vector2.INF and career.race:
 		gps_route = PackedVector2Array()
 		var r := career.race

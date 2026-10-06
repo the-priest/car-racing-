@@ -52,7 +52,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - mountain hairpin pass with snowy peaks
   - valley road and an airfield drag strip
   - ~100k trees and 1,800 street lights
-- **Navigation**: a full-screen map (M / View / Touchpad) showing you, your mission, races, home, cops and speed traps, plus a minimap with a GPS route and a mission marker on the rim with distance. The objective banner shows a direction arrow and distance.
+- **Navigation**: a full-screen map (M / View / Touchpad) where you can pin your own waypoint (click or stick + A), showing you, your mission, races, home, cops and speed traps, plus a minimap with a GPS route and a mission marker on the rim with distance. The objective banner shows a direction arrow and distance.
 - **Atmosphere**: dynamic day/night, rain with wet reflective roads, volumetric fog, procedural sky/clouds/stars, neon city nights. Speed blur and camera shake can be adjusted. Time of day (dynamic, day, dusk or night) and weather (dynamic, clear or rain) can be locked in Settings.
 - **Controller first**: full gamepad support for driving and menus, PlayStation/Xbox button prompts, analog triggers, rumble (engine, slip, ABS, impacts, landings). Every action can be remapped on keyboard and controller (Controls → Remap).
 - **Graphics settings stay exactly as you set them** - no dynamic scaling:
