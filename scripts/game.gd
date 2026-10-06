@@ -1342,7 +1342,8 @@ func _read_driving_input(delta: float) -> void:
 		steer_kb = move_toward(steer_kb, s, delta * 12.0)
 	else:
 		var target := signf(raw_steer) if absf(raw_steer) > 0.5 else 0.0
-		var rate := (6.5 if target == 0.0 or signf(target) != signf(steer_kb) else 3.4) / (1.0 + player.speed / 55.0)
+		# Quick, predictable keyboard steering: fast to centre, slightly gentler at speed.
+		var rate := (10.0 if target == 0.0 or signf(target) != signf(steer_kb) else 6.0) / (1.0 + player.speed / 90.0)
 		steer_kb = move_toward(steer_kb, target, delta * rate)
 	player.input.steer = steer_kb
 	player.input.throttle = Input.get_action_strength("throttle")

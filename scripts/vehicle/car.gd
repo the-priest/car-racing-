@@ -54,7 +54,8 @@ var _drift_lift_t := 0.0
 var _drift_low_t := 0.0
 var _vel_heading := 0.0
 var path_rate := 0.0 # how fast the direction of travel is turning (rad/s)
-var _hb_t := 0.0 # handbrake turn: the car keeps the new heading after release
+var _hb_t := 0.0
+var _drift_v0 := 0.0 # speed when the drift started: the slide tries to hold most of it # handbrake turn: the car keeps the new heading after release
 var surface := "road"
 var power_mul := 1.0
 var gear_top: Array[float] = []
@@ -556,6 +557,7 @@ func _physics_step(dt: float) -> void:
 			and speed > 12.0 and forward_speed > 0.0 and steer_in > 0.3 and wheels_on_ground >= 3:
 		drift_mode = true
 		_tap_armed = 0.0
+		_drift_v0 = speed
 		# Kick the tail out toward the corner.
 		angular_velocity += up * -signf(float(input.steer)) * (0.55 + 0.1 * float(stats.drift))
 	_prev_thr = thr_in
@@ -574,7 +576,9 @@ func _physics_step(dt: float) -> void:
 	if not drift_mode and abs_u > 8.0:
 		lock = minf(lock, atan(wheelbase * mu_base * G / (abs_u * abs_u)) + 0.2)
 	var target := -float(input.steer) * lock
-	if assists and speed > 6.0 and forward_speed > 0.0:
+	# Auto counter-steer for the AI/sim cars. The player's arcade grip model below
+	# keeps the car pointed where you steer, so it never fights your input.
+	if assists and not tap_drift and speed > 6.0 and forward_speed > 0.0:
 		target -= clampf(beta, -0.5, 0.5) * 0.6 * smoothstep(0.04, 0.25, absf(beta))
 	var steer_rate := lerpf(7.5, 4.0, smoothstep(10.0, 50.0, abs_u)) * (1.5 if drift_mode else 1.0)
 	steer_angle = move_toward(steer_angle, clampf(target, -0.75, 0.75), dt * steer_rate)
@@ -791,7 +795,7 @@ func _physics_step(dt: float) -> void:
 
 	# Stability control. Grip mode: yaw rate follows the steering and side-slip is
 	# killed early. Drift mode: lets the slide hold but stops spin-outs.
-	if assists and on_ground and speed > 8.0 and forward_speed > 0.0:
+	if assists and on_ground and speed > (2.0 if tap_drift else 8.0) and forward_speed > 0.0:
 		var yaw_rate := angular_velocity.dot(up)
 		if drift_mode:
 			# Steering sets the drift angle (into the turn = deeper, counter-steer =
@@ -801,6 +805,11 @@ func _physics_step(dt: float) -> void:
 			var into := clampf(float(input.steer) * -sd, -1.0, 1.0)
 			var target_beta := sd * (0.36 + 0.24 * into)
 			apply_torque(up * ((target_beta - beta) * 40.0 - (yaw_rate - path_rate) * 6.0) * inertia.y)
+			if tap_drift and throttle > 0.3:
+				# Arcade drift: on the throttle the slide carries its speed instead of scrubbing it off.
+				var short := _drift_v0 * 0.9 - speed
+				if short > 0.0:
+					apply_central_force(v.normalized() * mass * minf(short * 1.6, 5.0) * throttle)
 			var vdir := v.normalized()
 			var perp := fwd - vdir * fwd.dot(vdir)
 			perp.y = 0.0
@@ -808,31 +817,43 @@ func _physics_step(dt: float) -> void:
 				var carve := minf(1.5 * absf(beta) * (0.4 + 0.6 * throttle) * speed, 9.0)
 				apply_central_force(perp.normalized() * mass * carve)
 		else:
-			var r_des := forward_speed * tan(steer_angle) / wheelbase
-			var r_max := mu_base * G / maxf(abs_u, 1.0) * 1.15
-			r_des = clampf(r_des, -r_max, r_max)
-			var err := r_des - yaw_rate
-			# Strong against over-rotation, eager on turn-in. The handbrake relaxes it
-			# so the car can pivot through hairpins, then it catches the car again.
-			var over := absf(yaw_rate) > absf(r_des) or signf(yaw_rate) != signf(r_des)
-			var hb_relax := 1.0 - 0.85 * hb
-			var gain := (5.0 if over else 3.0) * smoothstep(8.0, 16.0, speed) * hb_relax
-			apply_torque(up * err * gain * inertia.y)
-			var excess2 := maxf(0.0, absf(beta) - 0.06)
-			if hb > 0.1:
-				_hb_t = 0.9
-			if _hb_t > 0.0:
-				# After a handbrake turn, swing the direction of travel round to where
-				# the nose now points instead of swinging the nose back.
-				var vdir2 := v.normalized()
-				var perp2 := fwd - vdir2 * fwd.dot(vdir2)
-				perp2.y = 0.0
-				if perp2.length() > 0.01:
-					apply_central_force(perp2.normalized() * mass * minf(4.5 * absf(beta) * speed, 20.0))
+			if tap_drift and hb <= 0.1 and _hb_t <= 0.0:
+				# Arcade grip (player): the stick sets the turn rate directly, capped by
+				# what the tyres plus downforce can hold, and sideways slip is soaked up
+				# so the car goes where it points. Fast, precise, no understeer fights.
+				var df: float = float(stats.get("downforce", 0.00011))
+				var a_max := mu_base * G * (1.0 + df * forward_speed * forward_speed) * 0.92
+				var r_cap := minf(abs_u * tan(0.52) / wheelbase, a_max / maxf(abs_u, 1.0))
+				var r_des := -float(input.steer) * r_cap
+				apply_torque(up * (r_des - yaw_rate) * 10.0 * smoothstep(2.0, 6.0, speed) * inertia.y)
+				var lat_v := v.dot(right)
+				apply_central_force(right * clampf(-lat_v * 7.0, -a_max, a_max) * mass)
 			else:
-				apply_torque(up * (-signf(beta) * excess2 * 14.0 * hb_relax) * inertia.y)
-			if hb > 0.1 and speed > 5.0:
-				apply_torque(up * -float(input.steer) * hb * 5.0 * inertia.y)
+				var r_des := forward_speed * tan(steer_angle) / wheelbase
+				var r_max := mu_base * G / maxf(abs_u, 1.0) * 1.15
+				r_des = clampf(r_des, -r_max, r_max)
+				var err := r_des - yaw_rate
+				# Strong against over-rotation, eager on turn-in. The handbrake relaxes it
+				# so the car can pivot through hairpins, then it catches the car again.
+				var over := absf(yaw_rate) > absf(r_des) or signf(yaw_rate) != signf(r_des)
+				var hb_relax := 1.0 - 0.85 * hb
+				var gain := (5.0 if over else 3.0) * smoothstep(8.0, 16.0, speed) * hb_relax
+				apply_torque(up * err * gain * inertia.y)
+				var excess2 := maxf(0.0, absf(beta) - 0.06)
+				if hb > 0.1:
+					_hb_t = 0.9
+				if _hb_t > 0.0:
+					# After a handbrake turn, swing the direction of travel round to where
+					# the nose now points instead of swinging the nose back.
+					var vdir2 := v.normalized()
+					var perp2 := fwd - vdir2 * fwd.dot(vdir2)
+					perp2.y = 0.0
+					if perp2.length() > 0.01:
+						apply_central_force(perp2.normalized() * mass * minf(4.5 * absf(beta) * speed, 20.0))
+				else:
+					apply_torque(up * (-signf(beta) * excess2 * 14.0 * hb_relax) * inertia.y)
+				if hb > 0.1 and speed > 5.0:
+					apply_torque(up * -float(input.steer) * hb * 5.0 * inertia.y)
 
 	if burnout and on_ground:
 		apply_torque(up * -float(input.steer) * inertia.y * 2.2)

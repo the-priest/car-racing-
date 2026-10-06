@@ -10,7 +10,7 @@ var cars: Array = []
 var car_idx := 0
 const HZ := 120.0
 
-const SCENARIOS := ["step_steer", "gas_tap_drift", "drift_counter", "handbrake_turn", "lift_exit"]
+const SCENARIOS := ["step_steer", "step_fast", "slow_turn", "lane_change", "gas_tap_drift", "drift_counter", "handbrake_turn", "lift_exit"]
 
 func _initialize() -> void:
 	var ground := StaticBody3D.new()
@@ -50,7 +50,7 @@ func _tick() -> void:
 	inp.brake = 0.0
 	inp.steer = 0.0
 	inp.handbrake = 0.0
-	var target_kmh: float = {"step_steer": 100.0, "gas_tap_drift": 95.0, "drift_counter": 95.0, "handbrake_turn": 70.0, "lift_exit": 95.0}[name]
+	var target_kmh: float = {"step_steer": 100.0, "step_fast": 190.0, "slow_turn": 35.0, "lane_change": 120.0, "gas_tap_drift": 95.0, "drift_counter": 95.0, "handbrake_turn": 70.0, "lift_exit": 95.0}[name]
 	# Phase 1 (0-1 s): hold speed exactly, straight.
 	if t < 1.0:
 		car.linear_velocity = -car.global_transform.basis.z * target_kmh / 3.6
@@ -61,7 +61,7 @@ func _tick() -> void:
 		return
 	var tt := t - 1.0
 	match name:
-		"step_steer":
+		"step_steer", "step_fast", "slow_turn":
 			inp.throttle = 0.5
 			inp.steer = 1.0
 			var yr := absf(car.angular_velocity.y)
@@ -75,6 +75,13 @@ func _tick() -> void:
 			if name == "lift_exit" and tt > 1.6:
 				inp.throttle = 0.0
 				inp.steer = 0.0
+		"lane_change":
+			inp.throttle = 0.6
+			inp.steer = 1.0 if tt < 0.5 else (-1.0 if tt < 1.0 else 0.0)
+			var side := car.global_position.dot(Vector3(1, 0, 0))
+			log_data.max_side = maxf(log_data.get("max_side", 0.0), absf(side))
+			if tt > 2.5:
+				log_data.settle_yaw = maxf(log_data.get("settle_yaw", 0.0), absf(car.angular_velocity.y))
 		"handbrake_turn":
 			inp.throttle = 0.3
 			inp.steer = 1.0 if tt < 0.9 else 0.0
@@ -88,7 +95,9 @@ func _tick() -> void:
 	if tt >= 3.5:
 		var turned := rad_to_deg(absf(wrapf(_heading() - log_data.yaw0, -PI, PI)))
 		var out := "%-10s %-15s turned=%5.1f deg  speed %3d->%3d km/h  max_beta=%4.2f end_beta=%4.2f drift_t=%4.2fs spun=%s" % [cars[car_idx], name, turned, int(log_data.v0 * 3.6), int(car.speed * 3.6), log_data.max_beta, beta, log_data.drift_frames / HZ, log_data.spun]
-		if name == "step_steer":
+		if name == "lane_change":
+			out += "  lateral=%.1fm  residual_yaw=%.2f" % [log_data.get("max_side", 0.0), log_data.get("settle_yaw", 0.0)]
+		if name in ["step_steer", "step_fast", "slow_turn"]:
 			var hist: Array = log_data.yaw_hist
 			var steady: float = hist[hist.size() - 1]
 			var t90 := 0.0
