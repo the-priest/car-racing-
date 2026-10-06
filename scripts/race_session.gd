@@ -201,7 +201,10 @@ func update(dt: float) -> void:
 		elif next_cp >= cps.size():
 			lap += 1
 			next_cp = 0
-			if lap < laps:
+			if lap == laps - 1:
+				game.hud.big("FINAL LAP", 1.6)
+				game.audio.play_oneshot("beep", 1.2)
+			elif lap < laps:
 				game.hud.message("LAP %d / %d" % [lap + 1, laps], 2.0)
 		else:
 			p_idx = prev
