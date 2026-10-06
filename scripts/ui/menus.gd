@@ -216,9 +216,14 @@ func show_screen(name: String, push := true) -> void:
 		screens[current].root.visible = false
 		if push and current != name:
 			stack.append(current)
+	var fresh := name != current
 	current = name
 	_rebuild(name)
 	screens[name].root.visible = true
+	if fresh:
+		var r: Control = screens[name].root
+		r.modulate.a = 0.0
+		create_tween().tween_property(r, "modulate:a", 1.0, 0.16)
 	await get_tree().process_frame
 	var btns := _buttons(screens[name].box)
 	if focus_hint != "":
