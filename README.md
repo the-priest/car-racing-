@@ -45,7 +45,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - higher tiers unlock as the story progresses (C after chapter 1, B after 3, A after 6, S after 9)
   - **9 upgrade categories** up to 5 levels; a fully built Vanta Zero does 0-100 km/h in about 1 second and tops out around 500 km/h
 
-  The garage has stat bars, paint, and studio lighting.
+  The garage has stat bars, paint, rim finishes (chrome, gold, black, gunmetal, bronze) and studio lighting. Aero upgrades add visible rear wings, and turbo upgrades add whistle and blow-off sounds.
 - **6 × 6 km open world**:
   - downtown grid with skyscrapers and tree-lined streets
   - coastal highway ring
@@ -53,7 +53,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - valley road and an airfield drag strip
   - ~100k trees and 1,800 street lights
 - **Navigation**: a full-screen map (M / View / Touchpad) showing you, your mission, races, home, cops and speed traps, plus a minimap with a GPS route and a mission marker on the rim with distance. The objective banner shows a direction arrow and distance.
-- **Atmosphere**: dynamic day/night, rain with wet reflective roads, volumetric fog, procedural sky/clouds/stars, neon city nights. Speed blur and camera shake can be adjusted.
+- **Atmosphere**: dynamic day/night, rain with wet reflective roads, volumetric fog, procedural sky/clouds/stars, neon city nights. Speed blur and camera shake can be adjusted. Time of day (dynamic, day, dusk or night) and weather (dynamic, clear or rain) can be locked in Settings.
 - **Controller first**: full gamepad support for driving and menus, PlayStation/Xbox button prompts, analog triggers, rumble (engine, slip, ABS, impacts, landings). Every action can be remapped on keyboard and controller (Controls → Remap).
 - **Graphics settings stay exactly as you set them** - no dynamic scaling:
   - Low uses the OpenGL renderer for laptops.
