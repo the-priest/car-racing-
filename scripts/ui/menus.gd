@@ -424,6 +424,7 @@ func _build_pause(box: VBoxContainer) -> void:
 		_button(box, "SKIP TO " + ("DAY" if game.daynight.night > 0.5 else "NIGHT"), func():
 			game.skip_time()
 			show_screen("pause", false), game.police.pursuit)
+	_button(box, "PHOTO MODE", func(): game.enter_photo())
 	_button(box, "RESET CAR TO ROAD", func():
 		game.reset_to_road()
 		back())

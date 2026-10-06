@@ -1,7 +1,7 @@
 extends Node3D
 ## Main game: owns the world and all systems, routes input and game state.
 
-enum State { LOADING, MENU, PLAY, PAUSED, GARAGE, RESULTS }
+enum State { LOADING, MENU, PLAY, PAUSED, GARAGE, RESULTS, PHOTO }
 
 var state := State.LOADING
 var world: World
@@ -43,6 +43,8 @@ var welcomed := false
 var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
 var ach_timer := 2.0
 var credits_pending := false
+var photo := {"yaw": 0.0, "pitch": 0.25, "dist": 7.0, "fov": 55.0}
+var photo_hint: Label
 var top_kmh := 0.0
 
 func _ready() -> void:
@@ -56,6 +58,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--phototest":
+			shots_spec = "PHOTOTEST"
 		if a == "--creditstest":
 			shots_spec = "CREDITS"
 		if a == "--sliptest":
@@ -169,11 +173,33 @@ func _ready() -> void:
 		await _aitest()
 		get_tree().quit()
 		return
+	if shots_spec == "PHOTOTEST":
+		_on_play()
+		await _frames(30)
+		_pause()
+		await _frames(5)
+		enter_photo()
+		photo.yaw += 1.2
+		photo.pitch = 0.35
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await _snap("photo_mode")
+		await _take_photo()
+		var files := DirAccess.get_files_at("user://screenshots")
+		print("[photo] state=", state, " files=", files.size())
+		var ev := InputEventAction.new()
+		ev.action = "ui_cancel"
+		ev.pressed = true
+		_photo_input(ev)
+		await _frames(5)
+		print("[photo] after exit state=", state, " menu=", menus.current)
+		get_tree().quit()
+		return
 	if shots_spec == "CREDITS":
 		_on_play()
 		credits_pending = true
 		_on_resume()
-		for i in 600:
+		for i in 40:
 			await get_tree().process_frame
 		await _snap("credits")
 		menus.credits_done.emit()
@@ -548,6 +574,82 @@ func _on_resume() -> void:
 		credits_pending = false
 		_roll_credits()
 
+## Photo mode: frozen world, free orbit camera, save screenshots to user://screenshots.
+func enter_photo() -> void:
+	menus.close_all()
+	state = State.PHOTO
+	hud.visible = false
+	get_tree().paused = true
+	var to_cam := cam.global_position - player.global_position
+	photo.yaw = atan2(to_cam.x, to_cam.z)
+	photo.dist = clampf(to_cam.length(), 3.5, 20.0)
+	photo.pitch = 0.2
+	photo.fov = cam.fov
+	if photo_hint == null:
+		var layer := CanvasLayer.new()
+		layer.layer = 20
+		add_child(layer)
+		photo_hint = Label.new()
+		photo_hint.add_theme_font_size_override("font_size", 18)
+		photo_hint.add_theme_color_override("font_shadow_color", Color.BLACK)
+		photo_hint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+		photo_hint.offset_top = -60
+		photo_hint.offset_left = -600
+		photo_hint.offset_right = 600
+		photo_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		layer.add_child(photo_hint)
+	_photo_hint_default()
+	photo_hint.visible = true
+
+func _photo_hint_default() -> void:
+	photo_hint.text = "PHOTO MODE   ·   %s: orbit   ·   %s: zoom   ·   [%s] save picture   ·   [%s] exit" % [
+		"Left stick" if using_pad else "Arrows / drag", "Triggers" if using_pad else "W/S / wheel",
+		Settings.glyph("accept"), Settings.glyph("back")]
+
+func _photo_camera(delta: float) -> void:
+	cam.process_mode = Node.PROCESS_MODE_DISABLED
+	var orbit := Vector2(Input.get_axis("ui_left", "ui_right"), Input.get_axis("ui_up", "ui_down"))
+	orbit += Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y)) * (1.0 if Input.get_connected_joypads().size() > 0 else 0.0)
+	if orbit.length() < 0.15:
+		orbit = Vector2.ZERO
+	photo.yaw -= orbit.x * delta * 1.6
+	photo.pitch = clampf(photo.pitch + orbit.y * delta * 1.0, -0.15, 1.3)
+	var zoom := Input.get_action_strength("brake") - Input.get_action_strength("throttle")
+	photo.dist = clampf(photo.dist + zoom * delta * 8.0, 3.0, 25.0)
+	var p := player.global_position + Vector3(0, 0.7, 0)
+	var off: Vector3 = Vector3(sin(photo.yaw) * cos(photo.pitch), sin(photo.pitch), cos(photo.yaw) * cos(photo.pitch)) * float(photo.dist)
+	cam.global_position = p + off
+	cam.look_at(p)
+	cam.fov = photo.fov
+
+func _photo_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT or event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
+		photo.yaw -= event.relative.x * 0.006
+		photo.pitch = clampf(photo.pitch + event.relative.y * 0.004, -0.15, 1.3)
+	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		photo.dist = clampf(photo.dist + (-0.8 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 0.8), 3.0, 25.0)
+	elif event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause"):
+		photo_hint.visible = false
+		cam.fov = photo.fov
+		_pause()
+	elif event.is_action_pressed("ui_accept"):
+		_take_photo()
+	get_viewport().set_input_as_handled()
+
+func _take_photo() -> void:
+	photo_hint.visible = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	DirAccess.make_dir_recursive_absolute("user://screenshots")
+	var path := "user://screenshots/velocity_heat_%s.png" % Time.get_datetime_string_from_system().replace(":", "-")
+	get_viewport().get_texture().get_image().save_png(path)
+	audio.play_oneshot("reward", 1.4, -6.0)
+	photo_hint.text = "Saved: " + ProjectSettings.globalize_path(path)
+	photo_hint.visible = true
+	await get_tree().create_timer(2.5, true, false, true).timeout
+	if state == State.PHOTO:
+		_photo_hint_default()
+
 func _pause() -> void:
 	state = State.PAUSED
 	get_tree().paused = true
@@ -725,6 +827,9 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey or event is InputEventMouseButton:
 		using_pad = false
 	Settings.using_pad = using_pad
+	if state == State.PHOTO:
+		_photo_input(event)
+		return
 	if state != State.PLAY or hud.big_map.visible:
 		return
 	if event.is_action_pressed("pause"):
@@ -916,6 +1021,9 @@ func _process(delta: float) -> void:
 		audio.update_siren(0.0)
 		audio.update_rotor(INF)
 		audio.set_horn(false)
+	if state == State.PHOTO:
+		_photo_camera(delta)
+		return
 	if state == State.MENU:
 		_menu_camera(delta)
 		audio.update_player(player, false, delta)
