@@ -459,6 +459,8 @@ func _input(event: InputEvent) -> void:
 			career.start_race(rid)
 		elif player_at_home() and not police.pursuit and career.active.is_empty():
 			_open_garage()
+		elif hud.sub_panel.visible:
+			hud.skip_line()
 	elif event.is_action_pressed("headlights"):
 		lights_override = 0 if player.lights_on else 1
 	elif event.is_action_pressed("shift_up"):

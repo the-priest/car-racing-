@@ -35,6 +35,7 @@ var phone_panel: PanelContainer
 var phone_l: Label
 var sub_l: Label
 var sub_name: Label
+var sub_hint: Label
 var sub_panel: PanelContainer
 var sub_style: StyleBoxFlat
 var sub_lines: Array = []
@@ -225,8 +226,13 @@ void fragment() {
 	var sv := VBoxContainer.new()
 	sv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sub_panel.add_child(sv)
+	var name_row := HBoxContainer.new()
+	sv.add_child(name_row)
 	sub_name = _label(18, ACCENT)
-	sv.add_child(sub_name)
+	sub_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(sub_name)
+	sub_hint = _label(13, Color(1, 1, 1, 0.4), HORIZONTAL_ALIGNMENT_RIGHT)
+	name_row.add_child(sub_hint)
 	sub_l = _label(24, Color.WHITE)
 	sub_l.autowrap_mode = TextServer.AUTOWRAP_WORD
 	sv.add_child(sub_l)
@@ -304,6 +310,13 @@ func radio(text: String) -> void:
 	radio_t = 5.0 + text.length() * 0.03
 	radio_panel.modulate.a = 1.0
 
+## Finish the typewriter, or move to the next line if it's already complete.
+func skip_line() -> void:
+	if sub_l.visible_ratio < 1.0:
+		sub_l.visible_ratio = 1.0
+	else:
+		_next_sub()
+
 func clear_dialogue() -> void:
 	sub_lines.clear()
 	sub_t = 0.0
@@ -329,7 +342,7 @@ func _next_sub() -> void:
 		line = line.substr(colon + 2)
 	var col: Color = Career.SPEAKERS.get(who, Color(0.85, 0.85, 0.9))
 	sub_name.text = who.to_upper() if who != "" else ""
-	sub_name.visible = who != ""
+	sub_hint.text = "[%s] next" % Settings.glyph("interact")
 	sub_name.add_theme_color_override("font_color", col)
 	sub_style.border_color = col if who != "" else Color(1, 1, 1, 0.3)
 	sub_l.text = line
