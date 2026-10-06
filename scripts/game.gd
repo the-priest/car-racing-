@@ -820,6 +820,13 @@ func _process(delta: float) -> void:
 		reset_to_road()
 
 func _update_weather(delta: float) -> void:
+	match str(Settings.data.weather):
+		"clear":
+			daynight.rain = move_toward(daynight.rain, 0.0, delta * 0.2)
+			return
+		"rain":
+			daynight.rain = move_toward(daynight.rain, 0.85, delta * 0.2)
+			return
 	weather_timer -= delta
 	if weather_timer <= 0.0:
 		weather_timer = randf_range(150.0, 400.0)

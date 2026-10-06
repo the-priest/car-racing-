@@ -559,6 +559,7 @@ const SETTINGS := [
 	["music", "Music volume", [0.0, 0.25, 0.5, 0.75, 1.0], ["Off", "25%", "50%", "75%", "100%"]],
 	["sfx", "Effects volume", [0.0, 0.25, 0.5, 0.85, 1.0], ["Off", "25%", "50%", "85%", "100%"]],
 	["time_mode", "Time of day", ["dynamic", "day", "dusk", "night"], ["Dynamic cycle", "Always day", "Always dusk", "Always night"]],
+	["weather", "Weather", ["dynamic", "clear", "rain"], ["Dynamic", "Always clear", "Always rain"]],
 	["speed_fx", "Speed blur", [true, false], ["On", "Off"]],
 	["cam_shake", "Camera shake", [0.0, 0.5, 1.0], ["Off", "Low", "Full"]],
 	["show_fps", "Show FPS", [false, true], ["Off", "On"]],
