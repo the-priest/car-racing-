@@ -19,6 +19,7 @@ var ring: AudioStreamPlayer
 var rotor: AudioStreamPlayer
 var horn: AudioStreamPlayer
 var turbo: AudioStreamPlayer
+var rain: AudioStreamPlayer
 var spool := 0.0
 var cyl := -1
 var last_throttle := 0.0
@@ -54,6 +55,8 @@ func setup() -> void:
 	horn = _player(streams.horn)
 	streams["turbo"] = _gen_turbo()
 	turbo = _player(streams.turbo)
+	streams["rain"] = _gen_rain()
+	rain = _player(streams.rain)
 	rotor = _player(streams.rotor)
 	music_a = _player(streams.music_night, "Music")
 	music_b = _player(streams.music_chase, "Music")
@@ -240,6 +243,40 @@ func _gen_turbo() -> AudioStreamWAV:
 	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	s.loop_end = n
 	return s
+
+## Rain ambience: soft filtered hiss with scattered droplet ticks (2 s loop).
+func _gen_rain() -> AudioStreamWAV:
+	var rate := 22050
+	var n := rate * 2
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var lp := 0.0
+	var hp_prev := 0.0
+	var drop := 0.0
+	for i in n:
+		var w := rng.randf_range(-1.0, 1.0)
+		lp += (w - lp) * 0.45
+		var hiss := lp - hp_prev * 0.6
+		hp_prev = lp
+		if rng.randf() < 0.0025:
+			drop = rng.randf_range(0.3, 0.8)
+		drop *= 0.93
+		var v := hiss * 0.35 + drop * rng.randf_range(-1.0, 1.0)
+		# Fade the loop ends together so the seam is inaudible.
+		var edge := minf(1.0, minf(float(i), float(n - i)) / 400.0)
+		data.encode_s16(i * 2, int(clampf(v * edge + hiss * 0.35 * (1.0 - edge), -1.0, 1.0) * 24000.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = rate
+	s.data = data
+	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	s.loop_end = n
+	return s
+
+func update_rain(amount: float) -> void:
+	rain.volume_db = _db(clampf(amount, 0.0, 1.0) * 0.45)
 
 func set_horn(on: bool) -> void:
 	horn.volume_db = -6.0 if on else -80.0
