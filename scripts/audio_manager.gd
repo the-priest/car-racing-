@@ -18,6 +18,8 @@ var music_b: AudioStreamPlayer
 var ring: AudioStreamPlayer
 var rotor: AudioStreamPlayer
 var horn: AudioStreamPlayer
+var turbo: AudioStreamPlayer
+var spool := 0.0
 var cyl := -1
 var last_throttle := 0.0
 var pop_timer := 0.0
@@ -50,6 +52,8 @@ func setup() -> void:
 	streams["radio"] = _gen_radio()
 	streams["horn"] = _gen_horn()
 	horn = _player(streams.horn)
+	streams["turbo"] = _gen_turbo()
+	turbo = _player(streams.turbo)
 	rotor = _player(streams.rotor)
 	music_a = _player(streams.music_night, "Music")
 	music_b = _player(streams.music_chase, "Music")
@@ -128,9 +132,14 @@ func update_player(car: Car, active: bool, delta: float) -> void:
 	gravel.volume_db = _db(clampf(car.speed / 30.0, 0.0, 1.0) * 0.6 if active and car.surface == "terrain" else 0.0)
 	wind.volume_db = _db(pow(clampf(car.speed / 90.0, 0.0, 1.0), 2.0) * 0.6 if active else 0.0)
 	nitro.volume_db = _db(0.35 if active and car.nitro_on else 0.0)
+	# Turbo spools with revs under throttle (turbo upgrade only).
+	var want := thr * rpm_n * rpm_n if active and bool(st.get("turbo", false)) else 0.0
+	spool = move_toward(spool, want, delta * (1.6 if want > spool else 4.0))
+	turbo.volume_db = _db(spool * 0.12)
+	turbo.pitch_scale = 0.6 + spool * 0.7
 	# Lift-off effects: turbo flutter for small engines, pops & bangs for big ones.
 	if active and last_throttle > 0.8 and thr < 0.2 and rpm_n > 0.6:
-		if int(st.cyl) <= 6 and int(st.cyl) > 0:
+		if (int(st.cyl) <= 6 and int(st.cyl) > 0) or bool(st.get("turbo", false)):
 			play_oneshot("blowoff", randf_range(0.95, 1.1), -6.0)
 		else:
 			pop_timer = 0.6
@@ -201,6 +210,28 @@ func _gen_horn() -> AudioStreamWAV:
 		var b := 1.0 if fmod(t * 524.0, 1.0) < 0.5 else -1.0
 		lp += ((a + b) * 0.5 - lp) * 0.35
 		data.encode_s16(i * 2, int(clampf(lp * 0.55, -1.0, 1.0) * 30000.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = rate
+	s.data = data
+	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	s.loop_end = n
+	return s
+
+## Turbo whistle loop: a soft high sine with a little airy noise.
+func _gen_turbo() -> AudioStreamWAV:
+	var rate := 22050
+	var n := rate / 2
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / rate
+		lp += (rng.randf_range(-1.0, 1.0) - lp) * 0.3
+		var v := sin(TAU * 1800.0 * t) * 0.35 + sin(TAU * 3600.0 * t) * 0.08 + lp * 0.12
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 26000.0))
 	var s := AudioStreamWAV.new()
 	s.format = AudioStreamWAV.FORMAT_16_BITS
 	s.mix_rate = rate
