@@ -307,6 +307,9 @@ func _on_play() -> void:
 	if float(Save.data.playtime) < 1.0:
 		hud.show_dialogue(Career.PROLOGUE)
 		career.call_timer = 16.0
+		var g := func(k: String) -> String: return Settings.glyph(k)
+		hud.message("%s Throttle   %s Brake   %s Handbrake / drift   %s Nitrous" % [g.call("throttle"), g.call("brake"), g.call("handbrake"), g.call("nitro")], 9.0)
+		hud.message("%s Camera   %s Map   %s Phone   %s Reset to road" % [g.call("camera"), g.call("map"), g.call("phone"), g.call("reset")], 9.0)
 
 func _on_resume() -> void:
 	state = State.PLAY

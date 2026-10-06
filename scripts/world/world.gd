@@ -428,6 +428,19 @@ func _build_city() -> void:
 			var c := Vector3((x0 + x1) * 0.5, 0.09, (z0 + z1) * 0.5)
 			var size := Vector3(x1 - x0, 0.18, z1 - z0)
 			Proc.box(walk, c, size)
+			if not park_set.has("%d,%d" % [int(x0), int(z0)]):
+				# Street trees along the kerb, clear of the corners.
+				var inset := 2.4
+				var spacing := 22.0
+				for edge_i in 4:
+					var horiz := edge_i < 2
+					var a0 := (x0 if horiz else z0) + 9.0
+					var a1 := (x1 if horiz else z1) - 9.0
+					var fixed: float = [z0 + inset, z1 - inset, x0 + inset, x1 - inset][edge_i]
+					var t := a0
+					while t <= a1:
+						street_trees.append(Vector3(t, 0.18, fixed) if horiz else Vector3(fixed, 0.18, t))
+						t += spacing
 			if park_set.has("%d,%d" % [int(x0), int(z0)]):
 				Proc.box(parks, Vector3(c.x, 0.2, c.z), Vector3(size.x - 8, 0.2, size.z - 8))
 			var bs := BoxShape3D.new()
@@ -710,6 +723,8 @@ func update_lamps(delta: float, cam_pos: Vector3, night: float) -> void:
 			l.visible = false
 
 # ---------------------------------------------------------------- vegetation
+var street_trees: Array[Vector3] = []
+
 func _build_trees() -> void:
 	var root := Node3D.new()
 	root.name = "Trees"
@@ -730,6 +745,7 @@ func _build_trees() -> void:
 		"b_near": Proc.tree_mesh(false, 18, bark, leaf_b), "b_far": Proc.tree_mesh(false, 6, bark, leaf_b),
 		"p_near": Proc.tree_mesh(true, 42, bark, leaf_p), "p_far": Proc.tree_mesh(true, 18, bark, leaf_p),
 	}
+	_build_street_trees(root, meshes)
 	var T: Array = d.trees
 	var count := T.size() / 6
 	var keep: float = q.trees
@@ -773,6 +789,44 @@ func _build_trees() -> void:
 				mmi.visibility_range_begin = near_end
 				mmi.visibility_range_begin_margin = 60.0
 				mmi.visibility_range_end = far_end
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(mmi)
+
+## City street trees: chunked multimeshes with the same near/far LOD as the countryside.
+func _build_street_trees(root: Node3D, meshes: Dictionary) -> void:
+	var keep: float = clampf(float(q.trees) * 1.2, 0.0, 1.0)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var tiles := {}
+	for p in street_trees:
+		if rng.randf() > keep:
+			continue
+		var key := Vector2i(floori(p.x / 340.0), floori(p.z / 340.0))
+		if not tiles.has(key):
+			tiles[key] = []
+		tiles[key].append(p)
+	for key in tiles:
+		var pts: Array = tiles[key]
+		for lod in ["near", "far"]:
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.use_custom_data = true
+			mm.mesh = meshes["b_" + lod]
+			mm.instance_count = pts.size()
+			for j in pts.size():
+				var s := rng.randf_range(0.5, 0.62)
+				mm.set_instance_transform(j, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s * rng.randf_range(0.95, 1.1), s)), pts[j]))
+				var g := rng.randf_range(0.85, 1.1)
+				mm.set_instance_custom_data(j, Color(g, g * rng.randf_range(0.95, 1.05), g * 0.9, rng.randf()))
+			var mmi := MultiMeshInstance3D.new()
+			mmi.multimesh = mm
+			if lod == "near":
+				mmi.visibility_range_end = minf(float(q.tree_dist), 600.0)
+				mmi.visibility_range_end_margin = 40.0
+			else:
+				mmi.visibility_range_begin = minf(float(q.tree_dist), 600.0)
+				mmi.visibility_range_begin_margin = 40.0
+				mmi.visibility_range_end = 1400.0
 				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			root.add_child(mmi)
 

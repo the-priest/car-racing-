@@ -99,7 +99,7 @@ func update(delta: float) -> void:
 	# Night ambient: moonlit blue city glow instead of the near-black sky.
 	env.ambient_light_color = Color(0.16, 0.19, 0.3)
 	env.ambient_light_sky_contribution = lerpf(1.0, 0.3, night)
-	env.ambient_light_energy = lerpf(1.0, 0.9, night)
+	env.ambient_light_energy = lerpf(1.25, 0.9, night)
 	env.background_energy_multiplier = lerpf(1.0, 0.9, night)
 	env.tonemap_exposure = lerpf(0.92, 1.45, night) * (1.0 + golden * 0.1)
 	var fog_day := Color(0.66, 0.74, 0.84)
