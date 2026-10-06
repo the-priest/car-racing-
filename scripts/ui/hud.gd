@@ -683,7 +683,8 @@ class BigMap extends Control:
 		queue_redraw()
 	func close() -> void:
 		visible = false
-		get_tree().paused = false
+		if game.is_playing():
+			get_tree().paused = false
 	func _input(event: InputEvent) -> void:
 		if not visible:
 			return

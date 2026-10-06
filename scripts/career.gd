@@ -457,8 +457,8 @@ func _on_target_hit(hits: int, need: int) -> void:
 	game.cam.shake = maxf(game.cam.shake, 0.5)
 	game._rumble(0.9, 0.6, 0.3)
 	if hits == 2 and target.def.name == "ARMORED TRUCK" and not game.police.pursuit:
-		game.police.start_pursuit("THE GUARDS CALLED IT IN", 1)
-		game.police.say("Dispatch: Armored car under attack! All nearby units respond!", true)
+		message.emit("The guards called it in - cops are on the way", 2.5)
+		game.police.say("Dispatch: Armored car under attack on %s! All units, respond!" % game.police.area_name(target.car.global_position), true)
 	if hits >= need:
 		big.emit("%s DISABLED" % target.def.name, 2.0)
 		game.audio.play_oneshot("reward")
@@ -637,6 +637,9 @@ func _race_finished(r: Dictionary) -> void:
 	var reward := int(def.reward * mult)
 	if game.daynight.night > 0.5:
 		reward = int(reward * 1.25)
+	var in_contract: bool = not active.is_empty() and active.steps[step].has("race")
+	if in_contract:
+		reward = 0 # the contract pays instead
 	Save.add_cash(reward)
 	if place == 1:
 		Save.data.races_won = int(Save.data.races_won) + 1
@@ -654,7 +657,6 @@ func _race_finished(r: Dictionary) -> void:
 				_next_step()
 				return
 			else:
-				finished.emit(res)
-				_complete_contract(false, "You lost the race")
+				_complete_contract(false, "You lost the race (%s)" % ["1st", "2nd", "3rd", "4th", "5th", "6th"][clampi(place - 1, 0, 5)])
 				return
 	finished.emit(res)

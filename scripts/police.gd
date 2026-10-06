@@ -219,6 +219,7 @@ func start_pursuit(reason: String, at_heat := 1) -> void:
 	pursuit = true
 	pursuit_time = 0.0
 	cooldown = 0.0
+	bust = 0.0
 	takedowns = 0
 	bonus = 0
 	engaged = false
@@ -243,6 +244,8 @@ func end_pursuit(escaped: bool) -> void:
 	heat = 0
 	min_heat = 0
 	takedowns = 0
+	bust = 0.0
+	cooldown = 0.0
 	for c in cops.duplicate():
 		_remove(c)
 	_remove_heli()

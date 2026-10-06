@@ -242,6 +242,11 @@ func _build_player(id: String) -> void:
 
 func reset_career() -> void:
 	career.abandon()
+	career.pending_call = -1
+	career.ringing = 0.0
+	career.last_failed = {}
+	career.call_timer = 25.0
+	audio.set_ringing(false)
 	police.clear()
 	apply_player_car()
 	_place_at_home()
@@ -301,13 +306,28 @@ func _notification(what: int) -> void:
 func _to_menu() -> void:
 	state = State.MENU
 	hud.visible = false
-	get_tree().paused = false
+	# The world stays frozen behind menus; cameras/day-night are driven from here.
+	_clear_inputs()
+	if hud.big_map.visible:
+		hud.big_map.visible = false
+	get_tree().paused = true
 	menus.close_all()
 	menus.show_screen("main", false)
 	menu_t = 0.0
 
+func _clear_inputs() -> void:
+	if player:
+		player.input.throttle = 0.0
+		player.input.brake = 0.0
+		player.input.steer = 0.0
+		player.input.handbrake = 0.0
+		player.input.nitro = false
+	audio.set_horn(false)
+
 func _on_play() -> void:
 	menus.close_all()
+	_showroom(false)
+	get_tree().paused = false
 	state = State.PLAY
 	hud.visible = true
 	cam.snap = true
@@ -330,6 +350,8 @@ func _pause() -> void:
 	menus.show_screen("pause", false)
 
 func _on_career_finished(res: Dictionary) -> void:
+	if state != State.PLAY:
+		return # e.g. a job abandoned by NEW CAREER from the main menu
 	audio.play_oneshot("reward")
 	if res.get("contract_next", false):
 		hud.big("VICTORY", 2.0)
@@ -437,7 +459,7 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey or event is InputEventMouseButton:
 		using_pad = false
 	Settings.using_pad = using_pad
-	if state != State.PLAY:
+	if state != State.PLAY or hud.big_map.visible:
 		return
 	if event.is_action_pressed("pause"):
 		_pause()
@@ -488,6 +510,8 @@ func _showroom(on: bool) -> void:
 
 func _open_garage() -> void:
 	_showroom(true)
+	_clear_inputs()
+	get_tree().paused = true
 	state = State.GARAGE
 	hud.visible = false
 	player.linear_velocity = Vector3.ZERO
@@ -524,7 +548,7 @@ func _read_driving_input(delta: float) -> void:
 
 # ---------------------------------------------------------------- frame
 func _physics_process(delta: float) -> void:
-	if state != State.PLAY or player == null:
+	if state != State.PLAY or player == null or hud.big_map.visible:
 		return
 	if not autopilot:
 		_read_driving_input(delta)
@@ -604,6 +628,8 @@ func _process(delta: float) -> void:
 	if not playing:
 		audio.update_player(player, false, delta)
 		return
+	if hud.big_map.visible:
+		return # full-screen map: gameplay frozen
 	cam.process_mode = Node.PROCESS_MODE_INHERIT
 	t0 = _pt("world/fx", t0)
 	traffic.update(delta, player, police.cars())
@@ -721,12 +747,18 @@ func _update_gps(delta: float) -> void:
 	gps_route.append(target)
 
 func _menu_camera(delta: float) -> void:
+	# Slow low orbit around your car under studio lights, framed right of the menu.
 	menu_t += delta
-	var a := menu_t * 0.04
+	_showroom(true)
+	var a := menu_t * 0.12 + 0.6
+	var p := player.global_position
 	cam.process_mode = Node.PROCESS_MODE_DISABLED
-	cam.global_position = Vector3(sin(a) * 900.0, 230.0, cos(a) * 900.0)
-	cam.look_at(Vector3(0, 60, 0))
-	cam.fov = 55.0
+	var pos := p + Vector3(sin(a) * 6.4, 1.25 + sin(menu_t * 0.21) * 0.25, cos(a) * 6.4)
+	cam.global_position = pos
+	var to_car := (p - pos).normalized()
+	var right := to_car.cross(Vector3.UP).normalized()
+	cam.look_at(p + Vector3(0, 0.55, 0) - right * 2.3)
+	cam.fov = 50.0
 
 func _garage_camera(delta: float) -> void:
 	menu_t += delta

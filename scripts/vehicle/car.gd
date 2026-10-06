@@ -114,6 +114,7 @@ func _setup_engine() -> void:
 	gear_top.clear()
 	for g in int(stats.gears):
 		gear_top.append(stats.top * 1.06 * pow(float(g + 1) / stats.gears, 0.72))
+	gear = clampi(gear, 0, gear_top.size() - 1)
 	cd = 4.5 / (stats.top * stats.top)
 	power = (4.5 * stats.top + 0.12 * stats.top) * mass
 	drive_f = mass * stats.accel

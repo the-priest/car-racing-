@@ -170,10 +170,12 @@ func show_screen(name: String, push := true) -> void:
 	if name != "main":
 		confirm_new = false
 	var keep := -1
+	var keep_key := ""
 	if name == current and screens.has(name):
 		var f := get_viewport().gui_get_focus_owner()
 		if f is Button:
 			keep = _buttons(screens[name].box).find(f)
+			keep_key = (f as Button).text.split(":")[0]
 	if current != "" and screens.has(current):
 		screens[current].root.visible = false
 		if push and current != name:
@@ -185,6 +187,11 @@ func show_screen(name: String, push := true) -> void:
 	var btns := _buttons(screens[name].box)
 	if keep >= 0 and not btns.is_empty():
 		var k := mini(keep, btns.size() - 1)
+		# Prefer the button with the same label (settings rows keep their name).
+		for j in btns.size():
+			if keep_key != "" and (btns[j] as Button).text.split(":")[0] == keep_key:
+				k = j
+				break
 		while k < btns.size() - 1 and (btns[k] as Button).disabled:
 			k += 1
 		var b: Button = btns[k]
