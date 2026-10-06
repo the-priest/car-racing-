@@ -70,6 +70,8 @@ func _ready() -> void:
 			shots_spec = "HUDTEST"
 		if a == "--phototest":
 			shots_spec = "PHOTOTEST"
+		if a == "--musictest":
+			shots_spec = "MUSICTEST"
 		if a == "--creditstest":
 			shots_spec = "CREDITS"
 		if a == "--sliptest":
@@ -172,6 +174,7 @@ func _ready() -> void:
 	for n in [world, effects, traffic, police, career, player, daynight]:
 		n.process_mode = Node.PROCESS_MODE_PAUSABLE
 	hud.setup(self)
+	audio.now_playing.connect(hud.now_playing)
 	hud.visible = false
 	on_settings_changed()
 	if shots_spec == "MENUTEST":
@@ -234,6 +237,31 @@ func _ready() -> void:
 		hud.tip("Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching.")
 		await _frames(40)
 		await _snap("hud_elements")
+		get_tree().quit()
+		return
+	if shots_spec == "MUSICTEST":
+		var lv := func(tag: String) -> void:
+			var parts := []
+			for m in audio.music:
+				parts.append("%s=%.2f%s" % [m, audio.music_level[m], "*" if audio.music[m].playing else ""])
+			print("[music] ", tag, " ", " ".join(parts), " cruise_pos=%.1f duck=%.2f" % [audio.music.cruise.get_playback_position(), audio.music_duck])
+		_to_menu()
+		await _frames(120)
+		lv.call("menu")
+		_on_play()
+		await _frames(240)
+		lv.call("cruise")
+		print("[music] card=", hud.np_title.text, " a=", hud.np_panel.modulate.a)
+		await _snap("music_card")
+		police.start_pursuit("TEST", 2)
+		await _frames(300)
+		lv.call("chase")
+		police.end_pursuit(true)
+		await _frames(400)
+		lv.call("after")
+		_pause()
+		await _frames(120)
+		lv.call("paused")
 		get_tree().quit()
 		return
 	if shots_spec == "PHOTOTEST":
@@ -1104,6 +1132,17 @@ func _soft_contacts(list: Array) -> void:
 			if (a == player or b == player) and rel < -3.0:
 				_on_impact(absf(rel) * 0.6)
 
+func _music_mode() -> String:
+	if menus.rolling_credits():
+		return "credits"
+	if state == State.MENU or state == State.GARAGE:
+		return "menu"
+	if police.pursuit:
+		return "chase"
+	if career.race != null:
+		return "race"
+	return "cruise"
+
 func _process(delta: float) -> void:
 	if state == State.LOADING or player == null:
 		return
@@ -1124,6 +1163,7 @@ func _process(delta: float) -> void:
 	world.set_wetness(clampf(daynight.rain * 1.2 + night * 0.25, 0.0, 1.0))
 	effects.update_rain(daynight.rain, cam.global_position, player.linear_velocity)
 	Car.wet_grip = 1.0 - 0.12 * clampf(daynight.rain, 0.0, 1.0)
+	audio.update_music(_music_mode(), delta, 1.0 if menus.rolling_credits() else (0.45 if state == State.PAUSED else (0.65 if state == State.PHOTO or hud.big_map.visible else 1.0)))
 	audio.update_rain(daynight.rain if state == State.PLAY or state == State.MENU or state == State.GARAGE else 0.0)
 	var lights := night > 0.25 or daynight.rain > 0.4
 	if lights_override >= 0:
@@ -1140,7 +1180,6 @@ func _process(delta: float) -> void:
 	if state == State.MENU:
 		_menu_camera(delta)
 		audio.update_player(player, false, delta)
-		audio.update_music(false, delta)
 		return
 	if state == State.GARAGE:
 		_garage_camera(delta)
@@ -1191,7 +1230,6 @@ func _process(delta: float) -> void:
 	audio.set_ringing(career.pending_call >= 0 and career.ringing > 0.0)
 	audio.update_siren(siren)
 	audio.update_rotor(police.heli.global_position.distance_to(cam.global_position) if police.heli else INF)
-	audio.update_music(police.pursuit or career.race != null, delta)
 	var ai_cars: Array = police.cars()
 	if career.race:
 		for r in career.race.rivals:

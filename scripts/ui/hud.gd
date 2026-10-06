@@ -20,6 +20,10 @@ var pursuit_stats: Label
 var radio_panel: PanelContainer
 var radio_l: Label
 var radio_t := 0.0
+var np_panel: PanelContainer
+var np_title: Label
+var np_artist: Label
+var np_t := 0.0
 var tip_panel: PanelContainer
 var tip_l: Label
 var tip_t := 0.0
@@ -162,6 +166,31 @@ void fragment() {
 	rv.add_child(radio_l)
 	radio_panel.modulate.a = 0.0
 	root.add_child(radio_panel)
+
+	np_panel = PanelContainer.new()
+	np_panel.position = Vector2(24, 150)
+	np_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ns := StyleBoxFlat.new()
+	ns.bg_color = Color(0.04, 0.02, 0.08, 0.6)
+	ns.border_width_left = 3
+	ns.border_color = Color(0.75, 0.45, 1.0)
+	ns.content_margin_left = 12
+	ns.content_margin_right = 16
+	ns.content_margin_top = 5
+	ns.content_margin_bottom = 7
+	np_panel.add_theme_stylebox_override("panel", ns)
+	var nv := VBoxContainer.new()
+	nv.add_theme_constant_override("separation", 0)
+	np_panel.add_child(nv)
+	var nh := _label(11, Color(0.78, 0.55, 1.0))
+	nh.text = "NOW PLAYING"
+	nv.add_child(nh)
+	np_title = _label(19, Color.WHITE)
+	nv.add_child(np_title)
+	np_artist = _label(14, Color(1, 1, 1, 0.65))
+	nv.add_child(np_artist)
+	np_panel.modulate.a = 0.0
+	root.add_child(np_panel)
 
 	tip_panel = PanelContainer.new()
 	tip_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -436,6 +465,12 @@ func tip(text: String) -> void:
 	tip_panel.modulate.a = 1.0
 	tip_t = 9.0
 
+## Track card under the cash readout when a free-roam song starts.
+func now_playing(title: String, artist: String) -> void:
+	np_title.text = title
+	np_artist.text = artist
+	np_t = 6.0
+
 func radio(text: String) -> void:
 	radio_l.text = text
 	radio_t = 5.0 + text.length() * 0.03
@@ -596,6 +631,9 @@ func _update(delta: float) -> void:
 	if radio_t > 0.0:
 		radio_t -= delta
 		radio_panel.modulate.a = clampf(radio_t * 2.0, 0.0, 1.0)
+	if np_t > 0.0:
+		np_t -= delta
+		np_panel.modulate.a = clampf(minf(np_t, 6.0 - np_t) * 2.0, 0.0, 1.0)
 	if sub_t > 0.0 and talking:
 		sub_t -= delta
 		if sub_t <= 0.0:

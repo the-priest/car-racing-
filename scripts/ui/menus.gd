@@ -818,6 +818,9 @@ func _build_credits(box: VBoxContainer) -> void:
 signal credits_done
 var _credits_root: Control
 
+func rolling_credits() -> bool:
+	return _credits_root != null
+
 func roll_credits() -> void:
 	close_all()
 	var bg := ColorRect.new()
@@ -856,6 +859,10 @@ func roll_credits() -> void:
 	line.call("\"Car Concept\" model by Eric Chadwick / Darmstadt Graphics Group GmbH", 18, Color(1, 1, 1, 0.7))
 	line.call("Khronos glTF Sample Assets, CC BY 4.0", 18, Color(1, 1, 1, 0.7))
 	line.call("World, sounds and music generated for this game", 18, Color(1, 1, 1, 0.7))
+	line.call("", 40, Color.WHITE)
+	line.call("SOUNDTRACK", 26, ACCENT)
+	for t in AudioManager.CRUISE + AudioManager.THEMES.values().slice(0, 3):
+		line.call("%s  -  %s" % [t[1], t[2]], 20, Color(1, 1, 1, 0.85))
 	line.call("", 60, Color.WHITE)
 	line.call("Thanks for playing.", 30, Color.WHITE)
 	line.call("The city is yours.", 22, ACCENT)

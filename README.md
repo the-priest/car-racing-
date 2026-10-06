@@ -58,6 +58,7 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - ~100k trees and 1,800 street lights
 - **Navigation**: a full-screen map (M / View / Touchpad) where you can pin your own waypoint (click or stick + A), showing you, your mission, races, home, cops and speed traps, plus a minimap with a GPS route and a mission marker on the rim with distance. The objective banner shows a direction arrow and distance.
 - **Atmosphere**: dynamic day/night, rain with wet reflective roads, tyre spray and thunderstorms, volumetric fog, procedural sky/clouds/stars, neon city nights. Speed blur and camera shake can be adjusted. Time of day (dynamic, day, dusk or night) and weather (dynamic, clear or rain) can be locked in Settings.
+- **Original synthwave soundtrack**: three free-roam tracks that rotate like a radio (with a now-playing card), plus a pursuit theme, a race theme, a garage theme and an end-credits song. Music crossfades as the action changes and ducks in the pause menu. The tracks are synthesized by `tools/music/gen_music.py`.
 - **Extras**: Easy/Normal/Hard difficulty, 16 achievements, a Records screen, Photo Mode (pause menu: free camera, saves PNGs to your user folder), one-time tips for new players, end credits.
 - **Controller first**: full gamepad support for driving and menus, PlayStation/Xbox button prompts, analog triggers, rumble (engine, slip, ABS, impacts, landings). Every action can be remapped on keyboard and controller (Controls → Remap).
 - **Graphics settings stay exactly as you set them** - no dynamic scaling:

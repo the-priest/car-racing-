@@ -1,9 +1,25 @@
 class_name AudioManager
 extends Node
 ## Engine/tyre/wind/nitro layers for the player, 3D engines for nearby AI,
-## sirens, one-shots and music with pursuit crossfade.
+## sirens, one-shots and the soundtrack: a free-roam playlist plus pursuit, race
+## and menu themes that crossfade with the game state.
 
 const DIR := "res://assets/audio/"
+const MUSIC_DIR := "res://assets/music/"
+## [file, title, artist]. Cruise tracks play through and rotate; themes loop.
+const CRUISE := [
+	["solano_nights", "Solano Nights", "Midnight Grid"],
+	["coast_road", "Coast Road", "Palm Static"],
+	["afterhours", "Afterhours", "Neon Ward"],
+]
+const THEMES := {
+	"chase": ["heat_index", "Heat Index", "Kill Switch"],
+	"race": ["redline", "Redline", "Overdrive 84"],
+	"menu": ["garage", "Dex's Garage", "Low Tide"],
+	"credits": ["solano_nights", "Solano Nights", "Midnight Grid"],
+}
+
+signal now_playing(title: String, artist: String)
 
 var streams := {}
 var eng_on: AudioStreamPlayer
@@ -13,8 +29,11 @@ var gravel: AudioStreamPlayer
 var wind: AudioStreamPlayer
 var nitro: AudioStreamPlayer
 var siren: AudioStreamPlayer
-var music_a: AudioStreamPlayer
-var music_b: AudioStreamPlayer
+var music := {}  # mode -> AudioStreamPlayer
+var music_level := {}  # mode -> 0..1 crossfade level
+var cruise_idx := 0
+var cruise_pos := 0.0
+var music_duck := 1.0
 var ring: AudioStreamPlayer
 var rotor: AudioStreamPlayer
 var horn: AudioStreamPlayer
@@ -24,7 +43,6 @@ var spool := 0.0
 var cyl := -1
 var last_throttle := 0.0
 var pop_timer := 0.0
-var chase_mix := 0.0
 var ai_players := {}
 
 func setup() -> void:
@@ -33,7 +51,7 @@ func setup() -> void:
 		AudioServer.set_bus_name(AudioServer.bus_count - 1, "Music")
 		AudioServer.add_bus()
 		AudioServer.set_bus_name(AudioServer.bus_count - 1, "SFX")
-	for n in ["tire_squeal", "wind", "gravel", "nitro", "siren", "music_night", "music_chase", "phone_ring"]:
+	for n in ["tire_squeal", "wind", "gravel", "nitro", "siren", "phone_ring"]:
 		streams[n] = _loop(n)
 	for n in ["impact", "blowoff", "backfire", "beep", "whoosh", "reward"]:
 		streams[n] = load(DIR + n + ".wav")
@@ -59,9 +77,18 @@ func setup() -> void:
 	streams["thunder"] = _gen_thunder()
 	rain = _player(streams.rain)
 	rotor = _player(streams.rotor)
-	music_a = _player(streams.music_night, "Music")
-	music_b = _player(streams.music_chase, "Music")
-	music_b.volume_db = -80.0
+	for mode in ["cruise", "chase", "race", "menu", "credits"]:
+		var mp := _player(null, "Music")
+		mp.volume_db = -80.0
+		music[mode] = mp
+		music_level[mode] = 0.0
+		if mode != "cruise":
+			var st: AudioStreamOggVorbis = load(MUSIC_DIR + THEMES[mode][0] + ".ogg").duplicate()
+			st.loop = mode != "credits"
+			mp.stream = st
+	music.cruise.finished.connect(_next_cruise)
+	cruise_idx = randi() % CRUISE.size()
+	_load_cruise()
 	apply_volumes()
 
 func _loop(n: String) -> AudioStreamWAV:
@@ -309,10 +336,40 @@ func update_rotor(dist: float) -> void:
 func update_siren(intensity: float) -> void:
 	siren.volume_db = _db(intensity * 0.5)
 
-func update_music(pursuit: bool, delta: float) -> void:
-	chase_mix = move_toward(chase_mix, 1.0 if pursuit else 0.0, delta * 0.5)
-	music_a.volume_db = _db(1.0 - chase_mix)
-	music_b.volume_db = _db(chase_mix)
+func _load_cruise() -> void:
+	var st: AudioStreamOggVorbis = load(MUSIC_DIR + CRUISE[cruise_idx][0] + ".ogg")
+	st.loop = false
+	music.cruise.stream = st
+	cruise_pos = 0.0
+
+func _next_cruise() -> void:
+	cruise_idx = (cruise_idx + 1) % CRUISE.size()
+	_load_cruise()
+	if music_level.cruise > 0.0:
+		music.cruise.play()
+		now_playing.emit(CRUISE[cruise_idx][1], CRUISE[cruise_idx][2])
+
+## mode: "cruise", "chase", "race" or "menu". duck < 1 lowers everything (pause menu).
+func update_music(mode: String, delta: float, duck := 1.0) -> void:
+	music_duck = move_toward(music_duck, duck, delta * 2.0)
+	for m in music:
+		var mp: AudioStreamPlayer = music[m]
+		var target := 1.0 if m == mode else 0.0
+		# Quick fade in for action themes, slower fade out so transitions overlap.
+		var rate := (1.2 if m in ["chase", "race", "credits"] else 0.5) if target > music_level[m] else 0.45
+		music_level[m] = move_toward(music_level[m], target, delta * rate)
+		mp.volume_db = _db(music_level[m] * music_duck)
+		if music_level[m] > 0.0 and not mp.playing:
+			if m == "cruise":
+				mp.play(cruise_pos)
+				if cruise_pos < 1.0:
+					now_playing.emit(CRUISE[cruise_idx][1], CRUISE[cruise_idx][2])
+			else:
+				mp.play()
+		elif music_level[m] <= 0.0 and mp.playing:
+			if m == "cruise":
+				cruise_pos = mp.get_playback_position()
+			mp.stop()
 
 ## Positional engine sound for AI cars near the listener.
 func update_ai(cars: Array, listener: Vector3) -> void:
