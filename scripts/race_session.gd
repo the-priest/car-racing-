@@ -177,15 +177,17 @@ func update(dt: float) -> void:
 		var gap := progress - ai.progress
 		r.car.power_mul = 1.0 + clampf(gap / 500.0, -0.08, 0.12)
 	if countdown > 0.0:
-		countdown -= dt
+		# Let a chapter title card finish before "3, 2, 1".
+		if game.hud.title_busy <= 0.0:
+			countdown -= dt
 		var c := int(ceil(countdown))
 		if c != _last_count:
 			_last_count = c
 			if c > 0 and c <= 3:
-				game.hud.big(str(c), 0.9)
+				game.hud.big(str(c), 0.9, true)
 				game.audio.play_oneshot("beep")
 			elif c <= 0:
-				game.hud.big("GO!", 1.0)
+				game.hud.big("GO!", 1.0, true)
 				game.audio.play_oneshot("beep", 2.0)
 		# Hold the player on the line (engine can still rev).
 		player.linear_velocity = Vector3(0, player.linear_velocity.y, 0)

@@ -155,19 +155,17 @@ func _ready() -> void:
 		if bonus >= Police.KANE_BONUS:
 			_award("kane")
 		slowmo(0.45 if bonus < 5000 else 0.9)
-		hud.big("TAKEDOWN", 1.2)
-		hud.message("Cop taken out  +$%d bounty" % bonus, 2.0)
+		hud.big("TAKEDOWN", 1.2, true)
 		audio.play_oneshot("impact", 0.7)
 		cam.shake = maxf(cam.shake, 0.8)
 		_rumble(1.0, 0.8, 0.35))
 	career = Career.new()
 	add_child(career)
 	career.setup(self, world)
-	career.message.connect(func(t, s): hud.message(t, s))
+	career.message.connect(func(t, s, k): hud.message(t, s, k))
 	career.big.connect(func(t, s): hud.big(t, s))
-	career.phone_ring.connect(func(c):
-		audio.set_ringing(true)
-		hud.message("%s is calling" % c, 3.0))
+	career.phone_ring.connect(func(_c):
+		audio.set_ringing(true))
 	career.finished.connect(_on_career_finished)
 	career.dialogue.connect(func(lines): hud.show_dialogue(lines))
 	career.dialogue_clear.connect(func(): hud.clear_dialogue())
@@ -948,6 +946,8 @@ func _pause() -> void:
 	get_tree().paused = true
 	menus.show_screen("pause", false)
 
+var pending_chase := ""
+
 func _on_career_finished(res: Dictionary) -> void:
 	if state != State.PLAY:
 		return # e.g. a job abandoned by NEW CAREER from the main menu
@@ -963,7 +963,9 @@ func _on_career_finished(res: Dictionary) -> void:
 			t = "VICTORY" if int(res.place) == 1 else ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH"][clampi(int(res.place) - 1, 0, 5)] + " PLACE"
 		else:
 			t = "JOB DONE" if res.ok else "JOB FAILED"
-		hud.big(t, 1.8)
+		# ESCAPED / BUSTED already on screen: the results card says the rest.
+		if hud.big_t < 0.3:
+			hud.big(t, 1.8, true)
 		if res.ok:
 			slowmo(0.9)
 		await get_tree().create_timer(1.7, true, false, true).timeout
@@ -978,6 +980,9 @@ func _on_career_finished(res: Dictionary) -> void:
 	if credits_roll_after_results:
 		credits_roll_after_results = false
 		credits_pending = true # rolls when the results card is dismissed
+	if pending_chase != "":
+		res["extra"] = [pending_chase]
+		pending_chase = ""
 	menus.show_results(res)
 	persist()
 
@@ -1033,20 +1038,22 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 		Save.data.heat_escapes = int(Save.data.heat_escapes) + 1
 		if int(police.last_stats.get("heat", 0)) >= 5:
 			_award("escape5")
-		hud.big("ESCAPED", 2.0)
+		hud.big("ESCAPED", 2.0, true)
 		var st: Dictionary = police.last_stats
-		hud.message("Bounty +$%s" % HUD._fmt(bounty), 4.0)
-		hud.message("Chase %s  ·  Heat %d  ·  Takedowns %d%s" % [HUD._time(float(st.get("time", 0.0))).split(".")[0], int(st.get("heat", 1)), int(st.get("takedowns", 0)), "  ·  KANE DOWN" if st.get("kane", false) else ""], 4.0)
+		var summary := "Chase %s  ·  Heat %d  ·  Takedowns %d  ·  Bounty $%s%s" % [HUD._time(float(st.get("time", 0.0))).split(".")[0], int(st.get("heat", 1)), int(st.get("takedowns", 0)), HUD._fmt(bounty), "  ·  KANE DOWN" if st.get("kane", false) else ""]
+		if career.active.is_empty():
+			hud.message(summary, 4.0)
+		else:
+			pending_chase = "Escaped the cops  ·  " + summary # shown on the job's results card
 		audio.play_oneshot("reward")
 	else:
 		var fine := mini(int(Save.data.cash), 2500 * maxi(int(police.last_stats.get("heat", 1)), 1))
 		Save.add_cash(-fine)
-		hud.big("BUSTED", 2.5)
-		hud.message("Fine -$%s" % HUD._fmt(fine), 3.0)
+		hud.big("BUSTED", 2.5, true)
 		if not career.active.is_empty() or career.race:
-			if career.race and career.active.is_empty():
-				hud.message("Race over - you got busted", 3.0)
-			career.abandon("You got busted")
+			career.abandon("You got busted  ·  fine $%s" % HUD._fmt(fine))
+		else:
+			hud.message("Fine $%s" % HUD._fmt(fine), 3.0)
 	persist()
 
 ## point/normal: contact position and the direction pushing the player away from what
@@ -1505,7 +1512,9 @@ func _update_weather(delta: float) -> void:
 
 func _update_drift(delta: float) -> void:
 	var ang := absf(player.slip_angle)
-	var drifting := player.on_ground and player.speed > 11.0 and ang > 0.24 and ang < 1.6 and player.forward_speed > 0.0
+	# Only real drifts score (gas-tap drift mode); a handbrake pivot is just a turn.
+	var drifting := player.on_ground and player.speed > 11.0 and ang > 0.24 and ang < 1.6 and player.forward_speed > 0.0 \
+			and (player.drift_mode or not player.assists)
 	if drifting:
 		drift.idle = 0.0
 		drift.time += delta
@@ -1520,7 +1529,7 @@ func _update_drift(delta: float) -> void:
 			if pts > 400:
 				var cash := pts / 40
 				Save.add_cash(cash)
-				hud.message("DRIFT %s  +$%d" % [HUD._fmt(pts), cash], 1.8)
+				hud.message("DRIFT %s  +$%d" % [HUD._fmt(pts), cash], 1.8, "driftpay")
 			drift.chain = 0.0
 			drift.mult = 1
 			drift.time = 0.0

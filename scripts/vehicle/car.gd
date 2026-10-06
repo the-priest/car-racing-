@@ -698,7 +698,7 @@ func _physics_step(dt: float) -> void:
 		# Load-sensitive friction
 		var mu := mu_base * grip_mul * (1.0 - 0.08 * (fz / total_load_static - 1.0))
 		if not w.front and hb > 0.0:
-			mu *= lerpf(1.0, 0.32, hb)
+			mu *= lerpf(1.0, 0.32 if not assists else 0.55, hb)
 		if not w.front:
 			if drift_mode and hb < 0.1:
 				mu *= 1.0 - 0.08 * float(stats.drift)
@@ -826,7 +826,7 @@ func _physics_step(dt: float) -> void:
 				var perp2 := fwd - vdir2 * fwd.dot(vdir2)
 				perp2.y = 0.0
 				if perp2.length() > 0.01:
-					apply_central_force(perp2.normalized() * mass * minf(2.6 * absf(beta) * speed, 13.0) * (1.0 - hb * 0.5))
+					apply_central_force(perp2.normalized() * mass * minf(4.5 * absf(beta) * speed, 20.0))
 			else:
 				apply_torque(up * (-signf(beta) * excess2 * 14.0 * hb_relax) * inertia.y)
 			if hb > 0.1 and speed > 5.0:

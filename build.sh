@@ -76,6 +76,8 @@ if [ ! -f "$TPL_DIR/linux_release.x86_64" ] || [ ! -f "$TPL_DIR/windows_release_
 fi
 
 # ---------------------------------------------------------------- build
+# Stamp the build so the main menu shows which version you're running.
+printf '%s  %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo local)" "$(date +%Y-%m-%d)" > version.txt
 say "Importing assets..."
 "$GODOT" --headless --path . --import >/dev/null 2>&1 || "$GODOT" --headless --path . --editor --quit >/dev/null 2>&1 || true
 

@@ -406,6 +406,8 @@ func _build_main(box: VBoxContainer) -> void:
 	var done_ch := int(Save.data.contract)
 	var total_ch := Career.CONTRACTS.size()
 	_text(box, "Bank  $%s   ·   %s" % [HUD._fmt(int(Save.data.cash)), ("Chapter %d of %d" % [done_ch + 1, total_ch]) if done_ch < total_ch else "Story complete"], 18)
+	if FileAccess.file_exists("res://version.txt"):
+		_text(box, "Build " + FileAccess.get_file_as_string("res://version.txt").strip_edges(), 13, Color(1, 1, 1, 0.35))
 
 func _build_pause(box: VBoxContainer) -> void:
 	_title(box, "PAUSED")
@@ -906,7 +908,7 @@ func show_results(res: Dictionary) -> void:
 		title = "VICTORY" if int(res.place) == 1 else ord + " PLACE"
 		_title(box, title, 60)
 		_text(box, res.title.to_upper(), 20, ACCENT)
-		_text(box, "Position  %s / %d\nTime  %s" % [ord, int(res.total), HUD._time(float(res.time))], 22, Color.WHITE)
+		_text(box, "Time  %s" % HUD._time(float(res.time)), 22, Color.WHITE)
 		var order: Array = res.get("order", [])
 		if not order.is_empty():
 			var lines := []
@@ -924,7 +926,9 @@ func show_results(res: Dictionary) -> void:
 				_text(box, "Up next: chapter %d of %d, %s  ·  %s calls soon" % [cur + 1, Career.CONTRACTS.size(), Career.CONTRACTS[cur].title, Career.CONTRACTS[cur].caller], 18, Color.WHITE)
 			else:
 				_text(box, "STORY COMPLETE", 22, ACCENT)
-	if res.ok or res.kind == "race":
+	for line in res.get("extra", []):
+		_text(box, str(line), 17, Color(1, 1, 1, 0.8))
+	if int(res.get("reward", 0)) > 0:
 		_text(box, "Reward  +$%s" % HUD._fmt(int(res.reward)), 26, Color(0.5, 1.0, 0.62))
 	if not res.ok and res.kind == "contract" and not game.career.last_failed.is_empty():
 		_button(box, "RETRY JOB", func():

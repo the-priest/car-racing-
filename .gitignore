@@ -4,3 +4,4 @@ node_modules/
 *.import.tmp
 /Radio/
 /.godot-tools/
+/version.txt

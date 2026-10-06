@@ -3,7 +3,7 @@ extends Node3D
 ## Contracts (phone calls from your fixer), street races, speed traps and the
 ## GPS waypoint. Contracts are step lists: goto / wait / heat / evade / race / takedown.
 
-signal message(text: String, seconds: float)
+signal message(text: String, seconds: float, key: String)
 signal dialogue(lines: Array)
 signal dialogue_clear
 signal title_card(top: String, title: String, sub: String)
@@ -345,7 +345,7 @@ func update(dt: float) -> void:
 	if pending_call >= 0 and ringing > 0.0:
 		ringing -= dt
 		if ringing <= 0.0:
-			message.emit("Missed call - press [%s] to call back" % Settings.glyph("phone"), 4.0)
+			message.emit("Missed call - press [%s] to call back" % Settings.glyph("phone"), 4.0, "")
 	# Speed traps
 	for i in SPEED_TRAPS.size():
 		var tp: Vector2 = SPEED_TRAPS[i]
@@ -358,10 +358,10 @@ func update(dt: float) -> void:
 				var cash := int(kmh * 15)
 				Save.add_cash(cash)
 				big.emit("SPEED TRAP  %d km/h" % kmh, 2.0)
-				message.emit("New record! +$%d" % cash, 2.5)
+				message.emit("New record! +$%d" % cash, 2.5, "")
 				game.audio.play_oneshot("reward")
 			else:
-				message.emit("Speed trap %d km/h  (best %d)" % [kmh, best], 2.5)
+				message.emit("Speed trap %d km/h  (best %d)" % [kmh, best], 2.5, "")
 	for k in trap_cool.keys():
 		trap_cool[k] -= dt
 	if race:
@@ -467,7 +467,7 @@ func _update_billboards() -> void:
 			game.audio.play_oneshot("reward")
 			game.cam.shake = maxf(game.cam.shake, 0.4)
 			big.emit("BILLBOARD  %d / %d" % [found.size(), BILLBOARD_COUNT], 1.8)
-			message.emit("+$2,000", 2.0)
+			message.emit("+$2,000", 2.0, "")
 
 ## Debris burst: copies of the billboard panel pieces fly off and fade.
 func _shatter(node: Node3D, vel: Vector3) -> void:
@@ -512,18 +512,18 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 				waypoint_label = "Drift to the end of " + str(DRIFT_ZONES[dm.i].name)
 				big.emit("DRIFT ZONE", 1.5)
 				game.tip("drift", "Drift zone: score drift points before you reach the end gate. While steering, lift off the throttle and stab it again to start a drift.")
-				message.emit("%s - drift all the way to the end" % DRIFT_ZONES[dm.i].name, 3.0)
+				message.emit("%s - drift all the way to the end" % DRIFT_ZONES[dm.i].name, 3.0, "")
 				game.audio.play_oneshot("beep", 1.5)
 				return
 		return
 	var dmk: Dictionary = drift_markers[drift_zone]
 	drift_zone_t -= dt
 	if not idle() or game.police.pursuit:
-		message.emit("Drift zone cancelled", 2.0)
+		message.emit("Drift zone cancelled", 2.0, "")
 		_end_drift_zone()
 		return
 	if drift_zone_t <= 0.0:
-		message.emit("Drift zone: out of time", 2.5)
+		message.emit("Drift zone: out of time", 2.5, "")
 		_end_drift_zone()
 		return
 	if pp.distance_to(dmk.b) < 16.0:
@@ -533,7 +533,7 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 		var cash := score / 15
 		Save.add_cash(cash)
 		big.emit("DRIFT ZONE  %s" % HUD._fmt(score), 2.5)
-		message.emit(("NEW BEST! " if score > best else "Best %s  ·  " % HUD._fmt(best)) + "+$%s" % HUD._fmt(cash), 3.5)
+		message.emit(("NEW BEST! " if score > best else "Best %s  ·  " % HUD._fmt(best)) + "+$%s" % HUD._fmt(cash), 3.5, "")
 		if score > best:
 			Save.data.best[key] = score
 		Save.save_game()
@@ -561,10 +561,10 @@ func answer_phone() -> Array:
 		return []
 	if pending_call < 0:
 		if game.police.pursuit:
-			message.emit("Lose the cops before making calls", 2.5)
+			message.emit("Lose the cops before making calls", 2.5, "")
 			return []
 		call_timer = minf(call_timer, 2.5)
-		message.emit("Calling %s..." % _caller(contract_index() if not story_done() else 100), 2.5)
+		message.emit("Calling %s..." % _caller(contract_index() if not story_done() else 100), 2.5, "")
 		return []
 	var c: Dictionary = CONTRACTS[pending_call] if pending_call < CONTRACTS.size() else _random_contract(pending_call)
 	pending_call = -1
@@ -675,14 +675,14 @@ func _on_target_hit(hits: int, need: int) -> void:
 	game.cam.shake = maxf(game.cam.shake, 0.5)
 	game._rumble(0.9, 0.6, 0.3)
 	if hits == 2 and target.def.name == "ARMORED TRUCK" and not game.police.pursuit:
-		message.emit("The guards called it in - cops are on the way", 2.5)
+		message.emit("The guards called it in - cops are on the way", 2.5, "")
 		game.police.say("Dispatch: Armored car under attack on %s! All units, respond!" % game.police.area_name(target.car.global_position), true)
 	if hits >= need:
 		game.slowmo(0.8)
 		big.emit("%s DISABLED" % target.def.name, 2.0)
 		game.audio.play_oneshot("reward")
 	else:
-		message.emit("HIT!  %d / %d" % [hits, need], 1.2)
+		message.emit("HIT!  %d / %d" % [hits, need], 1.2, "hit")
 
 func target_text() -> String:
 	if target == null:
@@ -706,13 +706,13 @@ func _update_contract(dt: float, pp: Vector2) -> void:
 		if pp.distance_to(waypoint) < 16.0:
 			if game.police.pursuit and need_clean and step > 0:
 				if away_warned <= 0.0:
-					message.emit("Lose the cops first - don't lead them here!", 2.0)
+					message.emit("Lose the cops first - don't lead them here!", 2.0, "")
 					away_warned = 2.5
 			elif game.player.speed < 14.0 or not need_clean:
 				game.audio.play_oneshot("beep")
 				_next_step()
 			elif away_warned <= 0.0:
-				message.emit("Slow down to stop here", 1.0)
+				message.emit("Slow down to stop here", 1.0, "")
 				away_warned = 1.2
 		away_warned -= dt
 	elif s.has("wait"):
@@ -721,7 +721,7 @@ func _update_contract(dt: float, pp: Vector2) -> void:
 			step_t -= dt
 			waypoint = wait_pos
 			if away_warned <= 0.0:
-				message.emit("Get back to the pick-up - the crew needs you there!", 2.0)
+				message.emit("Get back to the pick-up - the crew needs you there!", 2.0, "")
 				away_warned = 2.5
 			away_warned -= dt
 		else:
@@ -730,14 +730,14 @@ func _update_contract(dt: float, pp: Vector2) -> void:
 			# Cops are inbound but arrive as the crew comes out (the heat step).
 			alarm_sent = true
 			big.emit("SILENT ALARM", 1.5)
-			message.emit("Cops inbound - %d seconds" % int(float(s.wait) - step_t), 2.5)
+			message.emit("Cops inbound - %d seconds" % int(float(s.wait) - step_t), 2.5, "")
 			game.police.say("Dispatch: Silent alarm triggered. All units, respond code three.", true)
 			game.audio.play_oneshot("beep", 0.7)
 		wait_left = maxf(0.0, float(s.wait) - step_t)
 		if step_t >= float(s.wait):
 			wait_left = -1.0
 			if not s.get("here", false):
-				message.emit("Crew's in - GO GO GO!", 3.0)
+				message.emit("Crew's in - GO GO GO!", 3.0, "")
 			_next_step()
 	elif s.has("evade"):
 		if not game.police.pursuit:
@@ -794,7 +794,7 @@ func _complete_contract(ok: bool, why := "") -> void:
 			Save.data.contract = story_idx + 1
 			for tier in Data.TIER_UNLOCK:
 				if int(Data.TIER_UNLOCK[tier]) == story_idx + 1:
-					get_tree().create_timer(4.0, true).timeout.connect(func(): message.emit("NEW CARS UNLOCKED: tier %s - visit your garage" % tier, 4.0))
+					get_tree().create_timer(4.0, true).timeout.connect(func(): message.emit("NEW CARS UNLOCKED: tier %s - visit your garage" % tier, 4.0, ""))
 			if not Save.data.contracts_done.has(c.title):
 				Save.data.contracts_done.append(c.title)
 		Save.save_game()
@@ -805,7 +805,7 @@ func _complete_contract(ok: bool, why := "") -> void:
 			var lines: Array = FLAVOR[story_idx]
 			get_tree().create_timer(24.0, false).timeout.connect(func():
 				if idle():
-					message.emit("New message from %s" % lines[0].split(":")[0], 2.5)
+					message.emit("New message from %s" % lines[0].split(":")[0], 2.5, "")
 					game.audio.play_oneshot("beep", 1.6)
 					dialogue.emit(lines))
 		if story_idx == CONTRACTS.size() - 1:

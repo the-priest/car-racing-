@@ -38,6 +38,13 @@ var standings_l: RichTextLabel
 var standings_t := 0.0
 var big_l: Label
 var big_t := 0.0
+var big_queue: Array = [] # [text, secs] waiting for the current banner to finish
+var title_busy := 0.0 # a job title card is on screen: other banners/toasts wait
+var msg_hold: Array = []
+var cash_shown := -1.0
+var cash_delta := 0
+var cash_delta_t := 0.0
+var cash_delta_l: Label
 var toast_box: VBoxContainer
 var prompt_l: Label
 var phone_panel: PanelContainer
@@ -106,10 +113,17 @@ void fragment() {
 	var tl := VBoxContainer.new()
 	tl.position = Vector2(28, 22)
 	root.add_child(tl)
-	cash_l = _label(34, Color(0.5, 1.0, 0.62))
+	var cash_row := HBoxContainer.new()
+	cash_row.add_theme_constant_override("separation", 14)
+	tl.add_child(cash_row)
+	cash_l = _label(30, Color(0.5, 1.0, 0.62))
+	cash_row.add_child(cash_l)
+	cash_delta_l = _label(22, Color(0.5, 1.0, 0.62))
+	cash_delta_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cash_delta_l.modulate.a = 0.0
+	cash_row.add_child(cash_delta_l)
 	heat_l = _label(22, Color(1.0, 0.25, 0.3))
 	clock_l = _label(16, Color(1, 1, 1, 0.6))
-	tl.add_child(cash_l)
 	tl.add_child(heat_l)
 	tl.add_child(clock_l)
 
@@ -250,8 +264,9 @@ void fragment() {
 
 	toast_box = VBoxContainer.new()
 	toast_box.set_anchors_preset(Control.PRESET_CENTER)
-	toast_box.position = Vector2(-300, -70)
-	toast_box.custom_minimum_size = Vector2(600, 0)
+	toast_box.position = Vector2(-340, -70)
+	toast_box.custom_minimum_size = Vector2(680, 0)
+	toast_box.add_theme_constant_override("separation", 6)
 	root.add_child(toast_box)
 
 	drift_l = _label(46, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
@@ -354,24 +369,83 @@ func _label(size: int, color: Color, align := HORIZONTAL_ALIGNMENT_LEFT) -> Labe
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
 
-func big(text: String, secs := 1.5) -> void:
+## Big centre banner. Banners queue behind each other (and behind a job title
+## card) so nothing important is overwritten; urgent ones (countdown) show at once.
+func big(text: String, secs := 1.5, urgent := false) -> void:
+	if urgent:
+		big_queue.clear()
+		_show_big(text, secs)
+		return
+	if text == big_l.text and big_t > 0.0:
+		big_t = maxf(big_t, secs)
+		return
+	for q in big_queue:
+		if q[0] == text:
+			return
+	if (big_t > 0.35 and big_l.text != "") or title_busy > 0.0:
+		if big_queue.size() < 3:
+			big_queue.append([text, secs])
+		return
+	_show_big(text, secs)
+
+func _show_big(text: String, secs: float) -> void:
 	big_l.text = text
 	big_t = secs
 	big_l.modulate.a = 1.0
 	big_l.scale = Vector2(1.3, 1.3)
 	big_l.pivot_offset = big_l.custom_minimum_size * 0.5
 
-func message(text: String, secs := 2.5) -> void:
+## Short toast under the banner. Repeats of the same message (or the same key)
+## merge into one ("NEAR MISS  x3") instead of stacking up.
+func message(text: String, secs := 2.5, key := "") -> void:
+	if key == "":
+		key = text
+	if title_busy > 0.0:
+		for m in msg_hold:
+			if m[2] == key:
+				m[0] = text
+				return
+		msg_hold.append([text, secs, key])
+		return
+	for c in toast_box.get_children():
+		if c.is_queued_for_deletion() or str(c.get_meta("key", "")) != key:
+			continue
+		var l0 := c as Label
+		if str(l0.get_meta("base", "")) == text:
+			var n := int(l0.get_meta("count", 1)) + 1
+			l0.set_meta("count", n)
+			l0.text = "%s  x%d" % [text, n]
+		else:
+			l0.set_meta("base", text)
+			l0.set_meta("count", 1)
+			l0.text = text
+		_toast_timer(l0, secs)
+		return
 	var l := _label(24, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(680, 0)
 	l.text = text
+	l.set_meta("key", key)
+	l.set_meta("base", text)
+	l.set_meta("count", 1)
 	toast_box.add_child(l)
+	l.modulate.a = 0.0
+	_toast_timer(l, secs)
+	while toast_box.get_child_count() > 3:
+		var old := toast_box.get_child(0)
+		toast_box.remove_child(old)
+		old.queue_free()
+
+func _toast_timer(l: Label, secs: float) -> void:
+	var prev = l.get_meta("tw", null)
+	if prev is Tween and (prev as Tween).is_valid():
+		(prev as Tween).kill()
 	var tw := create_tween()
+	tw.tween_property(l, "modulate:a", 1.0, 0.15)
 	tw.tween_interval(secs)
 	tw.tween_property(l, "modulate:a", 0.0, 0.4)
 	tw.tween_callback(l.queue_free)
-	while toast_box.get_child_count() > 4:
-		toast_box.get_child(0).queue_free()
-		toast_box.remove_child(toast_box.get_child(0))
+	l.set_meta("tw", tw)
 
 ## Cinematic title card for a new job: act line, big title, subtitle; fades out.
 func title_card(top: String, title: String, sub: String) -> void:
@@ -410,6 +484,7 @@ func title_card(top: String, title: String, sub: String) -> void:
 	tw.tween_callback(box.queue_free)
 	big_t = 0.0
 	big_l.text = ""
+	title_busy = 3.4
 
 ## Gold achievement card that slides in at the top right; queued if several unlock at once.
 func achievement(title: String, desc: String) -> void:
@@ -518,6 +593,26 @@ func _next_sub() -> void:
 	sub_t = 2.6 + line.length() * 0.045
 	game.audio.play_oneshot("beep", 2.4, -18.0)
 
+## Cash readout counts toward the new balance, with a "+$2,000" chip beside it.
+func _update_cash(delta: float) -> void:
+	var cash := float(Save.data.cash)
+	if cash_shown < 0.0:
+		cash_shown = cash
+	var diff := cash - cash_shown
+	if absf(diff) >= 1.0:
+		if cash_delta_t <= 0.0:
+			cash_delta = 0
+		cash_delta += int(round(diff))
+		cash_delta_t = 2.6
+		cash_delta_l.text = ("+$%s" if cash_delta > 0 else "-$%s") % _fmt(absi(cash_delta))
+		cash_delta_l.add_theme_color_override("font_color", Color(0.5, 1.0, 0.62) if cash_delta > 0 else Color(1.0, 0.4, 0.4))
+		cash_shown = cash
+	if cash_delta_t > 0.0:
+		cash_delta_t -= delta
+		cash_delta_l.modulate.a = clampf(cash_delta_t * 2.0, 0.0, 1.0)
+	var target_disp := cash - (float(cash_delta) * clampf((cash_delta_t - 1.6) / 1.0, 0.0, 1.0) if cash_delta_t > 0.0 else 0.0)
+	cash_l.text = "$%s" % _fmt(int(target_disp))
+
 func _process(delta: float) -> void:
 	if game == null or game.player == null:
 		return
@@ -529,7 +624,7 @@ func _update(delta: float) -> void:
 	var car: Car = game.player
 	var police: Police = game.police
 	var career: Career = game.career
-	cash_l.text = "$%s" % _fmt(int(Save.data.cash))
+	_update_cash(delta)
 	if police.pursuit or police.heat > 0:
 		heat_l.text = "HEAT " + "★".repeat(police.heat) + "☆".repeat(5 - police.heat)
 	else:
@@ -614,12 +709,22 @@ func _update(delta: float) -> void:
 				var col := "#ffffff" if e.me else ("#ff6aa8" if e.boss else "#c8ccd6")
 				txt += "[right][color=%s]%d  %s[/color][/right]\n" % [col, k + 1, "YOU" if e.me else str(e.name).to_upper()]
 			standings_l.text = txt
+	if title_busy > 0.0:
+		title_busy -= delta
+		if title_busy <= 0.0:
+			var held := msg_hold.duplicate()
+			msg_hold.clear()
+			for m in held:
+				message(m[0], m[1], m[2])
 	if big_t > 0.0:
 		big_t -= delta
 		big_l.scale = big_l.scale.lerp(Vector2.ONE, 1.0 - exp(-12.0 * delta))
 		big_l.modulate.a = clampf(big_t * 2.0, 0.0, 1.0)
 	else:
 		big_l.text = ""
+		if not big_queue.is_empty() and title_busy <= 0.0:
+			var nb: Array = big_queue.pop_front()
+			_show_big(nb[0], nb[1])
 	var talking: bool = game.is_playing()
 	if talking and sub_panel.visible and sub_l.visible_ratio < 1.0:
 		sub_l.visible_ratio = minf(1.0, sub_l.visible_ratio + delta * 55.0 / maxf(sub_l.text.length(), 1.0))

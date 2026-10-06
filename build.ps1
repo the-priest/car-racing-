@@ -65,6 +65,9 @@ if (-not (Test-Path (Join-Path $TplDir "windows_release_x86_64.exe")) -or -not (
 }
 
 # ---------------------------------------------------------------- build
+# Stamp the build so the main menu shows which version you're running.
+$rev = (& git rev-parse --short HEAD 2>$null); if (-not $rev) { $rev = "local" }
+Set-Content "version.txt" ("$rev  " + (Get-Date -Format "yyyy-MM-dd"))
 Say "Importing assets..."
 & $Godot --headless --path . --import 2>&1 | Out-Null
 
