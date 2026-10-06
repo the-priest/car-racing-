@@ -549,6 +549,8 @@ func reset_to_road() -> void:
 		var c := r.path.at(r.p_idx)
 		var d := r.path.dir(r.p_idx)
 		var y := 0.6 if world.in_city(c.x, c.y) else world.ground(c.x, c.y) + 0.9
+		if not r.path.heights.is_empty() and not world.in_city(c.x, c.y):
+			y = maxf(y, r.path.heights[r.path.idx(r.p_idx)] + 0.9)
 		player.reset_to(Transform3D(Basis.looking_at(Vector3(d.x, 0, d.y), Vector3.UP), Vector3(c.x, y, c.y)))
 		cam.snap = true
 		return
