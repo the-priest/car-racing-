@@ -50,6 +50,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--balancetest":
+			shots_spec = "BALANCE"
 		if a == "--remaptest":
 			shots_spec = "REMAPTEST"
 		if a == "--drifttest":
@@ -147,6 +149,38 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "BALANCE":
+		Save.data.car = "vanta"
+		Save.data.upgrades = {}
+		apply_player_car()
+		_on_play()
+		traffic.set_count(0)
+		police.enabled = false
+		await _frames(30)
+		for leg in [["lot", "docks", 150], ["overpass", "quarry", 240], ["airfield", "farm", 260], ["home", "farm", 300], ["reserve", "airfield", 0], ["pier", "quarry", 0]]:
+			var a2 := world.nearest_node(Career.LOC[leg[0]])
+			var b2 := world.nearest_node(Career.LOC[leg[1]])
+			var pts := PackedVector2Array()
+			for nid in world.route(a2, b2):
+				pts.append(world.node_pos[nid])
+			var path := RacePath.new(pts, false, world)
+			var p0 := path.at(2)
+			var d0 := path.dir(2)
+			var y0 := (0.6 if world.in_city(p0.x, p0.y) else world.ground(p0.x, p0.y) + 0.8)
+			player.reset_to(Transform3D(Basis.looking_at(Vector3(d0.x, 0, d0.y), Vector3.UP), Vector3(p0.x, y0, p0.y)))
+			autopilot = true
+			var bot := AIDriver.new(player, path, 0.8, 0.0)
+			bot.idx = 2
+			var t := 0.0
+			while t < 600.0:
+				bot.update(1.0 / 120.0, [player], false)
+				await get_tree().physics_frame
+				t += 1.0 / 120.0
+				if bot.idx >= path.n - 4:
+					break
+			print("[balance] %s -> %s: %.0f m, %.0f s (limit %d)" % [leg[0], leg[1], path.length, t, leg[2]])
 		get_tree().quit()
 		return
 	if shots_spec == "REMAPTEST":
@@ -689,7 +723,11 @@ func _process(delta: float) -> void:
 	var playing := state == State.PLAY
 	if playing:
 		Save.data.playtime = float(Save.data.playtime) + delta
-		daynight.hour = fmod(daynight.hour + delta / 45.0, 24.0)
+		match str(Settings.data.time_mode):
+			"day": daynight.hour = move_toward(daynight.hour, 13.0, delta * 2.0)
+			"dusk": daynight.hour = move_toward(daynight.hour, 18.6, delta * 2.0)
+			"night": daynight.hour = move_toward(daynight.hour, 23.0, delta * 2.0)
+			_: daynight.hour = fmod(daynight.hour + delta / 45.0, 24.0)
 		_update_weather(delta)
 	daynight.update(delta)
 	var night := daynight.night
