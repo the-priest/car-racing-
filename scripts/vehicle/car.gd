@@ -318,7 +318,14 @@ func _tire(alpha: float) -> float:
 	# Peak ~0.19 rad, stays near 92% grip past the peak so slides don't snap away.
 	return sin(1.25 * atan(16.0 * alpha))
 
+static var prof_us := 0
+
 func _physics_process(dt: float) -> void:
+	var _t0 := Time.get_ticks_usec()
+	_physics_step(dt)
+	prof_us += Time.get_ticks_usec() - _t0
+
+func _physics_step(dt: float) -> void:
 	var xf := global_transform
 	var basis_n := xf.basis.orthonormalized()
 	var up := basis_n.y

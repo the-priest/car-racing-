@@ -60,10 +60,10 @@ func start(g: Node, w: World, kind: String, from: Vector2, to: Vector2, need_hit
 	tag.no_depth_test = true
 	tag.fixed_size = true
 	tag.pixel_size = 0.0022
-	tag.font_size = 30
-	tag.outline_size = 10
+	tag.font_size = 22
+	tag.outline_size = 8
 	tag.modulate = Color(1.0, 0.82, 0.2)
-	tag.position = Vector3(0, 3.6, 0)
+	tag.position = Vector3(0, 3.4, 0)
 	car.add_child(tag)
 	game.on_car_spawned(car)
 

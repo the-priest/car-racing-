@@ -332,7 +332,9 @@ func _build_pause(box: VBoxContainer) -> void:
 			game._on_resume()
 			career.abandon())
 	var at_home: bool = game.player_at_home()
-	_button(box, "GARAGE" + ("" if at_home else "  (drive home to use)"), func(): show_screen("garage"), not at_home or game.police.pursuit)
+	_button(box, "GARAGE" + ("" if at_home else "  (drive home to use)"), func():
+		close_all()
+		game._open_garage(), not at_home or game.police.pursuit)
 	_button(box, "SKIP TO " + ("DAY" if game.daynight.night > 0.5 else "NIGHT"), func():
 		game.skip_time()
 		show_screen("pause", false), game.police.pursuit)

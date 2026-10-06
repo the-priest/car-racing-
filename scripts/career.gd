@@ -5,6 +5,7 @@ extends Node3D
 
 signal message(text: String, seconds: float)
 signal dialogue(lines: Array)
+signal dialogue_clear
 signal story_complete
 signal big(text: String, seconds: float)
 signal phone_ring(caller: String)
@@ -489,10 +490,15 @@ func _end_target() -> void:
 	if target:
 		var t := target
 		target = null
+		if not t.disabled:
+			t.cleanup()
+			t.queue_free()
+			return
 		# Leave a disabled truck sitting there for a few seconds before cleanup.
 		get_tree().create_timer(12.0).timeout.connect(func():
-			t.cleanup()
-			t.queue_free())
+			if is_instance_valid(t):
+				t.cleanup()
+				t.queue_free())
 
 func _complete_contract(ok: bool, why := "") -> void:
 	var c := active
@@ -524,6 +530,7 @@ func _complete_contract(ok: bool, why := "") -> void:
 			story_complete.emit()
 	else:
 		last_failed = c
+		dialogue_clear.emit()
 		var who: String = c.get("caller", "Mara")
 		dialogue.emit(["%s: %s. Call me when you're ready to go again." % [who, why if why != "" else "That fell apart"]])
 		call_timer = 20.0

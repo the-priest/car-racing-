@@ -35,6 +35,9 @@ var kick_strong := 0.0
 var kick_weak := 0.0
 var kick_time := 0.0
 var haptics_on := false
+var prof := {} # perftest: accumulated usec per system
+var profiling := false
+var showroom: Node3D
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -49,6 +52,8 @@ func _ready() -> void:
 			shots_spec = "MENUTEST"
 		if a == "--review":
 			shots_spec = "REVIEW"
+		if a == "--perftest":
+			shots_spec = "PERFTEST"
 		if a == "--copstest":
 			shots_spec = "COPSTEST"
 		if a == "--storytest":
@@ -62,7 +67,9 @@ func _ready() -> void:
 	menus.play_pressed.connect(_on_play)
 	menus.resume_pressed.connect(_on_resume)
 	menus.quit_to_menu.connect(_to_menu)
-	menus.garage_closed.connect(func(): apply_player_car())
+	menus.garage_closed.connect(func():
+		apply_player_car()
+		_showroom(false))
 	daynight = DayNight.new()
 	add_child(daynight)
 	daynight.setup(self)
@@ -110,6 +117,7 @@ func _ready() -> void:
 		hud.message("%s is calling" % c, 3.0))
 	career.finished.connect(_on_career_finished)
 	career.dialogue.connect(func(lines): hud.show_dialogue(lines))
+	career.dialogue_clear.connect(func(): hud.clear_dialogue())
 	career.story_complete.connect(_on_story_complete)
 	hud = HUD.new()
 	add_child(hud)
@@ -132,6 +140,10 @@ func _ready() -> void:
 	if shots_spec == "REVIEW":
 		_to_menu()
 		await _review()
+		get_tree().quit()
+		return
+	if shots_spec == "PERFTEST":
+		await _perftest()
 		get_tree().quit()
 		return
 	if shots_spec == "COPSTEST":
@@ -444,7 +456,26 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_pressed("shift_down"):
 		player.input.shift_down = true
 
+func _showroom(on: bool) -> void:
+	# Studio lighting around the car while in the garage.
+	if on and showroom == null:
+		showroom = Node3D.new()
+		add_child(showroom)
+		for spec in [[Vector3(-4.5, 3.0, -4.0), Color(1.0, 0.92, 0.8), 6.0], [Vector3(4.5, 2.2, 4.5), Color(0.5, 0.7, 1.0), 5.0], [Vector3(0, 5.5, 0), Color(1, 1, 1), 3.0]]:
+			var l := OmniLight3D.new()
+			l.position = spec[0]
+			l.light_color = spec[1]
+			l.light_energy = spec[2]
+			l.omni_range = 12.0
+			l.shadow_enabled = false
+			showroom.add_child(l)
+	if showroom:
+		showroom.visible = on
+		if on:
+			showroom.global_position = player.global_position
+
 func _open_garage() -> void:
+	_showroom(true)
 	state = State.GARAGE
 	hud.visible = false
 	player.linear_velocity = Vector3.ZERO
@@ -491,10 +522,18 @@ func _physics_process(delta: float) -> void:
 	if career.target and is_instance_valid(career.target.car):
 		others.append(career.target.car)
 	others.append_array(police.cars())
+	var t0 := Time.get_ticks_usec()
 	_soft_contacts([player] + others)
 	traffic.collide(player)
 	for o in others:
 		traffic.collide(o, false)
+	_pt("contacts", t0)
+
+func _pt(k: String, t0: int) -> int:
+	var t := Time.get_ticks_usec()
+	if profiling:
+		prof[k] = prof.get(k, 0) + (t - t0)
+	return t
 
 func _soft_contacts(list: Array) -> void:
 	# Cars never block each other: overlapping cars get a soft separating impulse
@@ -527,6 +566,7 @@ func _process(delta: float) -> void:
 		_update_weather(delta)
 	daynight.update(delta)
 	var night := daynight.night
+	var t0 := Time.get_ticks_usec()
 	world.update_lamps(delta, cam.global_position, night)
 	traffic.set_night(night)
 	world.set_wetness(clampf(daynight.rain * 1.2 + night * 0.25, 0.0, 1.0))
@@ -551,12 +591,17 @@ func _process(delta: float) -> void:
 		audio.update_player(player, false, delta)
 		return
 	cam.process_mode = Node.PROCESS_MODE_INHERIT
+	t0 = _pt("world/fx", t0)
 	traffic.update(delta, player, police.cars())
+	t0 = _pt("traffic", t0)
 	police.update(delta)
+	t0 = _pt("police", t0)
 	career.update(delta)
+	t0 = _pt("career", t0)
 	_update_drift(delta)
 	_update_prompt()
 	_update_gps(delta)
+	t0 = _pt("gps/prompt", t0)
 	# Nitrous refills: near misses, big air and high speed.
 	var misses := traffic.near_misses(player)
 	if misses > 0:
@@ -585,6 +630,7 @@ func _process(delta: float) -> void:
 		for r in career.race.rivals:
 			ai_cars.append(r.car)
 	audio.update_ai(ai_cars, cam.global_position)
+	t0 = _pt("audio", t0)
 	_update_haptics(delta)
 	if player.landing_impact > 0.0:
 		_rumble(clampf(player.landing_impact / 8.0, 0.2, 1.0), 0.4, 0.18)
@@ -918,6 +964,45 @@ func _review() -> void:
 	_open_garage()
 	await _frames(30)
 	await _snap("r08_garage")
+
+## CPU cost of gameplay systems: free roam with traffic, then a heat-5 pursuit.
+func _perftest() -> void:
+	_on_play()
+	career.start_race("ring")
+	var path: RacePath = career.race.path
+	var start := career.race.p_idx
+	career.race.cleanup()
+	career.race.queue_free()
+	career.race = null
+	autopilot = true
+	var bot := AIDriver.new(player, path, 0.85, 0.0)
+	bot.idx = start
+	profiling = true
+	for phase in 2:
+		prof.clear()
+		Car.prof_us = 0
+		if phase == 1:
+			police.start_pursuit("TEST", 5)
+		var tp := 0.0
+		var tph := 0.0
+		var worst := 0.0
+		var n := 0
+		for t in 60 * 25:
+			bot.update(1.0 / 60.0, [player], false)
+			await get_tree().process_frame
+			if t > 60 * 5:
+				var a := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+				var b := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+				tp += a
+				tph += b
+				worst = maxf(worst, a + b)
+				n += 1
+		prof["car physics"] = Car.prof_us
+		var parts := []
+		for k in prof:
+			parts.append("%s %.2f" % [k, prof[k] / 1000.0 / n])
+		print("[perf]   per frame ms: ", ", ".join(parts))
+		print("[perf] ", ["free roam", "heat 5 pursuit"][phase], ": process %.2f ms  physics %.2f ms  worst %.2f ms  cars: traffic %d cops %d" % [tp / n, tph / n, worst, traffic.cars.size() if "cars" in traffic else -1, police.cops.size()])
 
 ## Heat-5 pursuit with the player car on autopilot around the ring road.
 func _copstest() -> void:

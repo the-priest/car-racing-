@@ -292,6 +292,11 @@ func radio(text: String) -> void:
 	radio_t = 5.0 + text.length() * 0.03
 	radio_panel.modulate.a = 1.0
 
+func clear_dialogue() -> void:
+	sub_lines.clear()
+	sub_t = 0.0
+	sub_panel.visible = false
+
 func show_dialogue(lines: Array) -> void:
 	## Queues lines ("Speaker: text" or narration) after anything already showing.
 	var was_idle := sub_lines.is_empty() and not sub_panel.visible
@@ -325,6 +330,11 @@ func _next_sub() -> void:
 func _process(delta: float) -> void:
 	if game == null or game.player == null:
 		return
+	var _t0 := Time.get_ticks_usec()
+	_update(delta)
+	game._pt("hud", _t0)
+
+func _update(delta: float) -> void:
 	var car: Car = game.player
 	var police: Police = game.police
 	var career: Career = game.career
