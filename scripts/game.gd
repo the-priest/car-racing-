@@ -42,6 +42,7 @@ var custom_wp := Vector2.INF # waypoint pinned on the full map
 var welcomed := false
 var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
 var ach_timer := 2.0
+var credits_pending := false
 var top_kmh := 0.0
 
 func _ready() -> void:
@@ -55,6 +56,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--creditstest":
+			shots_spec = "CREDITS"
 		if a == "--sliptest":
 			shots_spec = "SLIPTEST"
 		if a == "--pintest":
@@ -164,6 +167,18 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "CREDITS":
+		_on_play()
+		credits_pending = true
+		_on_resume()
+		for i in 600:
+			await get_tree().process_frame
+		await _snap("credits")
+		menus.credits_done.emit()
+		await _frames(20)
+		print("[credits] state=", state, " paused=", get_tree().paused)
 		get_tree().quit()
 		return
 	if shots_spec == "SLIPTEST":
@@ -529,6 +544,9 @@ func _on_resume() -> void:
 	hud.visible = true
 	get_tree().paused = false
 	cam.snap = true
+	if credits_pending:
+		credits_pending = false
+		_roll_credits()
 
 func _pause() -> void:
 	state = State.PAUSED
@@ -596,9 +614,17 @@ func slowmo(secs: float) -> void:
 	get_tree().create_timer(secs, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
 
 func _on_story_complete() -> void:
-	hud.big("THE END", 4.0)
+	credits_pending = true
+
+## After the finale's results card: the end credits, then an epilogue line in free roam.
+func _roll_credits() -> void:
+	state = State.PAUSED
+	hud.visible = false
+	get_tree().paused = true
+	await menus.roll_credits()
+	_on_resume()
 	hud.show_dialogue(["You came to Solano Bay with one car and a reputation.", "Now the city knows your name.",
-		"Story complete. Side jobs, street races and the cops are still out there.", "Thanks for playing VELOCITY HEAT."])
+		"Side jobs, street races and the cops are still out there. The phone's still on."])
 
 func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 	if escaped:

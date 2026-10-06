@@ -300,6 +300,10 @@ func _clear(box: Node) -> void:
 		c.queue_free()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _credits_root and (event.is_action_pressed("ui_accept") or event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause")):
+		credits_done.emit()
+		get_viewport().set_input_as_handled()
+		return
 	if current == "" or current == "loading":
 		return
 	if event.is_action_pressed("ui_cancel") or (event.is_action_pressed("pause") and current != "main"):
@@ -620,6 +624,11 @@ func _build_settings(box: VBoxContainer) -> void:
 			elif ev.is_action_pressed("ui_right"):
 				cycle.call(1)
 				b.accept_event())
+	if not Input.get_connected_joypads().is_empty():
+		_button(box, "TEST VIBRATION", func():
+			var g := float(Settings.data.vibration)
+			for d in Input.get_connected_joypads():
+				Input.start_joy_vibration(d, clampf(0.6 * g, 0.0, 1.0), clampf(0.8 * g, 0.0, 1.0), 0.5))
 	_text(box, "Low uses the lightweight OpenGL renderer for older laptops. Ultra enables real-time global illumination, screen-space reflections & GI, volumetric fog, 8K shadows and dense grass.", 15)
 	_button(box, "BACK", func(): back())
 
@@ -796,6 +805,60 @@ func _build_credits(box: VBoxContainer) -> void:
 	_text(box, "Car model: \"Car Concept\" by Eric Chadwick / Darmstadt Graphics Group GmbH, from the Khronos glTF Sample Assets, licensed CC BY 4.0. Based on a public-domain model by Unity Fan.", 16)
 	_text(box, "World, textures, sounds and music are procedurally generated for this game.", 16)
 	_button(box, "BACK", func(): back())
+
+## Full-screen scrolling end credits. Any confirm/back press skips. Returns when done.
+signal credits_done
+var _credits_root: Control
+
+func roll_credits() -> void:
+	close_all()
+	var bg := ColorRect.new()
+	bg.color = Color(0.01, 0.012, 0.02, 1.0)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.theme = theme_ui
+	add_child(bg)
+	_credits_root = bg
+	var v := VBoxContainer.new()
+	v.anchor_left = 0.5
+	v.anchor_right = 0.5
+	v.offset_left = -500
+	v.offset_right = 500
+	v.offset_top = 1100
+	v.add_theme_constant_override("separation", 14)
+	bg.add_child(v)
+	var line := func(t: String, size: int, col: Color) -> void:
+		var l := Label.new()
+		l.text = t
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.add_theme_font_size_override("font_size", size)
+		l.add_theme_color_override("font_color", col)
+		v.add_child(l)
+	line.call("THE END", 72, Color.WHITE)
+	line.call("", 20, Color.WHITE)
+	line.call("VELOCITY HEAT", 54, ACCENT)
+	line.call("A getaway story in Solano Bay", 22, Color(1, 1, 1, 0.7))
+	line.call("", 40, Color.WHITE)
+	line.call("THE CAST", 26, ACCENT)
+	for c in ["Mara  -  the fixer", "Dex  -  mechanic, smuggler, therapist", "Sable  -  king of the Night Kings", "Juno  -  fastest driver on the ring",
+			"Rook  -  drives dirty", "Lt. Kane  -  Heat Task Force", "Air One  -  always watching", "You  -  the driver"]:
+		line.call(c, 22, Color(1, 1, 1, 0.85))
+	line.call("", 40, Color.WHITE)
+	line.call("BUILT WITH", 26, ACCENT)
+	line.call("Godot Engine (MIT licence)", 22, Color(1, 1, 1, 0.85))
+	line.call("\"Car Concept\" model by Eric Chadwick / Darmstadt Graphics Group GmbH", 18, Color(1, 1, 1, 0.7))
+	line.call("Khronos glTF Sample Assets, CC BY 4.0", 18, Color(1, 1, 1, 0.7))
+	line.call("World, sounds and music generated for this game", 18, Color(1, 1, 1, 0.7))
+	line.call("", 60, Color.WHITE)
+	line.call("Thanks for playing.", 30, Color.WHITE)
+	line.call("The city is yours.", 22, ACCENT)
+	await get_tree().process_frame
+	var tw := create_tween()
+	tw.tween_property(v, "offset_top", -v.size.y - 80.0, 38.0)
+	tw.tween_callback(func(): credits_done.emit())
+	await credits_done
+	tw.kill()
+	bg.queue_free()
+	_credits_root = null
 
 func show_results(res: Dictionary) -> void:
 	if not screens.has("results"):
