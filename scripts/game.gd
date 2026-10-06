@@ -997,7 +997,7 @@ func _fuzz() -> void:
 	_on_play()
 	autopilot = true
 	var counts := {}
-	for step in 600:
+	for step in (int(OS.get_environment("FUZZ_STEPS")) if OS.has_environment("FUZZ_STEPS") else 600):
 		var act := randi() % 22
 		counts[act] = counts.get(act, 0) + 1
 		match act:
