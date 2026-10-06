@@ -67,6 +67,20 @@ const PAD_NAMES_PS := {JOY_BUTTON_A: "✕", JOY_BUTTON_B: "○", JOY_BUTTON_X: "
 
 ## Rebinds one action for keyboard (InputEventKey) or controller (InputEventJoypadButton).
 func rebind(action: String, ev: InputEvent) -> void:
+	if ev is InputEventKey and (ev as InputEventKey).physical_keycode == 0:
+		return
+	# Free the key/button from any other driving action that used it (no double triggers).
+	for other in REBINDABLE:
+		if other == action:
+			continue
+		for e in InputMap.action_get_events(other):
+			var same := (ev is InputEventKey and e is InputEventKey and (e as InputEventKey).physical_keycode == (ev as InputEventKey).physical_keycode) \
+				or (ev is InputEventJoypadButton and e is InputEventJoypadButton and (e as InputEventJoypadButton).button_index == (ev as InputEventJoypadButton).button_index)
+			if same:
+				InputMap.action_erase_event(other, e)
+				var ob: Dictionary = data.bindings.get(other, {}).duplicate()
+				ob["key" if ev is InputEventKey else "pad"] = -1 # unbound (persisted)
+				data.bindings[other] = ob
 	var b: Dictionary = data.bindings.get(action, {}).duplicate()
 	if ev is InputEventKey:
 		b["key"] = int((ev as InputEventKey).physical_keycode)
@@ -90,12 +104,14 @@ func _apply_binding(action: String) -> void:
 		for e in InputMap.action_get_events(action):
 			if e is InputEventKey:
 				InputMap.action_erase_event(action, e)
-		InputMap.action_add_event(action, _key(int(b.key) as Key))
+		if int(b.key) >= 0:
+			InputMap.action_add_event(action, _key(int(b.key) as Key))
 	if b.has("pad"):
 		for e in InputMap.action_get_events(action):
 			if e is InputEventJoypadButton:
 				InputMap.action_erase_event(action, e)
-		InputMap.action_add_event(action, _btn(int(b.pad) as JoyButton))
+		if int(b.pad) >= 0:
+			InputMap.action_add_event(action, _btn(int(b.pad) as JoyButton))
 
 ## Current label of an action's binding on keyboard or pad.
 func binding_text(action: String, pad: bool) -> String:

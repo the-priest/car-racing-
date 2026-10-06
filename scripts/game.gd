@@ -43,6 +43,8 @@ var welcomed := false
 var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
 var ach_timer := 2.0
 var credits_pending := false
+var credits_roll_after_results := false
+var session_id := 0 # bumped when leaving to the menu / new career; stale awaits bail out
 var photo := {"yaw": 0.0, "pitch": 0.25, "dist": 7.0, "fov": 55.0}
 var photo_hint: Label
 var top_kmh := 0.0
@@ -458,6 +460,12 @@ func _build_player(id: String) -> void:
 	_player_car_id = id
 
 func reset_career() -> void:
+	session_id += 1
+	credits_pending = false
+	top_kmh = 0.0
+	custom_wp = Vector2.INF
+	for b in career.billboards:
+		b.node.visible = true
 	career.abandon()
 	career.pending_call = -1
 	career.ringing = 0.0
@@ -494,6 +502,11 @@ func on_settings_changed() -> void:
 		player.manual = bool(Settings.data.manual)
 	cam.mode = int(Settings.data.camera) as CameraRig.Mode
 
+## Moves the clock toward a locked hour the short way round midnight.
+func _hour_toward(target: float, delta: float) -> float:
+	var diff := wrapf(target - daynight.hour, -12.0, 12.0)
+	return fposmod(daynight.hour + clampf(diff, -delta * 2.0, delta * 2.0), 24.0)
+
 func is_playing() -> bool:
 	return state == State.PLAY
 
@@ -524,6 +537,7 @@ func _notification(what: int) -> void:
 
 # ---------------------------------------------------------------- states
 func _to_menu() -> void:
+	session_id += 1
 	if state == State.PAUSED or state == State.PLAY:
 		persist()
 	state = State.MENU
@@ -662,6 +676,7 @@ func _on_career_finished(res: Dictionary) -> void:
 	if res.get("contract_next", false):
 		hud.big("VICTORY", 2.0)
 		return
+	var my_session := session_id
 	if shots_spec == "":
 		# A beat to enjoy the finish before the results card.
 		var t: String
@@ -674,11 +689,16 @@ func _on_career_finished(res: Dictionary) -> void:
 			slowmo(0.9)
 		await get_tree().create_timer(1.7, true, false, true).timeout
 		while state != State.PLAY:
-			if state == State.MENU:
+			if state == State.MENU or my_session != session_id:
 				return
 			await get_tree().process_frame
+		if my_session != session_id:
+			return
 	state = State.RESULTS
 	get_tree().paused = true
+	if credits_roll_after_results:
+		credits_roll_after_results = false
+		credits_pending = true # rolls when the results card is dismissed
 	menus.show_results(res)
 	persist()
 
@@ -716,7 +736,7 @@ func slowmo(secs: float) -> void:
 	get_tree().create_timer(secs, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
 
 func _on_story_complete() -> void:
-	credits_pending = true
+	credits_roll_after_results = true
 
 ## After the finale's results card: the end credits, then an epilogue line in free roam.
 func _roll_credits() -> void:
@@ -947,18 +967,20 @@ func _slipstream(delta: float, others: Array) -> void:
 	var fwd := -player.global_transform.basis.z
 	var pos := player.global_position
 	var found := [false] # array so the lambda can write to it (captures are by value)
-	var check := func(p: Vector3) -> void:
+	var check := func(p: Vector3, v: Vector3) -> void:
+		if v.dot(fwd) < 15.0:
+			return
 		var dv := p - pos
 		var ahead := dv.dot(fwd)
 		if ahead > 4.0 and ahead < 24.0 and absf(dv.dot(player.global_transform.basis.x)) < 1.8:
 			found[0] = true
 	for o in others:
 		if is_instance_valid(o):
-			check.call((o as Node3D).global_position)
+			check.call((o as Car).global_position, (o as Car).linear_velocity)
 	for i in traffic.active_count:
 		var c: Dictionary = traffic.cars[i]
-		if c.active:
-			check.call(c.pos)
+		if c.active and c.knock <= 0.0:
+			check.call(c.pos, Vector3(-sin(c.yaw), 0, -cos(c.yaw)) * float(c.speed))
 	if found[0]:
 		# Remove ~35% of aero drag while tucked in.
 		player.apply_central_force(fwd * player.cd * player.speed * player.speed * player.mass * 0.35)
@@ -999,9 +1021,9 @@ func _process(delta: float) -> void:
 	if playing:
 		Save.data.playtime = float(Save.data.playtime) + delta
 		match str(Settings.data.time_mode):
-			"day": daynight.hour = move_toward(daynight.hour, 13.0, delta * 2.0)
-			"dusk": daynight.hour = move_toward(daynight.hour, 18.6, delta * 2.0)
-			"night": daynight.hour = move_toward(daynight.hour, 23.0, delta * 2.0)
+			"day": daynight.hour = _hour_toward(13.0, delta)
+			"dusk": daynight.hour = _hour_toward(18.6, delta)
+			"night": daynight.hour = _hour_toward(23.0, delta)
 			_: daynight.hour = fmod(daynight.hour + delta / 45.0, 24.0)
 		_update_weather(delta)
 	daynight.update(delta)

@@ -493,7 +493,7 @@ func _shatter(node: Node3D, vel: Vector3) -> void:
 		tw.chain().tween_callback(mi.queue_free)
 
 func drift_zone_score() -> int:
-	return int(game.drift.total + game.drift.chain - drift_zone_base)
+	return maxi(0, int(game.drift.total + game.drift.chain - drift_zone_base))
 
 func _update_drift_zone(dt: float, pp: Vector2) -> void:
 	if drift_zone < 0:
@@ -503,7 +503,11 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 			if pp.distance_to(dm.a) < 14.0 and game.player.speed > 5.0:
 				drift_zone = dm.i
 				drift_zone_t = float(DRIFT_ZONES[dm.i].time)
-				drift_zone_base = game.drift.total + game.drift.chain
+				# Score starts fresh at the gate: bank nothing from a chain already running.
+				game.drift.chain = 0.0
+				game.drift.mult = 1
+				game.drift.time = 0.0
+				drift_zone_base = game.drift.total
 				waypoint = dm.b
 				waypoint_label = "Drift to the end of " + str(DRIFT_ZONES[dm.i].name)
 				big.emit("DRIFT ZONE", 1.5)
@@ -537,8 +541,10 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 		_end_drift_zone()
 
 func _end_drift_zone() -> void:
+	# Only clear the waypoint if it's still ours (a job may have set its own).
+	if drift_zone >= 0 and waypoint == drift_markers[drift_zone].b:
+		waypoint = Vector2.INF
 	drift_zone = -1
-	waypoint = Vector2.INF
 
 func _caller(idx: int) -> String:
 	if idx >= 100:
@@ -604,6 +610,8 @@ func pos_of(key: String) -> Vector2:
 	return LOC[key]
 
 func _start_contract(c: Dictionary) -> void:
+	if drift_zone >= 0:
+		_end_drift_zone()
 	active = c
 	step = -1
 	var idx := -1
@@ -841,6 +849,8 @@ func race_near(p: Vector2) -> String:
 	return ""
 
 func start_race(id: String, need_place := 1, boss := "") -> void:
+	if drift_zone >= 0:
+		_end_drift_zone()
 	race = RaceSession.new()
 	race.need_place = need_place
 	if boss != "":

@@ -325,6 +325,7 @@ func set_rims(idx: int) -> void:
 func set_underglow(idx: int) -> void:
 	var old := get_node_or_null("Underglow")
 	if old:
+		remove_child(old) # free the name now so the new node isn't renamed
 		old.queue_free()
 	if idx <= 0 or idx >= Data.GLOWS.size():
 		return
@@ -360,6 +361,7 @@ func set_underglow(idx: int) -> void:
 func set_kit(aero_lvl: int) -> void:
 	var old := get_node_or_null("KitWing")
 	if old:
+		remove_child(old)
 		old.queue_free()
 	var body_id: String = stats.get("body", "concept")
 	if aero_lvl < 2 or is_police or body_id == "wedge" or body_id == "van" or body_id == "delivery":
