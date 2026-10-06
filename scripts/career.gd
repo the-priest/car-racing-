@@ -507,6 +507,7 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 				waypoint = dm.b
 				waypoint_label = "Drift to the end of " + str(DRIFT_ZONES[dm.i].name)
 				big.emit("DRIFT ZONE", 1.5)
+				game.tip("drift", "Drift zone: score drift points before you reach the end gate. Tap the handbrake while steering to start a slide.")
 				message.emit("%s - drift all the way to the end" % DRIFT_ZONES[dm.i].name, 3.0)
 				game.audio.play_oneshot("beep", 1.5)
 				return
@@ -658,6 +659,7 @@ func _next_step() -> void:
 		add_child(target)
 		target.start(game, world, s.takedown, pos_of(s.from), pos_of(s.to), int(s.hits))
 		target.was_hit.connect(_on_target_hit)
+		game.tip("takedown", "Ram the target hard and often. The bar under your objective shows the hits left before it's disabled.")
 		waypoint = target.pos2()
 
 func _on_target_hit(hits: int, need: int) -> void:

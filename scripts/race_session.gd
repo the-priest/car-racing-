@@ -124,6 +124,7 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		rivals.append({"car": car, "ai": ai, "name": rname, "finished": false, "time": INF, "boss": is_boss})
 		game.on_car_spawned(car)
 	game.on_race_start()
+	game.tip("race", "Drive through the checkpoint gates. Tuck in behind rivals for a slipstream - it cuts drag and refills nitrous.")
 	game.hud.big(("VS  " + str(boss.name)) if not boss.is_empty() else str(d.name).to_upper(), 1.0)
 
 func _make_gate(c: Color) -> Node3D:

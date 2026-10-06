@@ -117,7 +117,8 @@ func _ready() -> void:
 	police.setup(self, world)
 	police.pursuit_started.connect(func(reason):
 		hud.big("PURSUIT", 1.5)
-		hud.message(reason, 3.0))
+		hud.message(reason, 3.0)
+		tip("pursuit", "Lose the cops: break line of sight and get far away. The red circle on your map is where they're searching. Stopping near cops gets you busted."))
 	police.pursuit_ended.connect(_on_pursuit_ended)
 	police.radio.connect(func(t):
 		hud.radio(t)
@@ -556,6 +557,17 @@ func _on_career_finished(res: Dictionary) -> void:
 	menus.show_results(res)
 	persist()
 
+## One-time contextual hint (remembered in the save).
+func tip(key: String, text: String) -> void:
+	if shots_spec != "":
+		return
+	var seen: Array = Save.data.get("tips", [])
+	if seen.has(key):
+		return
+	seen.append(key)
+	Save.data.tips = seen
+	hud.tip(text)
+
 ## Brief slow motion for big moments (takedowns). Real-time timer restores it.
 func slowmo(secs: float) -> void:
 	if profiling or shots_spec != "":
@@ -715,6 +727,7 @@ func _showroom(on: bool) -> void:
 			showroom.global_position = player.global_position
 
 func _open_garage() -> void:
+	tip("garage", "Your garage: buy cars, upgrades, paint, rims and underglow. Higher tiers unlock as the story moves on.")
 	_showroom(true)
 	_clear_inputs()
 	get_tree().paused = true

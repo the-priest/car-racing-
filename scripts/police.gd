@@ -426,6 +426,7 @@ func _try_roadblock() -> void:
 		var c := _make_cop(Transform3D(Basis.looking_at(face, Vector3.UP), Vector3(q.x, y + 0.4, q.y)), "block")
 		c.block_t = 0.0
 	say("Dispatch: Roadblock in position on %s. Box them in!" % area_name(Vector3(np.x, 0, np.y)), true)
+	game.tip("roadblock", "Roadblocks are just parked cars. Hit them flat out - ramming cops while you're faster takes them down for bounty.")
 	game.hud.message("ROADBLOCK AHEAD", 2.0)
 
 # ---------------------------------------------------------------- air unit
@@ -504,6 +505,7 @@ func _make_heli() -> void:
 	heli_vel = Vector3.ZERO
 	heli_lost_t = 0.0
 	say("Air One: Air unit on station. I have eyes on the suspect.", true)
+	game.tip("heli", "Air One is tracking you from above. Hide between tall downtown buildings to break its view, or outlast its fuel.")
 
 func _remove_heli() -> void:
 	if heli:

@@ -20,6 +20,9 @@ var pursuit_stats: Label
 var radio_panel: PanelContainer
 var radio_l: Label
 var radio_t := 0.0
+var tip_panel: PanelContainer
+var tip_l: Label
+var tip_t := 0.0
 var cooldown_bar: ProgressBar
 var race_box: VBoxContainer
 var pos_l: Label
@@ -157,6 +160,32 @@ void fragment() {
 	rv.add_child(radio_l)
 	radio_panel.modulate.a = 0.0
 	root.add_child(radio_panel)
+
+	tip_panel = PanelContainer.new()
+	tip_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	tip_panel.position = Vector2(24, -540)
+	tip_panel.custom_minimum_size = Vector2(420, 0)
+	tip_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ts := StyleBoxFlat.new()
+	ts.bg_color = Color(0.02, 0.03, 0.06, 0.8)
+	ts.border_width_top = 3
+	ts.border_color = CYAN
+	ts.content_margin_left = 14
+	ts.content_margin_right = 14
+	ts.content_margin_top = 8
+	ts.content_margin_bottom = 10
+	tip_panel.add_theme_stylebox_override("panel", ts)
+	var tv := VBoxContainer.new()
+	tip_panel.add_child(tv)
+	var th := _label(13, CYAN)
+	th.text = "TIP"
+	tv.add_child(th)
+	tip_l = _label(17, Color.WHITE)
+	tip_l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	tip_l.custom_minimum_size = Vector2(390, 0)
+	tv.add_child(tip_l)
+	tip_panel.visible = false
+	root.add_child(tip_panel)
 
 	race_box = VBoxContainer.new()
 	race_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -351,6 +380,13 @@ func title_card(top: String, title: String, sub: String) -> void:
 	big_t = 0.0
 	big_l.text = ""
 
+## Tip card above the minimap.
+func tip(text: String) -> void:
+	tip_l.text = text
+	tip_panel.visible = true
+	tip_panel.modulate.a = 1.0
+	tip_t = 9.0
+
 func radio(text: String) -> void:
 	radio_l.text = text
 	radio_t = 5.0 + text.length() * 0.03
@@ -498,6 +534,11 @@ func _update(delta: float) -> void:
 	var talking: bool = game.is_playing()
 	if talking and sub_panel.visible and sub_l.visible_ratio < 1.0:
 		sub_l.visible_ratio = minf(1.0, sub_l.visible_ratio + delta * 55.0 / maxf(sub_l.text.length(), 1.0))
+	if tip_t > 0.0:
+		tip_t -= delta
+		tip_panel.modulate.a = clampf(tip_t * 1.5, 0.0, 1.0)
+		if tip_t <= 0.0:
+			tip_panel.visible = false
 	if radio_t > 0.0:
 		radio_t -= delta
 		radio_panel.modulate.a = clampf(radio_t * 2.0, 0.0, 1.0)
