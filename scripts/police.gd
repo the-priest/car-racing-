@@ -27,6 +27,7 @@ var min_heat := 0 # contracts can force a minimum heat level
 var night := 0.0
 var takedowns := 0
 var bonus := 0 # extra bounty (Kane)
+var last_stats := {} # summary of the pursuit that just ended
 var roadblock_timer := 25.0
 var heli: Node3D
 var heli_light: SpotLight3D
@@ -234,6 +235,7 @@ func start_pursuit(reason: String, at_heat := 1) -> void:
 	say("Dispatch: All units, suspect vehicle %s on %s. Pursuit is a go." % [heading_name(p.linear_velocity), area_name(p.global_position)], true)
 
 func end_pursuit(escaped: bool) -> void:
+	last_stats = {"time": pursuit_time, "heat": heat, "takedowns": takedowns, "kane": bonus > 0}
 	var b := 0
 	if escaped:
 		b = bounty()

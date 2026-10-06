@@ -387,10 +387,12 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 		Save.add_cash(bounty)
 		Save.data.heat_escapes = int(Save.data.heat_escapes) + 1
 		hud.big("ESCAPED", 2.0)
-		hud.message("Bounty +$%s" % HUD._fmt(bounty), 3.0)
+		var st: Dictionary = police.last_stats
+		hud.message("Bounty +$%s" % HUD._fmt(bounty), 4.0)
+		hud.message("Chase %s  ·  Heat %d  ·  Takedowns %d%s" % [HUD._time(float(st.get("time", 0.0))).split(".")[0], int(st.get("heat", 1)), int(st.get("takedowns", 0)), "  ·  KANE DOWN" if st.get("kane", false) else ""], 4.0)
 		audio.play_oneshot("reward")
 	else:
-		var fine := mini(int(Save.data.cash), 2500 * maxi(police.heat, 1))
+		var fine := mini(int(Save.data.cash), 2500 * maxi(int(police.last_stats.get("heat", 1)), 1))
 		Save.add_cash(-fine)
 		hud.big("BUSTED", 2.5)
 		hud.message("Fine -$%s" % HUD._fmt(fine), 3.0)
@@ -1000,7 +1002,7 @@ func _readme_shots() -> void:
 			for c in police.cops:
 				if c.car.global_position.distance_to(player.global_position) < 45.0:
 					n += 1
-			if n > best_n and n >= 2:
+			if n > best_n and n >= 1:
 				best_n = n
 				daynight.hour = 18.4
 				await _snap("pursuit")
@@ -1009,10 +1011,20 @@ func _readme_shots() -> void:
 	autopilot = false
 	police.clear()
 	cam.mode = CameraRig.Mode.CHASE
-	# Takedown at sunset.
+	# Map with the route to the job, then the takedown at golden hour.
+	_place_at_home()
+	daynight.hour = 17.2
 	career.pending_call = 4
 	career.ringing = 5.0
 	hud.show_dialogue(career.answer_phone())
+	await _frames(30)
+	gps_timer = 0.0
+	await _frames(5)
+	hud.big_map.open()
+	await get_tree().process_frame
+	await get_tree().process_frame
+	await _snap("map")
+	hud.big_map.close()
 	player.reset_to(Transform3D(Basis(), career.pos3(career.waypoint) + Vector3(0, 0.8, 0)))
 	await _frames(40)
 	var tg: MissionTarget = career.target
@@ -1023,12 +1035,10 @@ func _readme_shots() -> void:
 				player.reset_to(Transform3D(tg.car.global_transform.basis, tg.car.global_position - f * 14.0 + Vector3(0, 0.25, 0)))
 				player.linear_velocity = tg.car.linear_velocity
 			await get_tree().physics_frame
+		hud.big_l.text = ""
+		for t in hud.toast_box.get_children():
+			t.queue_free()
 		await _snap("takedown")
-	hud.big_map.open()
-	await get_tree().process_frame
-	await get_tree().process_frame
-	await _snap("map")
-	hud.big_map.close()
 
 ## Screenshot tour of menus and new gameplay moments for visual review.
 func _review() -> void:
