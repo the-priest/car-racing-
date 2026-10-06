@@ -44,6 +44,7 @@ var slip_t := 0.0 # > 0 while slipstreaming (HUD indicator)
 var ach_timer := 2.0
 var credits_pending := false
 var tip_test := false
+var storm_t := 12.0
 var credits_roll_after_results := false
 var session_id := 0 # bumped when leaving to the menu / new career; stale awaits bail out
 var photo := {"yaw": 0.0, "pitch": 0.25, "dist": 7.0, "fov": 55.0}
@@ -1211,7 +1212,20 @@ func _process(delta: float) -> void:
 	if player.global_position.y < -20.0:
 		reset_to_road()
 
+## Lightning in heavy rain: a sky flash, then thunder a moment later.
+func _update_storm(delta: float) -> void:
+	if daynight.rain < 0.75:
+		return
+	storm_t -= delta
+	if storm_t > 0.0:
+		return
+	storm_t = randf_range(18.0, 45.0)
+	daynight.flash = 1.0
+	get_tree().create_timer(0.2).timeout.connect(func(): daynight.flash = 0.7)
+	get_tree().create_timer(randf_range(0.6, 2.2)).timeout.connect(func(): audio.play_oneshot("thunder", randf_range(0.8, 1.1), -4.0))
+
 func _update_weather(delta: float) -> void:
+	_update_storm(delta)
 	match str(Settings.data.weather):
 		"clear":
 			daynight.rain = move_toward(daynight.rain, 0.0, delta * 0.2)

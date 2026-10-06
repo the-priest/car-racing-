@@ -56,6 +56,7 @@ func setup() -> void:
 	streams["turbo"] = _gen_turbo()
 	turbo = _player(streams.turbo)
 	streams["rain"] = _gen_rain()
+	streams["thunder"] = _gen_thunder()
 	rain = _player(streams.rain)
 	rotor = _player(streams.rotor)
 	music_a = _player(streams.music_night, "Music")
@@ -273,6 +274,27 @@ func _gen_rain() -> AudioStreamWAV:
 	s.data = data
 	s.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	s.loop_end = n
+	return s
+
+## Rolling thunder: brown noise with a crack at the start and a long decay.
+func _gen_thunder() -> AudioStreamWAV:
+	var rate := 22050
+	var n := int(rate * 3.5)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	var brown := 0.0
+	for i in n:
+		var t := float(i) / rate
+		brown = clampf(brown + rng.randf_range(-1.0, 1.0) * 0.06, -1.0, 1.0)
+		var env := (1.0 - exp(-t * 12.0)) * exp(-t * 1.1) * (0.8 + 0.2 * sin(t * 9.0))
+		var crack := rng.randf_range(-1.0, 1.0) * exp(-t * 18.0) * 0.5
+		data.encode_s16(i * 2, int(clampf((brown * 1.8 * env + crack), -1.0, 1.0) * 28000.0))
+	var s := AudioStreamWAV.new()
+	s.format = AudioStreamWAV.FORMAT_16_BITS
+	s.mix_rate = rate
+	s.data = data
 	return s
 
 func update_rain(amount: float) -> void:

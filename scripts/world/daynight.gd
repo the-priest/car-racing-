@@ -13,6 +13,7 @@ var night := 0.0
 var rain := 0.0
 var _cloud := 0.0
 var _sky_timer := 0.0
+var flash := 0.0 # lightning, decays quickly
 
 func setup(parent: Node) -> void:
 	sky_mat = ShaderMaterial.new()
@@ -104,8 +105,9 @@ func update(delta: float) -> void:
 	# Night ambient: moonlit blue city glow instead of the near-black sky.
 	env.ambient_light_color = Color(0.5, 0.55, 0.65).lerp(Color(0.16, 0.19, 0.3), night)
 	env.ambient_light_sky_contribution = lerpf(0.85, 0.3, night)
-	env.ambient_light_energy = lerpf(1.25, 0.9, night)
-	env.background_energy_multiplier = lerpf(1.0, 0.9, night)
+	flash = maxf(0.0, flash - delta * 7.0)
+	env.ambient_light_energy = lerpf(1.25, 0.9, night) + flash * 3.0
+	env.background_energy_multiplier = lerpf(1.0, 0.9, night) + flash * 2.0
 	env.tonemap_exposure = lerpf(0.92, 1.45, night) * (1.0 + golden * 0.1)
 	var fog_day := Color(0.66, 0.74, 0.84)
 	var fog_gold := Color(0.9, 0.62, 0.42)
