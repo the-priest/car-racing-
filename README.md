@@ -1,6 +1,6 @@
 # Velocity Heat
 
-Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hire: chill at your garage, cruise the city, and when the phone rings, take the contract — bank-job getaways, hot deliveries, police escapes and street races. The cops are always ready to chase.
+Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hire in Solano Bay. Chill at your garage, cruise the city, and when the phone rings, take the contract: bank-job getaways, armored-truck takedowns, hot deliveries, boss races and police escapes. The cops are always ready to chase.
 
 ![Highway at dusk](docs/screenshots/highway_dusk.png)
 
@@ -14,14 +14,42 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 
 ## Features
 
-- **6 × 6 km open world**: downtown grid with skyscrapers, coastal highway ring, mountain hairpin pass with snow peaks, valley road, airfield drag strip, ~100k trees, 1,800 street lights.
-- **Tyre-model physics**: raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, gearbox (auto/manual), traction/stability control (toggleable): cars grip by default and only drift when you throw them in with the handbrake, burnouts & donuts, wheelspin on powerful cars.
-- **Cars**: modern Vanta builds (realistic scanned-quality model) and procedural classics (Stallion '69 muscle, Wedge '78, 900 hp Stallion restomod). **9 upgrade categories** up to 5 levels — fully built hypercars are tuned to reach roughly 500+ km/h (still being balanced).
-- **Career**: phone-call contracts from your fixer, bank heists, deliveries, escapes, races, plus repeatable random jobs, street-race events and speed traps.
-- **Police**: patrols, pursuits with 5 heat levels, reinforcements, cooldown/evasion, bounties. Only buildings can stop your car — everything else gets knocked aside.
-- **Atmosphere**: dynamic day/night, rain with wet reflective roads, volumetric fog, procedural sky/clouds/stars, neon city nights.
-- **Controller first**: full gamepad support for driving and menus, analog triggers, rumble.
-- **Scales from laptops to high-end GPUs**: Low preset uses the OpenGL renderer; Ultra enables SDFGI global illumination, SSR, SSIL, volumetric fog, 8K shadows and dense grass.
+- **Story campaign - 14 chapters in 3 acts.** Arrive in Solano Bay with one car and a reputation. Work for Mara, the city's best fixer, and Dex, her mechanic. Take on Sable and his Night Kings street crew, and survive Lieutenant Kane's Heat Task Force. Contracts come in as phone calls, told through subtitled dialogue with colour-coded speakers. Mission types:
+  - bank-job getaways
+  - timed deliveries
+  - armored-truck takedowns
+  - boss races against named rivals
+  - an ambush escape
+  - running down a traitor
+  - a final heist on the Federal Reserve
+
+  After the story, side jobs, street races and speed traps keep coming.
+- **Legendary police pursuits** with 5 heat levels:
+  - patrols and dispatch radio chatter that names where you are and which way you're heading
+  - reinforcements that cut you off from ahead, PIT rams, and roadblocks you can smash through
+  - elite interceptors and **Air One**, a helicopter with a searchlight. Lose it between downtown skyscrapers, or outlast its fuel.
+  - **Lt. Kane** in her own interceptor during the finale
+
+  Ram cops while you're the faster car to take them down for bounty. Only buildings can stop your car; everything else gets knocked aside.
+- **Handling that grips by default.** Cars stay planted, with traction control and stability control (both toggleable). Drifts only start when you throw the car in with the handbrake, then they're easy to hold. Raycast suspension, slip-angle tyres, load transfer, anti-roll bars, aero downforce, an auto or manual gearbox, burnouts and donuts, and wheelspin on powerful cars.
+- **Cars**:
+  - modern Vanta builds (realistic scanned-quality model)
+  - procedural classics: Stallion '69 muscle, Wedge '78, and a 900 hp Stallion restomod
+  - **9 upgrade categories** up to 5 levels; a fully built Vanta Zero does 0-100 km/h in about 1 second and tops out around 500 km/h
+
+  The garage has stat bars, paint, and studio lighting.
+- **6 × 6 km open world**:
+  - downtown grid with skyscrapers and tree-lined streets
+  - coastal highway ring
+  - mountain hairpin pass with snowy peaks
+  - valley road and an airfield drag strip
+  - ~100k trees and 1,800 street lights
+- **Navigation**: a full-screen map (M / View / Touchpad) showing you, your mission, races, home, cops and speed traps, plus a minimap with a GPS route and a mission marker on the rim with distance. The objective banner shows a direction arrow and distance.
+- **Atmosphere**: dynamic day/night, rain with wet reflective roads, volumetric fog, procedural sky/clouds/stars, neon city nights. Speed blur and camera shake can be adjusted.
+- **Controller first**: full gamepad support for driving and menus, PlayStation/Xbox button prompts, analog triggers, rumble (engine, slip, ABS, impacts, landings).
+- **Graphics settings stay exactly as you set them** - no dynamic scaling:
+  - Low uses the OpenGL renderer for laptops.
+  - Ultra enables SDFGI global illumination, SSR, SSIL, volumetric fog, 8K shadows and dense grass.
 
 ## Build it yourself
 
@@ -49,7 +77,7 @@ World data and audio are pre-baked in `assets/`. To regenerate them: `node bake/
 | Nitrous | Shift | A / Cross |
 | Burnout | W + S stopped | RT + LT |
 | Camera / Look back | C / B | Y / R3 |
-| Answer phone | Tab | D-pad ↓ |
+| Answer / make a call | Tab | D-pad ↓ |
 | Full map | M | View / Touchpad |
 | Start race / Garage | E | D-pad ↑ |
 | Reset to road | R | Hold B / Circle |

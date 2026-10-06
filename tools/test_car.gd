@@ -10,12 +10,15 @@ var t200 := -1.0
 var max_lat := 0.0
 var max_beta := 0.0
 var car_id := "vanta"
+var maxed := false
 
 func _initialize() -> void:
 	print("init start")
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--car="):
 			car_id = a.substr(6)
+		if a == "--max":
+			maxed = true
 	var ground := StaticBody3D.new()
 	ground.set_meta("surface", "road")
 	var cs := CollisionShape3D.new()
@@ -27,7 +30,11 @@ func _initialize() -> void:
 	get_root().add_child(ground)
 	car = Car.new()
 	get_root().add_child(car)
-	car.setup(Data.stats_for(car_id, {}), Color.RED, false, false)
+	var up := {}
+	if maxed:
+		for k in Data.UPGRADES:
+			up[k] = Data.UPGRADES[k].cost.size()
+	car.setup(Data.stats_for(car_id, up), Color.RED, false, false)
 	car.global_position = Vector3(0, 0.05, 0)
 	print("init done")
 	physics_frame.connect(_tick)
@@ -50,7 +57,7 @@ func _tick() -> void:
 			if car.global_position.length() > 1700.0:
 				car.global_position = Vector3(0, car.global_position.y, 0)
 				car.reset_physics_interpolation()
-			if t > 12.0:
+			if t > (40.0 if maxed else 12.0):
 				print("0-100 %.2fs  0-200 %.2fs  v@30s %d km/h gear %d" % [t100, t200, kmh, car.gear + 1])
 				phase = 2; t = 0.0
 		2: # brake to stop
