@@ -282,6 +282,37 @@ func _setup_police_bar() -> void:
 		bar.add_child(ol)
 		police_lights.append(ol)
 
+## Rim finish from the garage (Data.RIMS index; 0 = stock).
+var stock_rims := {} # surface key -> original override (may be null)
+
+func set_rims(idx: int) -> void:
+	if model == null:
+		return
+	var mat: StandardMaterial3D = null
+	if idx > 0 and idx < Data.RIMS.size():
+		var r: Array = Data.RIMS[idx]
+		mat = StandardMaterial3D.new()
+		mat.albedo_color = r[1]
+		mat.metallic = r[2]
+		mat.roughness = r[3]
+	for w in wheels:
+		if w.node == null:
+			continue
+		for mi in (w.node as Node).find_children("*", "MeshInstance3D", true, false):
+			var m := mi as MeshInstance3D
+			for i in m.mesh.get_surface_count():
+				var key := "%d_%d" % [m.get_instance_id(), i]
+				if not stock_rims.has(key):
+					# First visit: remember the stock override (null, or e.g. chrome on classics)
+					# and whether this surface is a rim at all.
+					var orig := m.get_surface_override_material(i)
+					var basem := m.mesh.surface_get_material(i)
+					var is_rim := (basem != null and String(basem.resource_name).begins_with("Rim")) or (orig != null and String(orig.resource_name).begins_with("Rim"))
+					stock_rims[key] = {"rim": is_rim, "orig": orig}
+				var info: Dictionary = stock_rims[key]
+				if info.rim:
+					m.set_surface_override_material(i, mat if mat else info.orig)
+
 ## Visual body kit from upgrades: Aero 2 adds a low lip wing, Aero 3 a tall GT wing.
 func set_kit(aero_lvl: int) -> void:
 	var old := get_node_or_null("KitWing")

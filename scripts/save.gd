@@ -11,7 +11,7 @@ func _ready() -> void:
 
 func defaults() -> Dictionary:
 	return {
-		"cash": 8000, "rep": 0, "owned": ["vanta"], "car": "vanta", "upgrades": {}, "paint": {},
+		"cash": 8000, "rep": 0, "owned": ["vanta"], "car": "vanta", "upgrades": {}, "paint": {}, "rims": {},
 		"contract": 0, "contracts_done": [], "best": {}, "races_won": 0, "heat_escapes": 0,
 		"pos": [], "hour": 19.0, "playtime": 0.0,
 	}

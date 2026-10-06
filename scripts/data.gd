@@ -33,6 +33,10 @@ const CAR_ORDER := ["vanta", "stallion", "vanta_s", "wedge", "vanta_r", "vanta_x
 
 const POLICE := {"name": "Interceptor", "tier": "-", "price": 0, "mass": 1500.0, "accel": 10.5, "top": 80.0, "grip": 15.5, "brake": 28.0, "nitro": 8.0, "awd": true, "drift": 0.9, "gears": 6, "cyl": 8, "idle": 800.0, "red": 7000.0, "paint": Color(0.03, 0.03, 0.035)}
 
+## Rim finishes: [name, colour, metallic, roughness]; index 0 keeps the car's stock rims.
+const RIMS := [["Stock", Color.WHITE, 0.0, 0.0], ["Chrome", Color(0.93, 0.93, 0.95), 1.0, 0.06], ["Gloss black", Color(0.03, 0.03, 0.035), 0.5, 0.2],
+	["Gold", Color(0.85, 0.66, 0.24), 1.0, 0.14], ["Gunmetal", Color(0.24, 0.25, 0.27), 0.9, 0.25], ["Bronze", Color(0.55, 0.36, 0.2), 1.0, 0.2]]
+
 const PAINTS := [
 	Color(0.55, 0.04, 0.06), Color(0.85, 0.12, 0.02), Color(0.95, 0.42, 0.02), Color(0.9, 0.75, 0.05),
 	Color(0.1, 0.5, 0.15), Color(0.02, 0.45, 0.45), Color(0.05, 0.12, 0.55), Color(0.3, 0.08, 0.5),

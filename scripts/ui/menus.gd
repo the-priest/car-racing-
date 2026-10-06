@@ -519,6 +519,15 @@ func _build_garage(box: VBoxContainer) -> void:
 			row.add_child(sw)
 		_text(box, "Paint", 18)
 		box.add_child(row)
+		var rims: Dictionary = Save.data.get("rims", {})
+		var ri := int(rims.get(garage_sel, 0))
+		_button(box, "Rims:  ‹ %s ›" % Data.RIMS[ri][0], func():
+			var nr: Dictionary = Save.data.get("rims", {}).duplicate()
+			nr[garage_sel] = (ri + 1) % Data.RIMS.size()
+			Save.data.rims = nr
+			Save.save_game()
+			game.preview_car(garage_sel)
+			show_screen("garage", false))
 	_button(box, "BACK", func(): back())
 
 ## Stat bar: stock value in white, upgrade gain in accent colour.
