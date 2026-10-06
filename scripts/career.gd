@@ -591,7 +591,7 @@ func _race_finished(r: Dictionary) -> void:
 		if r.time < best:
 			Save.data.best[r.id] = r.time
 	Save.save_game()
-	var res := {"kind": "race", "title": def.name, "place": place, "total": r.total, "time": r.time, "reward": reward, "ok": place <= r.need}
+	var res := {"kind": "race", "title": def.name, "place": place, "total": r.total, "time": r.time, "reward": reward, "ok": place <= r.need, "order": r.get("order", [])}
 	if not active.is_empty():
 		var s: Dictionary = active.steps[step]
 		if s.has("race"):

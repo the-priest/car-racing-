@@ -25,6 +25,8 @@ var pos_l: Label
 var lap_l: Label
 var rtime_l: Label
 var wrong_l: Label
+var standings_l: RichTextLabel
+var standings_t := 0.0
 var big_l: Label
 var big_t := 0.0
 var toast_box: VBoxContainer
@@ -160,7 +162,17 @@ void fragment() {
 	lap_l = _label(22, ACCENT, HORIZONTAL_ALIGNMENT_RIGHT)
 	rtime_l = _label(26, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
 	wrong_l = _label(26, Color(1, 0.25, 0.3), HORIZONTAL_ALIGNMENT_RIGHT)
-	for l in [pos_l, lap_l, rtime_l, wrong_l]:
+	standings_l = RichTextLabel.new()
+	standings_l.bbcode_enabled = true
+	standings_l.fit_content = true
+	standings_l.scroll_active = false
+	standings_l.custom_minimum_size = Vector2(230, 0)
+	standings_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	standings_l.add_theme_font_size_override("normal_font_size", 17)
+	standings_l.add_theme_color_override("default_color", Color(1, 1, 1, 0.8))
+	standings_l.add_theme_constant_override("outline_size", 4)
+	standings_l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	for l in [pos_l, lap_l, rtime_l, wrong_l, standings_l]:
 		race_box.add_child(l)
 
 	big_l = _label(96, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
@@ -381,6 +393,15 @@ func _update(delta: float) -> void:
 		lap_l.text = ("LAP %d/%d" % [mini(r.lap + 1, r.laps), r.laps]) if r.path.closed else ("CP %d/%d" % [r.next_cp, r.cps.size()])
 		rtime_l.text = _time(r.race_time)
 		wrong_l.text = "WRONG WAY" if r.wrong > 1.0 else ""
+		standings_t -= delta
+		if standings_t <= 0.0:
+			standings_t = 0.25
+			var txt := ""
+			for k in r.order.size():
+				var e: Dictionary = r.order[k]
+				var col := "#ffffff" if e.me else ("#ff6aa8" if e.boss else "#c8ccd6")
+				txt += "[right][color=%s]%d  %s[/color][/right]\n" % [col, k + 1, "YOU" if e.me else str(e.name).to_upper()]
+			standings_l.text = txt
 	if big_t > 0.0:
 		big_t -= delta
 		big_l.scale = big_l.scale.lerp(Vector2.ONE, 1.0 - exp(-12.0 * delta))
@@ -527,7 +548,8 @@ static func draw_player(ci: CanvasItem, c: Vector2, ang: float, sz: float) -> vo
 	ci.draw_colored_polygon(inner, Color(0.15, 0.9, 1.0))
 
 static func dist_text(m: float) -> String:
-	return ("%.1f km" % (m / 1000.0)) if m >= 1000.0 else ("%d m" % int(m))
+	# Coarse steps keep labels from re-shaping text every frame.
+	return ("%.1f km" % (m / 1000.0)) if m >= 1000.0 else ("%d m" % (int(m / 10.0) * 10))
 
 class Minimap extends Control:
 	var game: Node

@@ -777,6 +777,7 @@ func _frames(n: int) -> void:
 		await get_tree().physics_frame
 
 func _autotest() -> void:
+	Save.wipe()
 	print("[test] start cash=", Save.data.cash, " contract=", Save.data.contract)
 	_on_play()
 	# 1) Contract via phone: teleport through the goto steps.
@@ -868,7 +869,7 @@ func _storytest() -> void:
 					police.end_pursuit(true)
 				await _frames(20)
 			elif s.has("wait"):
-				await _frames(int(60 * (float(s.wait) + 1.0)))
+				await _frames(int(120 * (float(s.wait) + 1.0)))
 			elif s.has("evade"):
 				await _frames(60)
 				police.end_pursuit(true)
@@ -981,6 +982,8 @@ func _perftest() -> void:
 	for phase in 2:
 		prof.clear()
 		Car.prof_us = 0
+		Car.prof_vis_us = 0
+		Effects.prof_us = 0
 		if phase == 1:
 			police.start_pursuit("TEST", 5)
 		var tp := 0.0
@@ -998,6 +1001,8 @@ func _perftest() -> void:
 				worst = maxf(worst, a + b)
 				n += 1
 		prof["car physics"] = Car.prof_us
+		prof["car visuals"] = Car.prof_vis_us
+		prof["effects"] = Effects.prof_us
 		var parts := []
 		for k in prof:
 			parts.append("%s %.2f" % [k, prof[k] / 1000.0 / n])

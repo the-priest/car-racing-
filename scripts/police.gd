@@ -37,6 +37,7 @@ var radio_cool := 0.0
 var sight_timer := 0.0
 var heli_fuel := 0.0
 var heli_away := 0.0
+var engaged := false # a cop (or Air One) has made contact this pursuit
 
 func setup(g: Node, w: World) -> void:
 	game = g
@@ -161,6 +162,8 @@ func start_pursuit(reason: String, at_heat := 1) -> void:
 	pursuit_time = 0.0
 	cooldown = 0.0
 	takedowns = 0
+	engaged = false
+	reinforce = 0.0
 	last_heat = heat
 	roadblock_timer = 20.0
 	for c in cops:
@@ -355,6 +358,7 @@ func _make_heli() -> void:
 		[BoxMesh.new(), Vector3(0, 1.0, 6.4), Vector3(0.12, 1.4, 0.8), stripe, Vector3.ZERO],
 		[SphereMesh.new(), Vector3(0, 0.15, -1.3), Vector3(1.3, 1.1, 1.3), glass, Vector3.ZERO],
 		[BoxMesh.new(), Vector3(0.9, -1.25, 0), Vector3(0.1, 0.1, 3.4), stripe, Vector3.ZERO],
+		[BoxMesh.new(), Vector3(0, -0.2, 0.2), Vector3(2.34, 0.32, 2.6), stripe, Vector3.ZERO],
 		[BoxMesh.new(), Vector3(-0.9, -1.25, 0), Vector3(0.1, 0.1, 3.4), stripe, Vector3.ZERO],
 	]
 	var cap := parts[0][0] as CapsuleMesh
@@ -507,7 +511,9 @@ func update(dt: float) -> void:
 		reinforce -= dt
 		if reinforce <= 0.0:
 			reinforce = 5.0 if heat < 4 else 3.5
-			spawn_near(200.0, 380.0, "chase")
+			if not engaged:
+				reinforce = 1.5
+			spawn_near(140.0 if not engaged else 200.0, 320.0 if not engaged else 380.0, "chase")
 	if heat >= 3 and cooldown <= 0.0:
 		roadblock_timer -= dt
 		if roadblock_timer <= 0.0:
@@ -534,6 +540,11 @@ func update(dt: float) -> void:
 		if c.down <= 0.0 and c.mode != "block":
 			nearest = minf(nearest, d2)
 	var spotted := nearest < 260.0 or heli_sees
+	if spotted:
+		engaged = true
+	# Units are still converging: you can't "evade" cops that haven't arrived yet.
+	if not engaged and pursuit_time < 30.0:
+		spotted = true
 	if not spotted:
 		if cooldown == 0.0:
 			say("Dispatch: Lost visual on the suspect. All units, search the area.")

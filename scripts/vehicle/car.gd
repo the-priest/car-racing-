@@ -616,7 +616,14 @@ func _physics_step(dt: float) -> void:
 		apply_torque(up.cross(Vector3.UP) * inertia.x * 8.0)
 		apply_central_force(Vector3.UP * mass * 4.0)
 
+static var prof_vis_us := 0
+
 func _process(delta: float) -> void:
+	var _t0 := Time.get_ticks_usec()
+	_visuals(delta)
+	prof_vis_us += Time.get_ticks_usec() - _t0
+
+func _visuals(delta: float) -> void:
 	# Wheel visuals: suspension travel, steering and spin.
 	for w in wheels:
 		if w.node == null:

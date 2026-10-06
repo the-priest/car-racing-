@@ -260,7 +260,19 @@ func _build_loading() -> void:
 	loading_bar.add_theme_stylebox_override("fill", fill)
 	box.add_child(loading_bar)
 	loading_label = _text(box, "Loading...")
-	_text(box, "Tip: tap the handbrake or brake mid-corner to start a drift. Hold throttle + brake while stopped for a burnout.", 16)
+	var tips := [
+		"Cars grip by default. Tap the handbrake while steering to throw them into a drift.",
+		"Ram a cop hard while you're the faster car to take it out of the chase - it adds to your bounty.",
+		"The police helicopter can't see you between tall buildings. Head downtown to break its line of sight.",
+		"Roadblocks are just parked cars. Hit them flat out.",
+		"Air One runs out of fuel eventually. Survive long enough and it has to leave.",
+		"No call coming? Press the phone button to ring your contact yourself.",
+		"Near misses, big air and drifting all refill your nitrous.",
+		"Night jobs pay 25% more.",
+		"Hold throttle + brake while stopped for a burnout.",
+		"Open the full map with M / View / Touchpad to see every race and your next job.",
+	]
+	_text(box, "TIP: " + str(tips[randi() % tips.size()]), 16)
 	screens.loading.root.visible = true
 	current = "loading"
 
@@ -370,8 +382,14 @@ func _build_garage(box: VBoxContainer) -> void:
 	var sel: Dictionary = Data.CARS[garage_sel]
 	var up: Dictionary = Save.data.upgrades.get(garage_sel, {})
 	var st := Data.stats_for(garage_sel, up)
-	_text(box, "\n%s  ·  %s  ·  %d cyl  ·  %d km/h top  ·  PI %d" % [sel.name, "AWD" if sel.awd else "RWD", sel.cyl, int(st.top * 3.6 * 0.97), Data.perf_index(st)], 18, Color.WHITE)
-	_text(box, "0-100 approx %.1fs   Grip %.2fg   Nitrous %.0fs" % [27.8 / (st.accel * 0.72), st.grip / 9.81, st.nitro_cap], 16)
+	_text(box, "\n%s  ·  %s  ·  %d cyl  ·  PI %d" % [sel.name, "AWD" if sel.awd else "RWD", sel.cyl, Data.perf_index(st)], 20, Color.WHITE)
+	_text(box, Data.DESC.get(garage_sel, ""), 15, Color(1, 1, 1, 0.6))
+	var base := Data.stats_for(garage_sel, {})
+	for row in [["TOP SPEED", st.top, base.top, 150.0, "%d km/h" % int(st.top * 3.6 * 0.97)],
+			["ACCELERATION", st.accel, base.accel, 30.0, "0-100 %.1fs" % (27.8 / (st.accel * 0.72))],
+			["HANDLING", st.grip, base.grip, 30.0, "%.2fg" % (st.grip / 9.81)],
+			["NITROUS", st.nitro * st.nitro_cap, base.nitro * base.nitro_cap, 160.0, "%.0fs" % st.nitro_cap]]:
+		box.add_child(_stat_bar(row[0], float(row[1]) / float(row[3]), float(row[2]) / float(row[3]), row[4]))
 	if not owned.has(garage_sel):
 		_button(box, "BUY  $%s" % HUD._fmt(int(sel.price)), func():
 			if int(Save.data.cash) >= int(sel.price):
@@ -428,6 +446,31 @@ func _build_garage(box: VBoxContainer) -> void:
 		_text(box, "Paint", 18)
 		box.add_child(row)
 	_button(box, "BACK", func(): back())
+
+## Stat bar: stock value in white, upgrade gain in accent colour.
+func _stat_bar(label: String, val: float, stock: float, text: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var l := Label.new()
+	l.text = label
+	l.custom_minimum_size = Vector2(130, 0)
+	l.add_theme_font_size_override("font_size", 14)
+	l.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
+	row.add_child(l)
+	var bar := Control.new()
+	bar.custom_minimum_size = Vector2(150, 10)
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.draw.connect(func():
+		var w := bar.size.x
+		bar.draw_rect(Rect2(0, 0, w, 8), Color(1, 1, 1, 0.1))
+		bar.draw_rect(Rect2(0, 0, w * clampf(val, 0.0, 1.0), 8), ACCENT)
+		bar.draw_rect(Rect2(0, 0, w * clampf(minf(stock, val), 0.0, 1.0), 8), Color(0.92, 0.92, 0.95)))
+	row.add_child(bar)
+	var v := Label.new()
+	v.text = text
+	v.add_theme_font_size_override("font_size", 14)
+	row.add_child(v)
+	return row
 
 const SETTINGS := [
 	["quality", "Graphics preset", ["low", "medium", "high", "ultra"], ["Low (laptops)", "Medium", "High", "Ultra"]],
@@ -580,6 +623,12 @@ func show_results(res: Dictionary) -> void:
 		_title(box, title, 60)
 		_text(box, res.title.to_upper(), 20, ACCENT)
 		_text(box, "Position  %s / %d\nTime  %s" % [ord, int(res.total), HUD._time(float(res.time))], 22, Color.WHITE)
+		var order: Array = res.get("order", [])
+		if not order.is_empty():
+			var lines := []
+			for k in order.size():
+				lines.append("%d.  %s" % [k + 1, order[k]])
+			_text(box, "   ".join(lines), 16, Color(1, 1, 1, 0.7))
 	else:
 		_title(box, "JOB DONE" if res.ok else "JOB FAILED", 60)
 		_text(box, res.title.to_upper(), 20, ACCENT)

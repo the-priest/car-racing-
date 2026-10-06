@@ -121,7 +121,14 @@ func clear_skids() -> void:
 	skid_next = 0
 	last_mark.clear()
 
+static var prof_us := 0
+
 func _process(_delta: float) -> void:
+	var _t0 := Time.get_ticks_usec()
+	_tick()
+	prof_us += Time.get_ticks_usec() - _t0
+
+func _tick() -> void:
 	for e in cars:
 		var car: Car = e.car
 		if not is_instance_valid(car):

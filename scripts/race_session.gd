@@ -25,6 +25,7 @@ var result := {}
 var need_place := 1
 var boss: Dictionary = {} # named story rival (takes grid slot 0)
 var wrong := 0.0
+var order: Array = [] # [{me, name, boss}] in race order
 var gates: Array[Node3D] = []
 var _last_count := 4
 
@@ -122,6 +123,7 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		rivals.append({"car": car, "ai": ai, "name": rname, "finished": false, "time": INF, "boss": is_boss})
 		game.on_car_spawned(car)
 	game.on_race_start()
+	game.hud.big(("VS  " + str(boss.name)) if not boss.is_empty() else str(d.name).to_upper(), 1.0)
 
 func _make_gate(c: Color) -> Node3D:
 	var root := Node3D.new()
@@ -223,16 +225,18 @@ func update(dt: float) -> void:
 		if not r.finished and ((path.closed and ai.lap >= laps) or (not path.closed and ai.idx >= path.n - 5)):
 			r.finished = true
 			r.time = race_time
-	var entries := [{"me": true, "p": progress + (1e7 if finished_me else 0.0)}]
+	var entries := [{"me": true, "p": progress + (1e7 if finished_me else 0.0), "name": "You", "boss": false}]
 	for r in rivals:
-		entries.append({"me": false, "p": (1e7 + 1e5 - r.time) if r.finished else (r.ai as AIDriver).progress})
+		entries.append({"me": false, "p": (1e7 + 1e5 - r.time) if r.finished else (r.ai as AIDriver).progress, "name": r.name, "boss": r.get("boss", false)})
 	entries.sort_custom(func(a, b): return a.p > b.p)
+	order = entries
 	for k in entries.size():
 		if entries[k].me:
 			place = k + 1
 	if finished_me:
 		done = true
-		result = {"id": id, "place": place, "total": rivals.size() + 1, "time": race_time, "need": need_place}
+		result = {"id": id, "place": place, "total": rivals.size() + 1, "time": race_time, "need": need_place,
+			"order": order.map(func(e): return "YOU" if e.me else str(e.name))}
 
 func cleanup() -> void:
 	for r in rivals:
