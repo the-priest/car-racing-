@@ -1,0 +1,48 @@
+# Builds Velocity Heat for Windows and Linux on every push.
+# Download the builds from the run's "Artifacts" section (Actions tab).
+# Pushing a tag like v1.0 also publishes a GitHub Release with both zips.
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and export templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-tools
+            ~/.local/share/godot/export_templates
+          key: godot-4.7-stable-v1
+
+      - name: Build Windows and Linux
+        run: ./build.sh
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: VelocityHeat-windows
+          path: build/windows
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: VelocityHeat-linux
+          path: build/VelocityHeat-linux.zip
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/VelocityHeat-*.zip

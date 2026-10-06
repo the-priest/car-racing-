@@ -66,21 +66,20 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
   - Low uses the OpenGL renderer for laptops.
   - Ultra enables SDFGI global illumination, SSR, SSIL, volumetric fog, 8K shadows and dense grass.
 
-## Build it yourself
+## Get the game
 
-1. Install **Godot 4.7** (standard build) and its **export templates** (Editor → Manage Export Templates → Download).
-2. Clone this repo.
-3. Linux executable:
-   ```bash
-   mkdir -p build/linux
-   godot --headless --path . --export-release "Linux" build/linux/VelocityHeat.x86_64
-   ./build/linux/VelocityHeat.x86_64
-   ```
-   Windows: `mkdir -p build/windows` then `godot --headless --path . --export-release "Windows" build/windows/VelocityHeat.exe` (a single self-contained .exe)
-   (Export templates must match your Godot version exactly, e.g. 4.7.2.)
-4. Or just open the project in the Godot editor and press **F5**.
+**Easiest:** open the repo's **Actions** tab on GitHub, click the latest green **Build** run, and download **VelocityHeat-windows** or **VelocityHeat-linux** from *Artifacts*. Every push builds both automatically.
 
-World data and audio are pre-baked in `assets/`. To regenerate them: `node bake/bake_world.mjs` and `node bake/bake_audio.mjs` (Node 18+).
+**Build it yourself (one command):**
+
+| Your PC | Do this | You get |
+|---|---|---|
+| Windows | double-click **`build.bat`** | `build\windows\VelocityHeat.exe` (+ the Linux build) |
+| Linux / macOS | run **`./build.sh`** | `build/linux/VelocityHeat.x86_64` (+ the Windows build) |
+
+The first run downloads Godot 4.7 and its export templates (about 1 GB, one time only) into `.godot-tools/`. If Godot 4.7 is already installed, point the script at it with `GODOT=/path/to/godot` to skip the download. `build.sh linux` / `build.bat windows` builds just one platform. Zips of both builds land in `build/`.
+
+Or open the project in the Godot 4.7 editor and press **F5** to play.
 
 ## Controls
 
