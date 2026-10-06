@@ -502,7 +502,7 @@ func _update(delta: float) -> void:
 	clock_l.text = "%02d:%02d  %s%s" % [int(h), int(fmod(h, 1.0) * 60.0), ("NIGHT" if game.daynight.night > 0.75 else ("DUSK" if h > 12.0 else "DAWN") if game.daynight.night > 0.15 else "DAY"), "  RAIN" if game.daynight.rain > 0.3 else ""]
 	pursuit_box.visible = police.pursuit
 	if police.pursuit:
-		pursuit_l.text = ("BUSTED IN %.1f" % maxf(0.0, 4.0 - police.bust)) if police.bust > 0.3 else ("EVADING..." if police.cooldown > 0.0 else "PURSUIT")
+		pursuit_l.text = ("BUSTED IN %.1f" % maxf(0.0, police.bust_time() - police.bust)) if police.bust > 0.3 else ("EVADING..." if police.cooldown > 0.0 else "PURSUIT")
 		var air := ""
 		if police.heli:
 			air = "   ·   AIR UNIT: " + ("TRACKING" if police.heli_sees else "SEARCHING")

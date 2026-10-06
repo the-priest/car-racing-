@@ -78,6 +78,9 @@ func say(text: String, force := false) -> void:
 	radio_cool = 4.0
 	radio.emit(text)
 
+func bust_time() -> float:
+	return float(Settings.diff(6.0, 4.0, 3.0))
+
 func bounty() -> int:
 	return int(1500 * heat + pursuit_time * 40.0 + takedowns * TAKEDOWN_BONUS + bonus)
 
@@ -349,7 +352,7 @@ func _drive_cop(c: Dictionary, dt: float) -> void:
 	car.input.brake = clampf((car.speed - vt) / 8.0, 0.0, 1.0) if car.speed > vt + 2.0 else 0.0
 	car.input.handbrake = 0.0
 	car.input.nitro = c.mode == "chase" and dp > 50.0 and absf(ang) < 0.15
-	car.power_mul = 1.0 + heat * 0.05 + (0.15 if dp > 200.0 else 0.0) + (0.1 if c.elite else 0.0)
+	car.power_mul = (1.0 + heat * 0.05 + (0.15 if dp > 200.0 else 0.0) + (0.1 if c.elite else 0.0)) * float(Settings.diff(0.9, 1.0, 1.08))
 	if car.speed < 1.5 and car.input.throttle > 0.0:
 		c.stuck += dt
 	else:
@@ -606,7 +609,7 @@ func update(dt: float) -> void:
 	if chasing < want and cooldown <= 0.0:
 		reinforce -= dt
 		if reinforce <= 0.0:
-			reinforce = 5.0 if heat < 4 else 3.5
+			reinforce = (5.0 if heat < 4 else 3.5) * float(Settings.diff(1.5, 1.0, 0.75))
 			if not engaged:
 				reinforce = 1.5
 			spawn_near(140.0 if not engaged else 200.0, 320.0 if not engaged else 380.0, "chase")
@@ -668,7 +671,7 @@ func update(dt: float) -> void:
 		if bust == 0.0:
 			say("Dispatch: Suspect is boxed in! Move in, move in!")
 		bust += dt
-		if bust > 4.0:
+		if bust > bust_time():
 			end_pursuit(false)
 	else:
 		bust = maxf(0.0, bust - dt * 2.0)

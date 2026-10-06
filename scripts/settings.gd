@@ -43,7 +43,7 @@ var data := {
 	"music": 0.5, "sfx": 0.85, "assists": true, "manual": false, "units": "kmh",
 	"show_fps": false, "traffic": 1.0, "camera": 0, "sensitivity": 1.0,
 	"vibration": 1.0, "steer_sens": 1.0, "deadzone": 0.08, "steer_curve": 1.3,
-	"speed_fx": true, "cam_shake": 1.0, "time_mode": "dynamic", "weather": "dynamic",
+	"speed_fx": true, "cam_shake": 1.0, "time_mode": "dynamic", "weather": "dynamic", "difficulty": "normal",
 	"bindings": {}, # action -> {"key": physical keycode, "pad": joy button} overrides
 }
 
@@ -201,6 +201,13 @@ func save_settings() -> void:
 	var ov := ConfigFile.new()
 	ov.set_value("rendering", "renderer/rendering_method", preset().renderer)
 	ov.save(OVERRIDE)
+
+## Picks a value for the current difficulty.
+func diff(easy, normal, hard):
+	match str(data.get("difficulty", "normal")):
+		"easy": return easy
+		"hard": return hard
+	return normal
 
 func set_value(key: String, value) -> void:
 	data[key] = value

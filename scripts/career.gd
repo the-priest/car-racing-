@@ -646,7 +646,7 @@ func _next_step() -> void:
 		waypoint = pos_of(s.goto)
 		waypoint_label = s.label
 		if s.has("time"):
-			time_left = float(s.time)
+			time_left = float(s.time) * float(Settings.diff(1.3, 1.0, 0.9))
 	elif s.has("wait"):
 		waypoint_label = s.label
 		if not s.get("here", false) and step > 0 and active.steps[step - 1].has("goto"):
@@ -665,7 +665,7 @@ func _next_step() -> void:
 		waypoint_label = s.label
 		target = MissionTarget.new()
 		add_child(target)
-		target.start(game, world, s.takedown, pos_of(s.from), pos_of(s.to), int(s.hits))
+		target.start(game, world, s.takedown, pos_of(s.from), pos_of(s.to), int(s.hits) + int(Settings.diff(-1, 0, 1)))
 		target.was_hit.connect(_on_target_hit)
 		game.tip("takedown", "Ram the target hard and often. The bar under your objective shows the hits left before it's disabled.")
 		waypoint = target.pos2()

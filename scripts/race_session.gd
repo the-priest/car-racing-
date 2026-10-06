@@ -90,7 +90,7 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		var car := Car.new()
 		add_child(car)
 		var st: Dictionary = ps.duplicate()
-		var f := float(d.skill) * randf_range(0.97, 1.03) + 0.06
+		var f := float(d.skill) * randf_range(0.97, 1.03) + 0.06 + float(Settings.diff(-0.07, 0.0, 0.04))
 		st.accel = float(st.accel) * f
 		st.top = float(st.top) * (0.98 + (f - 1.0) * 0.5)
 		var is_boss := k == 0 and not boss.is_empty()
@@ -99,7 +99,7 @@ func start(g: Node, w: World, race_id: String, d: Dictionary) -> void:
 		st.red = base.red
 		st.idle = base.idle
 		st.body = base.get("body", "concept")
-		var skill := float(d.skill) * randf_range(0.97, 1.02)
+		var skill := float(d.skill) * randf_range(0.97, 1.02) * float(Settings.diff(0.94, 1.0, 1.02))
 		if is_boss:
 			skill = float(d.skill) + float(boss.skill)
 			st.accel = float(st.accel) * (1.0 + float(boss.skill))
