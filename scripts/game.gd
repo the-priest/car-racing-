@@ -753,11 +753,11 @@ func _menu_camera(delta: float) -> void:
 	var a := menu_t * 0.12 + 0.6
 	var p := player.global_position
 	cam.process_mode = Node.PROCESS_MODE_DISABLED
-	var pos := p + Vector3(sin(a) * 6.4, 1.25 + sin(menu_t * 0.21) * 0.25, cos(a) * 6.4)
+	var pos := p + Vector3(sin(a) * 7.0, 1.25 + sin(menu_t * 0.21) * 0.25, cos(a) * 7.0)
 	cam.global_position = pos
 	var to_car := (p - pos).normalized()
 	var right := to_car.cross(Vector3.UP).normalized()
-	cam.look_at(p + Vector3(0, 0.55, 0) - right * 2.3)
+	cam.look_at(p + Vector3(0, 0.55, 0) - right * 1.7)
 	cam.fov = 50.0
 
 func _garage_camera(delta: float) -> void:
