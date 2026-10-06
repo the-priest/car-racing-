@@ -147,6 +147,17 @@ const CONTRACTS := [
 		"outro": ["Juno: Long live the king of Solano Bay.", "Mara: Phone's still on, driver. There's always another job."]},
 ]
 
+## Messages that arrive in free roam after a chapter, before the next job call.
+const FLAVOR := {
+	0: ["Unknown: Saw you at the docks. Smooth. The Night Kings noticed. - R"],
+	2: ["Dex: Pro tip: jobs at night pay a quarter more. The cops are meaner, but... money."],
+	3: ["Kane: (voicemail) This is Lieutenant Kane. I've seen your car.", "Kane: I never forget a car."],
+	5: ["Juno: You drive like you've got nothing to lose.", "Juno: Careful. That's exactly the kind of driver Sable likes to use."],
+	7: ["Mara: Lay low for a bit. Kane has the whole task force out tonight.", "Mara: Go cruise the mountain. Clear your head."],
+	9: ["Dex: Sable looked rattled after that race. Rattled people do stupid things."],
+	11: ["Juno: Heard what you did to Sable.", "Juno: The Night Kings are... reconsidering who they follow."],
+}
+
 ## Named rivals for story races.
 const BOSSES := {
 	"rook": {"name": "ROOK", "car": "stallion", "paint": Color(0.85, 0.65, 0.1), "skill": 0.02},
@@ -582,6 +593,13 @@ func _complete_contract(ok: bool, why := "") -> void:
 		if c.has("outro"):
 			dialogue.emit(c.outro)
 		call_timer = 50.0
+		if story_idx >= 0 and FLAVOR.has(story_idx):
+			var lines: Array = FLAVOR[story_idx]
+			get_tree().create_timer(24.0, false).timeout.connect(func():
+				if idle():
+					message.emit("New message from %s" % lines[0].split(":")[0], 2.5)
+					game.audio.play_oneshot("beep", 1.6)
+					dialogue.emit(lines))
 		if story_idx == CONTRACTS.size() - 1:
 			story_complete.emit()
 	else:
