@@ -61,6 +61,8 @@ func _ready() -> void:
 			shots_spec = "AITEST"
 		if a == "--menutest":
 			shots_spec = "MENUTEST"
+		if a == "--garageshot":
+			shots_spec = "GARAGESHOT"
 		if a == "--hudtest":
 			shots_spec = "HUDTEST"
 		if a == "--phototest":
@@ -176,6 +178,28 @@ func _ready() -> void:
 		return
 	if shots_spec == "AITEST":
 		await _aitest()
+		get_tree().quit()
+		return
+	if shots_spec == "GARAGESHOT":
+		if not Save.data.owned.has("raiden"):
+			Save.data.owned.append("raiden")
+		Save.data.car = "raiden"
+		Save.data.upgrades["raiden"] = {"aero": 3, "engine": 2}
+		Save.data.rims["raiden"] = 3
+		Save.data.glow["raiden"] = 2
+		Save.data.paint["raiden"] = Color(0.05, 0.12, 0.55).to_html()
+		Settings.data.time_mode = "dynamic"
+		_on_play()
+		daynight.hour = 22.5
+		apply_player_car()
+		await _frames(20)
+		_place_at_home()
+		await _frames(60)
+		_open_garage()
+		menu_t = 1.2
+		for i in 40:
+			await get_tree().process_frame
+		await _snap("garage_custom")
 		get_tree().quit()
 		return
 	if shots_spec == "HUDTEST":
@@ -957,6 +981,8 @@ func _open_garage() -> void:
 	player.linear_velocity = Vector3.ZERO
 	menus.garage_sel = Save.data.car
 	_settle_player()
+	var cd: Dictionary = Data.CARS[Save.data.car]
+	menus.focus_hint = "[%s]  %s" % [cd.tier, cd.name]
 	menus.show_screen("garage", false)
 	persist()
 

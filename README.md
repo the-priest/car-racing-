@@ -15,7 +15,9 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 | ![Heat 4 pursuit with Air One's searchlight](docs/screenshots/pursuit_night.png) | ![Boss race against Sable over Summit Pass](docs/screenshots/boss_race.png) |
 | ![Armored truck takedown](docs/screenshots/takedown.png) | ![Full-screen map with GPS route](docs/screenshots/map.png) |
 
-![Story chapters](docs/screenshots/story.png)
+| | |
+|---|---|
+| ![Garage: gold rims, neon underglow, GT wing](docs/screenshots/garage_night.png) | ![Story chapters](docs/screenshots/story.png) |
 
 *Screenshots are from development builds rendered with a software GPU; real hardware looks better.*
 
