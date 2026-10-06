@@ -15,7 +15,7 @@ global uniform float wetness;
 
 varying vec3 wpos;
 varying vec3 wnrm;
-varying vec4 cust;
+varying flat vec4 cust;
 
 vec3 srgb(vec3 c) {
 	return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
@@ -71,12 +71,13 @@ void fragment() {
 			wall = mix(brick, vec3(0.42, 0.40, 0.36), clamp(mortar, 0.0, 1.0));
 		} else if (style == 1) {
 			// Precast concrete panels: real concrete texture, panel seams per floor.
-			vec3 conc = srgb(texture(surf_albedo, vec3(vec2(u, v) / 4.0 + seed, 6.0)).rgb) / 0.33;
+			vec3 conc = srgb(texture(surf_albedo, vec3(vec2(v, u) / 4.0 + seed, 6.0)).rgb) / 0.33; // broom marks run vertically, like weathering
 			// Palette: cream, sandstone, warm grey, terracotta, blue-grey.
 			int pi = int(pal * 4.99);
 			vec3 pc = pi == 0 ? vec3(0.62, 0.57, 0.47) : (pi == 1 ? vec3(0.55, 0.47, 0.36) : (pi == 2 ? vec3(0.5, 0.49, 0.46) : (pi == 3 ? vec3(0.48, 0.29, 0.21) : vec3(0.37, 0.41, 0.45))));
 			wall = pc * conc * (0.82 + grime * 0.3);
-			wall_t = texture(surf_nrh, vec3(vec2(u, v) / 4.0 + seed, 6.0)).rgb;
+			wall_t = texture(surf_nrh, vec3(vec2(v, u) / 4.0 + seed, 6.0)).rgb;
+			wall_t.rg = vec2(wall_t.g, wall_t.r); // swap slope axes to match the rotated UV
 		} else {
 			wall = vec3(0.16, 0.17, 0.18) * (0.9 + grime * 0.2);
 		}
@@ -140,7 +141,9 @@ void fragment() {
 			vec3 sc = vec3(h21(vec2(id.x, seed)), h21(vec2(id.x + 3.0, seed)), h21(vec2(id.x + 7.0, seed)));
 			sc = normalize(sc + 0.05) * 0.6;
 			albedo = mix(albedo, sc, fascia);
-			emis += sc * fascia * night * 0.7;
+			nmap = mix(nmap, vec3(0.5, 0.5, 1.0), fascia);
+			metal = mix(metal, 0.0, fascia);
+			emis += sc * fascia * night * 1.1;
 		}
 
 		// Interior lights at night: random rooms, warm/cool, with ceiling falloff.
@@ -152,7 +155,7 @@ void fragment() {
 		// Half-drawn blinds in some rooms (soft, not stripes) and furniture silhouettes low down.
 		float blinds = (style == 1 && h21(id + seed + 9.0) > 0.7) ? mix(0.35, 1.0, smoothstep(0.55, 0.6, 1.0 - f.y)) : 1.0;
 		blinds *= mix(0.55, 1.0, clamp(smoothstep(0.3, 0.45, f.y) + step(0.5, h21(id + seed + 4.0)) * 0.5, 0.0, 1.0));
-		emis += room * lit * falloff * blinds * night * (ground ? 0.2 : 0.12) * (0.55 + pane * 0.6) * (1.0 - mull);
+		emis += room * lit * falloff * blinds * night * (ground ? 0.45 : 0.3) * (0.55 + pane * 0.6) * (1.0 - mull);
 	}
 	ALBEDO = albedo;
 	ROUGHNESS = rough;

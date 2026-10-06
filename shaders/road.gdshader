@@ -46,6 +46,13 @@ void fragment() {
 	vec3 trh = mix(trh1, texture(surf_nrh, vec3(ruv2, 0.0)).rgb, mixer);
 	// The texture is authored around a 0.07 grey; per-road tints shift it.
 	vec3 col = tex * (asphalt_tint / 0.075) * (0.85 + n2 * 0.3);
+	// Broken, gravelly outer edge instead of a razor-sharp asphalt border.
+	if (style < 2 && max(abs(wpos.x), abs(wpos.z)) > 640.0) { // countryside only; city roads have kerbs
+		float e = min(x, W - x);
+		float crumble = 1.0 - smoothstep(0.08, 0.32 + n1 * 0.18, e + (n3 - 0.5) * 0.12);
+		vec3 grav = srgb(texture(surf_albedo, vec3(vec2(x, y) / 2.5, 5.0)).rgb) * 0.8;
+		col = mix(col, grav, crumble);
+	}
 	// Patches and tar seams
 	float patch = smoothstep(0.62, 0.66, texture(noise_b, wpos.xz * 0.012 + 7.0).r);
 	col = mix(col, col * 0.7, patch * 0.6);
