@@ -30,7 +30,7 @@ void fragment() {
 	float v = abs(p.x) * 0.9 + p.y;
 	float shape = smoothstep(0.1, 0.0, abs(v - 0.1) - 0.32) * step(abs(p.x), 0.95) * step(p.y, 0.95);
 	float a = shape * fade * mix(0.8, 1.0, night);
-	ALBEDO = vec3(1.0, 0.68, 0.15) * a * 2.6;
+	ALBEDO = vec3(1.0, 0.68, 0.15) * a * 4.0;
 	ALPHA = a;
 }
 """
