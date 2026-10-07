@@ -29,6 +29,18 @@ jobs:
       - name: Build Windows and Linux
         run: ./build.sh
 
+      # A script that fails to compile still exports, and the game then hangs on the
+      # loading screen, so check every script and load the world before shipping.
+      - name: Script check and smoke test
+        run: |
+          GODOT=$(ls .godot-tools/Godot_v*_linux.x86_64)
+          out=$(GODOT="$GODOT" sh tools/check.sh 2>&1)
+          echo "$out"
+          if echo "$out" | grep -q "SCRIPT ERROR"; then echo "::error::GDScript errors"; exit 1; fi
+          timeout 180 "$GODOT" --headless --path . -- --gpstest > smoke.log 2>&1 || true
+          tail -n 12 smoke.log
+          grep -q "\[gps\] full reroute" smoke.log || { echo "::error::Smoke test did not finish (world failed to load or hung)"; exit 1; }
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
