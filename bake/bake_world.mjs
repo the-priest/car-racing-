@@ -251,6 +251,47 @@ for (let j = 0; j < N; j++) {
   }
 }
 console.timeEnd('heightmap');
+
+// Thermal erosion: anything steeper than the talus angle sheds material to its
+// lower neighbour, the way scree settles. Turns 80-degree walls (where the road
+// corridors were blended into the mountains) into believable rocky slopes.
+// Road corridors and the city stay as they are: they never shed material, and what
+// slides into them is dropped (the game fits the ground to the roads anyway).
+console.time('erosion');
+{
+  const TALUS = 1.25 * CELL; // max height step between neighbours, about 51 degrees
+  const fixed = new Uint8Array(N * N);
+  for (let k = 0; k < N * N; k++) fixed[k] = mask[k * 2] > 0 || mask[k * 2 + 1] > 0 ? 1 : 0;
+  const delta = new Float32Array(N * N);
+  const NB = [1, -1, N, -N];
+  for (let it = 0; it < 120; it++) {
+    delta.fill(0);
+    let moved = 0;
+    for (let j = 1; j < N - 1; j++) {
+      for (let i = 1; i < N - 1; i++) {
+        const k = j * N + i;
+        if (fixed[k]) continue;
+        const h = hm[k];
+        let total = 0, maxd = 0;
+        for (const o of NB) {
+          const d = h - hm[k + o] - TALUS;
+          if (d > 0) { total += d; if (d > maxd) maxd = d; }
+        }
+        if (total <= 0) continue;
+        const amount = maxd * 0.45; // move part of the excess, shared by steepness
+        for (const o of NB) {
+          const d = h - hm[k + o] - TALUS;
+          if (d > 0 && !fixed[k + o]) delta[k + o] += amount * d / total;
+        }
+        delta[k] -= amount;
+        moved += amount;
+      }
+    }
+    for (let k = 0; k < N * N; k++) hm[k] += delta[k];
+    if (moved < 1) break;
+  }
+}
+console.timeEnd('erosion');
 function ground(x, z) {
   const gx = clamp((x + HALF) / CELL, 0, N - 1.001), gz = clamp((z + HALF) / CELL, 0, N - 1.001);
   const i = Math.floor(gx), j = Math.floor(gz), fx = gx - i, fz = gz - j;
