@@ -78,7 +78,7 @@ const BODIES := {
 			[-0.72, 0.78, 0.84], [-0.22, 0.7, 1.22], [0.22, 0.67, 1.26], [0.85, 0.64, 1.12], [1.6, 0.66, 0.9],
 		],
 		"n_body": 4.0, "n_cabin": 3.0, "scoop": false, "round_lights": true, "chrome": false, "wing": true,
-		"lamp_z": -1.72, "wing_y": 1.16, "wing_w": 1.86, "splitter": true,
+		"lamp_z": -1.72, "wing_y": 1.16, "wing_w": 1.86, "splitter": true, "light_bar": true,
 	},
 	# Plain delivery van for traffic.
 	"delivery": {
@@ -287,8 +287,9 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 		else:
 			var hl := _box(root, Vector3(sx * hwf * 0.6, lamp_y + 0.04, zf + 0.12), Vector3(0.42, 0.05, 0.1), head)
 			hl.name = "Headlamp"
-		var tl := _box(root, Vector3(sx * 0.55, _interp(keys, zr - 0.1, 3) - 0.2, zr + 0.02), Vector3(0.5, 0.11, 0.05), brake)
-		tl.name = "Taillamp"
+		if not def.get("light_bar", false):
+			var tl := _box(root, Vector3(sx * 0.55, _interp(keys, zr - 0.1, 3) - 0.2, zr + 0.02), Vector3(0.5, 0.11, 0.05), brake)
+			tl.name = "Taillamp"
 		_box(root, Vector3(sx * (_interp(keys, -0.4, 1) + 0.08), _interp(keys, -0.4, 3) + 0.08, -0.45), Vector3(0.16, 0.09, 0.12), chrome)
 		var ex := CylinderMesh.new()
 		ex.top_radius = 0.045
@@ -328,6 +329,14 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 		if def.has("wing_y"):
 			for sx in [-1.0, 1.0]: # end plates
 				_box(root, Vector3(sx * ww * 0.5, wy - 0.02, zr - 0.25), Vector3(0.02, 0.2, 0.48), dark)
+	if def.get("light_bar", false):
+		# One full-width light strip across the tail, with brighter ends.
+		var ly := _interp(keys, zr - 0.1, 3) - 0.16
+		var bar := _box(root, Vector3(0, ly, zr - 0.02), Vector3(float(keys[keys.size() - 1][1]) * 1.9, 0.045, 0.06), brake)
+		bar.name = "Taillamp"
+		for sx in [-1.0, 1.0]:
+			var end := _box(root, Vector3(sx * float(keys[keys.size() - 1][1]) * 0.82, ly - 0.035, zr - 0.03), Vector3(0.28, 0.09, 0.06), brake)
+			end.name = "Taillamp"
 	if def.get("splitter", false):
 		_box(root, Vector3(0, 0.27, zf + 0.06), Vector3(hwf * 2.1, 0.03, 0.3), dark)
 		for sx in [-1.0, 1.0]: # side skirts and a rear diffuser
