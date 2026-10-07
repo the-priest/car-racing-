@@ -48,6 +48,7 @@ var types: Array = []
 var streets: Array = []
 var buildings: Array = [] # Dictionaries {rect: Rect2, h: float, style: int}
 var lamp_pos := PackedVector3Array()
+var lamp_bases: Array[Vector2] = []
 var lamp_grid := {}
 var lamp_lights: Array[SpotLight3D] = []
 var lamp_timer := 0.0
@@ -93,6 +94,12 @@ func build(preset: Dictionary) -> void:
 	var _t9854 := Time.get_ticks_msec()
 	_build_lamps()
 	if OS.is_stdout_verbose(): print('[world] _build_lamps() ', Time.get_ticks_msec() - _t9854, ' ms')
+	var _tsp := Time.get_ticks_msec()
+	var sp_root := Node3D.new()
+	sp_root.name = "StreetProps"
+	add_child(sp_root)
+	StreetProps.build(self, sp_root)
+	if OS.is_stdout_verbose(): print('[world] street props ', Time.get_ticks_msec() - _tsp, ' ms')
 	progress.emit("Planting forests", 0.7)
 	await get_tree().process_frame
 	var _t4098 := Time.get_ticks_msec()
@@ -514,6 +521,50 @@ func drive_y(x: float, z: float) -> float:
 	if absf(x) < 612.0 and absf(z) < 612.0:
 		return 0.0
 	return maxf(ground(x, z) + 0.07, 0.0 if in_city(x, z) else -INF)
+
+var _seg_grid := {}
+
+## How far (x, z) is inside the nearest road's surface: positive on the road,
+## negative = metres clear of its edge. Countryside roads only (see on_street).
+func road_depth(x: float, z: float) -> float:
+	if _seg_grid.is_empty():
+		var roads: Array = d.roads
+		for ri in roads.size():
+			var pts: Array = roads[ri].pts
+			var n: int = pts.size() / 3
+			var last: int = n if roads[ri].closed else n - 1
+			for i in last:
+				var j := (i + 1) % n
+				var a := Vector2(pts[i * 3], pts[i * 3 + 2])
+				var b := Vector2(pts[j * 3], pts[j * 3 + 2])
+				for gx in range(floori(minf(a.x, b.x) / 50.0), floori(maxf(a.x, b.x) / 50.0) + 1):
+					for gz in range(floori(minf(a.y, b.y) / 50.0), floori(maxf(a.y, b.y) / 50.0) + 1):
+						var k := Vector2i(gx, gz)
+						if not _seg_grid.has(k):
+							_seg_grid[k] = []
+						_seg_grid[k].append([a, b, float(roads[ri].hw)])
+	var p := Vector2(x, z)
+	var best := -INF
+	var k0 := Vector2i(floori(x / 50.0), floori(z / 50.0))
+	for dx in [-1, 0, 1]:
+		for dz in [-1, 0, 1]:
+			for sg in _seg_grid.get(k0 + Vector2i(dx, dz), []):
+				var a: Vector2 = sg[0]
+				var ab: Vector2 = sg[1] - a
+				var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+				best = maxf(best, float(sg[2]) - p.distance_to(a + ab * t))
+	return best
+
+## True if (x, z) is on a city street's carriageway (or within margin of it).
+func on_street(x: float, z: float, margin := 0.0) -> bool:
+	if not in_city(x, z):
+		return false
+	var hw: float = d.streetHw + margin
+	for sv in streets:
+		var s0: float = sv
+		if absf(x - s0) < hw or absf(z - s0) < hw:
+			return true
+	return false
 
 func in_city(x: float, z: float) -> bool:
 	return absf(x) < 680.0 and absf(z) < 680.0
@@ -1067,7 +1118,8 @@ func _build_lamps() -> void:
 	var L: Array = []
 	var src: Array = d.lamps
 	for i in src.size() / 5:
-		if not near_station(src[i * 5], src[i * 5 + 2], 3.0):
+		if not near_station(src[i * 5], src[i * 5 + 2], 3.0) and not on_street(src[i * 5], src[i * 5 + 2], 0.6) \
+				and road_depth(src[i * 5], src[i * 5 + 2]) < -0.6:
 			L.append_array(src.slice(i * 5, i * 5 + 5))
 	var count := L.size() / 5
 	var mm := MultiMesh.new()
@@ -1087,6 +1139,7 @@ func _build_lamps() -> void:
 	bulbs.instance_count = count
 	for i in count:
 		var p := Vector3(L[i * 5], L[i * 5 + 1], L[i * 5 + 2])
+		lamp_bases.append(Vector2(p.x, p.z))
 		p.y += ground_delta(p.x, p.z)
 		var dir := Vector3(L[i * 5 + 3], 0, L[i * 5 + 4])
 		var bas := Basis(Vector3.UP, atan2(dir.x, dir.z))

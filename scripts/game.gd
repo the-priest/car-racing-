@@ -97,6 +97,8 @@ func _ready() -> void:
 			shots_spec = "REMAPTEST"
 		if a == "--drifttest":
 			shots_spec = "DRIFTTEST"
+		if a == "--propaudit":
+			shots_spec = "PROPAUDIT"
 		if a == "--fuzz":
 			shots_spec = "FUZZ"
 		if a == "--raceshot":
@@ -322,6 +324,10 @@ func _ready() -> void:
 		return
 	if shots_spec == "DRIFTTEST":
 		await _drifttest()
+		get_tree().quit()
+		return
+	if shots_spec == "PROPAUDIT":
+		_propaudit()
 		get_tree().quit()
 		return
 	if shots_spec == "TUTORIALTEST":
@@ -2745,6 +2751,124 @@ func _aitest() -> void:
 # ---------------------------------------------------------------- UI test (mouse + gamepad)
 ## Follows GPS routes by teleporting along them and counts reroutes (should be none
 ## while on the line), then leaves the route and turns around (one reroute each).
+## Finds street furniture, trees and buildings standing on a road surface.
+func _propaudit() -> void:
+	var d: Dictionary = world.d
+	var hw: float = d.streetHw
+	var streets: Array = world.streets
+	# Road segments in a 50 m grid for distance queries.
+	var grid := {}
+	var roads: Array = d.roads
+	for ri in roads.size():
+		var pts: Array = roads[ri].pts
+		var n: int = pts.size() / 3
+		var last: int = n if roads[ri].closed else n - 1
+		for i in last:
+			var j := (i + 1) % n
+			var a := Vector2(pts[i * 3], pts[i * 3 + 2])
+			var b := Vector2(pts[j * 3], pts[j * 3 + 2])
+			var lo := Vector2i(floori(minf(a.x, b.x) / 50.0), floori(minf(a.y, b.y) / 50.0))
+			var hi := Vector2i(floori(maxf(a.x, b.x) / 50.0), floori(maxf(a.y, b.y) / 50.0))
+			for gx in range(lo.x, hi.x + 1):
+				for gz in range(lo.y, hi.y + 1):
+					var k := Vector2i(gx, gz)
+					if not grid.has(k):
+						grid[k] = []
+					grid[k].append([a, b, float(roads[ri].hw), str(roads[ri].name)])
+	# How far p is inside a road surface (positive = on the road), and which road.
+	var on_road := func(p: Vector2) -> Array:
+		var best := -INF
+		var nm := ""
+		if world.in_city(p.x, p.y):
+			for sv in streets:
+				var s0: float = sv
+				var e := hw - minf(absf(p.x - s0), absf(p.y - s0))
+				if e > best:
+					best = e
+					nm = "street %d" % int(s0)
+		var k := Vector2i(floori(p.x / 50.0), floori(p.y / 50.0))
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				for sg in grid.get(k + Vector2i(dx, dz), []):
+					var a: Vector2 = sg[0]
+					var b: Vector2 = sg[1]
+					var ab := b - a
+					var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+					var e: float = float(sg[2]) - p.distance_to(a + ab * t)
+					if e > best:
+						best = e
+						nm = sg[3]
+		return [best, nm]
+	var report := func(kind: String, items: Array, margin: float) -> void:
+		var bad := 0
+		var shown := 0
+		for p in items:
+			var r: Array = on_road.call(p)
+			if r[0] > -margin:
+				bad += 1
+				if shown < 8:
+					shown += 1
+					print("[audit]   ", kind, " at ", p.round(), " is ", snappedf(r[0] + margin, 0.1), " m into ", r[1])
+		print("[audit] ", kind, ": ", bad, " of ", items.size(), " on or too close to a road")
+	var lamps: Array = []
+	var L: Array = d.lamps
+	for i in L.size() / 5:
+		# Same filter as World._build_lamps.
+		if not world.near_station(L[i * 5], L[i * 5 + 2], 3.0) and not world.on_street(L[i * 5], L[i * 5 + 2], 0.6) and world.road_depth(L[i * 5], L[i * 5 + 2]) < -0.6:
+			lamps.append(Vector2(L[i * 5], L[i * 5 + 2]))
+	report.call("lamp post", lamps, 0.3)
+	var trees: Array = []
+	var T: Array = d.trees
+	for i in T.size() / 6:
+		trees.append(Vector2(T[i * 6], T[i * 6 + 2]))
+	report.call("tree", trees, 1.0)
+	var st: Array = []
+	for p in world.street_trees:
+		st.append(Vector2(p.x, p.z))
+	report.call("street tree", st, 0.8)
+	var bl: Array = []
+	for b in d.buildings:
+		var r: Array = b.b
+		for c in [Vector2(r[0], r[1]), Vector2(r[2], r[3]), Vector2(r[0], r[3]), Vector2(r[2], r[1]), Vector2((r[0] + r[2]) * 0.5, r[1]), Vector2((r[0] + r[2]) * 0.5, r[3]), Vector2(r[0], (r[1] + r[3]) * 0.5), Vector2(r[2], (r[1] + r[3]) * 0.5)]:
+			bl.append(c)
+	report.call("building corner/edge", bl, 0.5)
+	# Floating or sunk: base height vs the ground under it.
+	var hcheck := func(kind: String, items: Array, tol: float) -> void:
+		var bad := 0
+		var shown := 0
+		for it in items:
+			var p: Vector3 = it
+			var g := world.drive_y(p.x, p.z) if world.in_city(p.x, p.z) else world.ground(p.x, p.z)
+			var off := p.y - g
+			if absf(off) > tol:
+				bad += 1
+				if shown < 6:
+					shown += 1
+					print("[audit]   ", kind, " at ", p.round(), " is ", snappedf(off, 0.1), " m ", "above" if off > 0 else "below", " the ground")
+		print("[audit] ", kind, ": ", bad, " of ", items.size(), " floating or sunk")
+	var lamp3: Array = []
+	for i in L.size() / 5:
+		if world.in_city(L[i * 5], L[i * 5 + 2]):
+			continue
+		var p := Vector3(L[i * 5], L[i * 5 + 1], L[i * 5 + 2])
+		p.y += world.ground_delta(p.x, p.z)
+		lamp3.append(p)
+	hcheck.call("lamp post (country)", lamp3, 0.6)
+	var tree3: Array = []
+	for i in T.size() / 6:
+		if world.in_city(T[i * 6], T[i * 6 + 2]):
+			continue
+		var p := Vector3(T[i * 6], T[i * 6 + 1], T[i * 6 + 2])
+		p.y += world.ground_delta(p.x, p.z)
+		tree3.append(p)
+	hcheck.call("tree", tree3, 0.8)
+	var gs: Array = []
+	for g in world.gas_stations:
+		for lp in [Vector3(-5, 0, -11), Vector3(-5, 0, 11), Vector3(21, 0, -8), Vector3(21, 0, 8), Vector3(-6.3, 0, 14)]:
+			var q: Vector3 = g.basis * lp + g.pos
+			gs.append(Vector2(q.x, q.z))
+	report.call("gas station part", gs, 0.3)
+
 ## Drift only on a brake tap: gas lifts and full-throttle cornering never drift,
 ## and centring the wheel straightens the car quickly. Runs on the airfield apron.
 func _drifttest() -> void:

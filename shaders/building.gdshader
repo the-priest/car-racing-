@@ -147,6 +147,47 @@ void fragment() {
 		rough = mix(mix(wall_t.b, 0.35, wetness), mix(0.03 + pane * 0.05, 0.5, mull), win);
 		metal = mix(style == 0 ? 0.3 : 0.0, mix(0.9, 0.3, mull), win);
 		nmap = mix(nmap, glass_n, win * (1.0 - mull));
+		// Shop interiors behind the ground floor glass: a lit back wall with shelves
+		// of goods (or a cafe/office look), so the street level isn't a black band.
+		if (ground && style != 0) {
+			vec2 g = vec2(f.x, clamp((f.y - 0.08) / 0.78, 0.0, 1.0));
+			float shop = h21(vec2(id.x, seed + 13.0));
+			vec3 back = shop < 0.33 ? vec3(0.78, 0.72, 0.6) : (shop < 0.66 ? vec3(0.62, 0.7, 0.74) : vec3(0.7, 0.55, 0.45));
+			// Three kinds of shop: grocery (dense shelves), boutique (a few big
+			// items on rails), cafe (tables low down, warm walls, no shelves).
+			float rows = shop < 0.33 ? 4.0 : 3.0;
+			float row = fract(g.y * rows);
+			vec2 item = floor(vec2(g.x * (shop < 0.33 ? 24.0 : 9.0), g.y * rows));
+			vec3 prod = vec3(h21(item + shop), h21(item + shop + 1.7), h21(item + shop + 3.3));
+			float has = step(shop < 0.33 ? 0.3 : 0.55, h21(item + shop + 5.1)) * step(0.12, row) * step(row, shop < 0.33 ? 0.7 : 0.85) * step(0.25, g.y) * step(g.y, 0.85);
+			float shelf = step(0.9, row) * step(0.2, g.y) * aa;
+			if (shop >= 0.66) {
+				// Cafe: tables and chairs as dark shapes, pendant lights, no shelves.
+				vec2 tc = vec2(fract(g.x * 4.0), g.y);
+				has = step(abs(tc.x - 0.5), 0.22) * step(g.y, 0.32) * step(0.2, g.y);
+				prod = vec3(0.18, 0.12, 0.08);
+				shelf = step(abs(tc.x - 0.5), 0.04) * step(0.85, g.y) * aa;
+			}
+			has = mix(0.25, has, aa);
+			vec3 interior = mix(back, prod * 0.75 + 0.1, has);
+			interior = mix(interior, shop >= 0.66 ? vec3(1.0, 0.85, 0.6) : vec3(0.25, 0.22, 0.2), shelf);
+			// Counter and a dark doorway in some bays.
+			interior = mix(interior, vec3(0.3, 0.24, 0.18), step(g.y, 0.2) * step(0.5, shop));
+			float door = step(0.5, h21(vec2(id.x, seed + 21.0))) * step(0.72, f.x) * step(f.x, 0.9) * step(g.y, 0.82);
+			interior = mix(interior, vec3(0.08, 0.08, 0.09), door * aa);
+			interior *= 0.55 + 0.45 * g.y; // light from the ceiling
+			vec3 shopglass = mix(tint, interior, 0.82);
+			// Some shops close for the night (roller shutter down); a few are vacant.
+			float closed = step(0.72, h21(vec2(id.x, seed + 31.0))) * smoothstep(0.4, 0.7, night) + step(0.95, h21(vec2(id.x, seed + 33.0)));
+			closed = clamp(closed, 0.0, 1.0);
+			vec3 shutter = vec3(0.42, 0.43, 0.44) * (0.8 + 0.2 * step(0.5, fract(g.y * 36.0)));
+			shopglass = mix(shopglass, shutter, closed);
+			albedo = mix(albedo, shopglass, win);
+			metal = mix(metal, mix(0.12, 0.5, closed), win);
+			rough = mix(rough, mix(0.08, 0.45, closed), win);
+			if (closed > 0.5) nmap = mix(nmap, vec3(0.5, 0.5 + (step(0.5, fract(g.y * 36.0)) - 0.5) * 0.3, 1.0), win);
+			emis += interior * win * (1.0 - door * 0.9) * (1.0 - closed) * mix(0.16, 0.38, night);
+		}
 		// Shop fronts: a coloured fascia sign over the ground floor windows.
 		if (ground && style != 0) {
 			float fascia = step(0.86, f.y) * step(0.1, f.x) * step(f.x, 0.9);
@@ -167,7 +208,7 @@ void fragment() {
 		// Half-drawn blinds in some rooms (soft, not stripes) and furniture silhouettes low down.
 		float blinds = (style == 1 && h21(id + seed + 9.0) > 0.7) ? mix(0.35, 1.0, smoothstep(0.55, 0.6, 1.0 - f.y)) : 1.0;
 		blinds *= mix(0.55, 1.0, clamp(smoothstep(0.3, 0.45, f.y) + step(0.5, h21(id + seed + 4.0)) * 0.5, 0.0, 1.0));
-		emis += room * lit * falloff * blinds * night * (ground ? 0.45 : 0.3) * (0.55 + pane * 0.6) * (1.0 - mull);
+		emis += room * lit * falloff * blinds * night * (ground ? 0.12 : 0.3) * (0.55 + pane * 0.6) * (1.0 - mull);
 	}
 	ALBEDO = albedo;
 	ROUGHNESS = rough;
