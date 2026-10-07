@@ -121,6 +121,10 @@ func _ready() -> void:
 			shots_spec = "GPSTEST"
 		if a == "--damagetest":
 			shots_spec = "DAMAGETEST"
+		if a == "--impacttest":
+			shots_spec = "IMPACTTEST"
+		if a == "--drifttest":
+			shots_spec = "DRIFTTEST"
 		if a == "--introshots":
 			shots_spec = "INTROSHOTS"
 	audio = AudioManager.new()
@@ -205,6 +209,7 @@ func _ready() -> void:
 		hud.message("Radio off: no playable music in %s" % AudioManager.radio_folder(), 5.0))
 	hud.visible = false
 	on_settings_changed()
+	await _prewarm_fx()
 	if shots_spec == "MENUTEST":
 		_to_menu()
 		await _menutest()
@@ -309,6 +314,14 @@ func _ready() -> void:
 		return
 	if shots_spec == "DAMAGETEST":
 		await _damagetest()
+		get_tree().quit()
+		return
+	if shots_spec == "IMPACTTEST":
+		await _impacttest()
+		get_tree().quit()
+		return
+	if shots_spec == "DRIFTTEST":
+		await _drifttest()
 		get_tree().quit()
 		return
 	if shots_spec == "TUTORIALTEST":
@@ -1303,7 +1316,7 @@ func _update_onboarding(delta: float) -> void:
 	if onboard_t > 2.0 and not seen.has("ctl_drive"):
 		tip("ctl_drive", "Drive: %s accelerate, %s brake / reverse, %s nitrous. Nitrous refills from near misses, drifts and big air." % [g.call("throttle"), g.call("brake"), g.call("nitro")])
 	elif onboard_t > 35.0 and not seen.has("ctl_drift"):
-		tip("ctl_drift", "Drift: while steering into a corner, lift off %s and press it again (or tap %s on the gas). Steer to hold the angle. %s (handbrake) is for tight hairpins." % [g.call("throttle"), g.call("brake"), g.call("handbrake")])
+		tip("ctl_drift", "Drift: at speed, steer hard into a corner and tap %s while staying on %s. Steer to hold the angle; centre the wheel or lift off to straighten. %s (handbrake) is for tight hairpins." % [g.call("brake"), g.call("throttle"), g.call("handbrake")])
 	elif onboard_t > 70.0:
 		tip("ctl_map", "%s opens the map (pin your own waypoint there). %s resets your car to the road, %s changes camera, %s turns on the radio." % [g.call("map"), g.call("reset"), g.call("camera"), g.call("radio")])
 
@@ -1374,7 +1387,39 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 
 ## point/normal: contact position and the direction pushing the player away from what
 ## it hit. Unknown (rigid-body hits): guessed from the player's change in velocity.
+## Draw each effect once in front of the camera while the loading screen is still
+## up, so their shaders are compiled now and not on the first crash or skid.
+func _prewarm_fx() -> void:
+	var at := cam.global_position - cam.global_transform.basis.z * 6.0
+	effects.sparks(at, Vector3.UP, 1.0)
+	effects.set_scrape(true, at, Vector3.UP, 0.5)
+	var smoke: Array = []
+	for e in effects.cars:
+		for p in e.smoke + e.dust:
+			smoke.append(p)
+	for p in smoke:
+		p.global_position = at
+		p.emitting = true
+	await _frames(3)
+	effects.set_scrape(false)
+	for p in smoke:
+		p.emitting = false
+		p.restart()
+		p.emitting = false
+
+## One crash makes several contact reports (body_entered on each collider, car
+## contacts every physics tick); they are folded into one event so a crash costs one
+## spark burst, one sound and one dose of damage.
+var _impact_ms := -1000
+var _impact_str := 0.0
+
 func _on_impact(strength: float, point := Vector3.INF, normal := Vector3.ZERO) -> void:
+	var now := Time.get_ticks_msec()
+	if now - _impact_ms < 150 and strength < _impact_str * 1.5:
+		return
+	if strength > 4.0:
+		_impact_ms = now
+		_impact_str = strength
 	if strength > 5.0 and state == State.PLAY:
 		if point == Vector3.INF:
 			var dv := player.linear_velocity - player.last_vel
@@ -1859,7 +1904,7 @@ func _update_weather(delta: float) -> void:
 
 func _update_drift(delta: float) -> void:
 	var ang := absf(player.slip_angle)
-	# Only real drifts score (gas-tap drift mode); a handbrake pivot is just a turn.
+	# Only real drifts score (brake-tap drift mode); a handbrake pivot is just a turn.
 	var drifting := player.on_ground and player.speed > 11.0 and ang > 0.24 and ang < 1.6 and player.forward_speed > 0.0 \
 			and (player.drift_mode or not player.assists)
 	if drifting:
@@ -2597,6 +2642,15 @@ func _review() -> void:
 ## CPU cost of gameplay systems: free roam with traffic, then a heat-5 pursuit.
 func _perftest() -> void:
 	_on_play()
+	if OS.has_environment("PERF_UPGRADED"):
+		# Fully built car with every cosmetic, to compare against stock.
+		var nu := {}
+		for k in Data.UPGRADES:
+			nu[k] = Data.UPGRADES[k].cost.size()
+		Save.data.upgrades[Save.data.car] = nu
+		Save.data.get("glow", {})[Save.data.car] = 2
+		apply_player_car()
+		print("[perf] upgraded car ", Save.data.car, " ", nu)
 	career.start_race("ring")
 	var path: RacePath = career.race.path
 	var start := career.race.p_idx
@@ -2691,6 +2745,95 @@ func _aitest() -> void:
 # ---------------------------------------------------------------- UI test (mouse + gamepad)
 ## Follows GPS routes by teleporting along them and counts reroutes (should be none
 ## while on the line), then leaves the route and turns around (one reroute each).
+## Drift only on a brake tap: gas lifts and full-throttle cornering never drift,
+## and centring the wheel straightens the car quickly. Runs on the airfield apron.
+func _drifttest() -> void:
+	Save.data.tutorial_done = true
+	Save.data.intro_seen = true
+	_on_play()
+	traffic.set_count(0)
+	police.enabled = false
+	var acts := ["throttle", "brake", "steer_left", "steer_right", "handbrake", "nitro"]
+	var release := func() -> void:
+		for a in acts:
+			Input.action_release(a)
+	var hold := func(frames: int, stats: Dictionary) -> void:
+		for i in frames:
+			await get_tree().physics_frame
+			stats.beta = maxf(float(stats.get("beta", 0.0)), absf(player.slip_angle))
+			if player.drift_mode:
+				stats.drift = true
+	var cars: Array = ["vanta", "rsr"]
+	for cid in cars:
+		Save.data.car = cid
+		apply_player_car()
+		for test in ["grip", "gas_tap", "brake_tap"]:
+			release.call()
+			player.reset_to(Transform3D(Basis(Vector3.UP, PI), Vector3(2240, 15.5, -1150)))
+			await _frames(10)
+			Input.action_press("throttle")
+			var st := {}
+			var t := 0
+			while player.kmh < 100.0 and t < 900:
+				await get_tree().physics_frame
+				t += 1
+			Input.action_press("steer_right")
+			await hold.call(15, {})
+			match test:
+				"grip":
+					await hold.call(180, st)
+				"gas_tap":
+					Input.action_release("throttle")
+					await hold.call(14, st)
+					Input.action_press("throttle")
+					await hold.call(120, st)
+				"brake_tap":
+					Input.action_press("brake")
+					await hold.call(7, st)
+					Input.action_release("brake")
+					await hold.call(70, st)
+			var res := "%s %-9s drift=%s max_slip=%.0f deg kmh=%d" % [cid, test, str(st.get("drift", false)), rad_to_deg(float(st.get("beta", 0.0))), int(player.kmh)]
+			if test == "brake_tap":
+				# Let go: centre the wheel, stay on the gas, time how long until straight.
+				Input.action_release("steer_right")
+				var k := 0
+				while (player.drift_mode or absf(player.slip_angle) > 0.05) and k < 600:
+					await get_tree().physics_frame
+					k += 1
+				res += "  straight after %.2f s" % (k / 60.0)
+			print("[drift] ", res)
+	release.call()
+
+## Frame times (rendered) around crashes: sparks, flash, sound, damage smoke.
+func _impacttest() -> void:
+	_on_play()
+	state = State.PLAY
+	menus.close_all()
+	hud.visible = true
+	player.reset_to(Transform3D(Basis(Vector3.UP, 0.0), Vector3(0, 0.8, -300)))
+	cam.snap = true
+	var phase := func(label: String, frames: int, hit_every: int) -> void:
+		var worst := 0.0
+		var total := 0.0
+		var last := Time.get_ticks_usec()
+		for i in frames:
+			if hit_every > 0 and i % hit_every == 0:
+				_on_impact(30.0, player.global_position + Vector3(0, 0.5, -2.0), Vector3(0, 0, 1))
+			await get_tree().process_frame
+			var now := Time.get_ticks_usec()
+			var ms := (now - last) / 1000.0
+			last = now
+			if i > 2:
+				worst = maxf(worst, ms)
+				total += ms
+		print("[impact] ", label, ": avg ", snappedf(total / (frames - 3), 0.1), " ms  worst ", snappedf(worst, 0.1), " ms  damage=", snappedf(player.damage, 0.01))
+	await phase.call("baseline", 90, 0)
+	await phase.call("first hit", 30, 30)
+	await phase.call("hits every 20 frames", 120, 20)
+	await phase.call("after hits (smoking)", 90, 0)
+	player.repair()
+	await phase.call("repaired", 60, 0)
+
 ## Crash damage, wreck = bust in a chase, repair at every gas station.
 func _damagetest() -> void:
 	_on_play()
@@ -2875,15 +3018,19 @@ func _tutorialtest() -> void:
 				Input.action_press("nitro")
 			"DRIFT":
 				Input.action_release("nitro")
-				# Build speed, then steer in and stab the gas.
+				# Build speed, then steer in on the gas and tap the brake.
 				var c := fmod(ft, 3.0)
 				if c < 1.6:
 					Input.action_press("throttle") if player.kmh < 90.0 else Input.action_release("throttle")
 					Input.action_release("steer_right")
-				elif c < 1.85:
+					Input.action_release("brake")
+				elif c < 1.75:
+					Input.action_press("throttle")
 					Input.action_press("steer_right")
-					Input.action_release("throttle")
+				elif c < 1.87:
+					Input.action_press("brake")
 				else:
+					Input.action_release("brake")
 					Input.action_press("steer_right")
 					Input.action_press("throttle")
 			"HANDBRAKE":

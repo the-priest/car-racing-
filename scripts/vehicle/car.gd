@@ -9,6 +9,8 @@ const G := 9.81
 const LAYER_CARS := 2
 
 signal impact(strength: float)
+
+const UNDERGLOW_SHADER := preload("res://shaders/underglow.gdshader")
 signal shifted(gear: int)
 
 var stats: Dictionary = {}
@@ -48,7 +50,6 @@ var slip_angle := 0.0 # body side-slip
 var drift_mode := false # true only once the driver deliberately kicks the car sideways
 ## Gas-tap drift (player only): lift off and stab the throttle again while steering.
 var tap_drift := false
-var _tap_armed := 0.0
 var _prev_brk := 0.0
 var _brk_t := 0.0
 var _prev_thr := 0.0
@@ -408,15 +409,20 @@ func set_underglow(idx: int) -> void:
 	var root := Node3D.new()
 	root.name = "Underglow"
 	add_child(root)
-	for z in [-1.0, 1.0]:
-		var l := OmniLight3D.new()
-		l.light_color = c
-		l.light_energy = 3.4
-		l.omni_range = 3.8
-		l.omni_attenuation = 1.4
-		l.shadow_enabled = false
-		l.position = Vector3(0, 0.12, z)
-		root.add_child(l)
+	# A soft additive pool of light on the ground under the car instead of real
+	# lights: looks the same from the chase camera and costs nothing per frame.
+	var pool := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(3.4, 6.2)
+	q.orientation = PlaneMesh.FACE_Y
+	pool.mesh = q
+	var sm := ShaderMaterial.new()
+	sm.shader = UNDERGLOW_SHADER
+	sm.set_shader_parameter("glow", c)
+	pool.material_override = sm
+	pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pool.position = Vector3(0, 0.04, 0.05) # car space: wheels touch down at y = 0
+	root.add_child(pool)
 	var strip := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = Vector3(1.5, 0.02, 3.4)
@@ -424,9 +430,6 @@ func set_underglow(idx: int) -> void:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.albedo_color = c
-	m.emission_enabled = true
-	m.emission = c
-	m.emission_energy_multiplier = 3.0
 	strip.material_override = m
 	strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	strip.position = Vector3(0, 0.2, 0.05)
@@ -522,7 +525,6 @@ func reset_to(t: Transform3D) -> void:
 	nitro_on = false
 	drift_mode = false
 	_hb_t = 0.0
-	_tap_armed = 0.0
 	_prev_brk = 0.0
 	_brk_t = 0.0
 	for w in wheels:
@@ -573,33 +575,34 @@ func _physics_step(dt: float) -> void:
 		path_rate = 0.0
 	if float(input.handbrake) <= 0.1:
 		_hb_t = maxf(0.0, _hb_t - dt)
-	# --- Drift mode: only entered on purpose, NFS-style: while steering, lift off
-	# the throttle and stab it again. The handbrake is for tight turns, not drifts.
-	# A quick brake tap while steering on the gas does the same (NFS "brake to drift").
+	# --- Drift mode: only ever entered on purpose. At speed, steer hard into the
+	# corner and give the brake a short, sharp tap while staying on the gas. The
+	# throttle alone never starts a drift, and the handbrake is for tight turns.
 	var steer_in := absf(float(input.steer))
 	var thr_in := float(input.throttle)
 	var brk_in := float(input.brake)
-	_tap_armed = maxf(0.0, _tap_armed - dt)
-	if _prev_thr >= 0.45 and thr_in < 0.25:
-		_tap_armed = 0.8
-	var gas_tap := _tap_armed > 0.0 and _prev_thr < 0.65 and thr_in >= 0.7
-	_brk_t = _brk_t + dt if brk_in > 0.4 else _brk_t
-	var brake_tap := _prev_brk > 0.4 and brk_in <= 0.4 and _brk_t < 0.6 and thr_in >= 0.7
+	if brk_in > 0.4:
+		_brk_t += dt
+	var brake_tap := _prev_brk > 0.4 and brk_in <= 0.4 and _brk_t > 0.03 and _brk_t < 0.4 and thr_in >= 0.7
 	if brk_in <= 0.4:
 		_brk_t = 0.0
 	_prev_brk = brk_in
-	if tap_drift and not drift_mode and (gas_tap or brake_tap) \
-			and speed > 12.0 and forward_speed > 0.0 and steer_in > 0.3 and wheels_on_ground >= 3:
+	if tap_drift and not drift_mode and brake_tap \
+			and speed > 16.0 and forward_speed > 0.0 and steer_in > 0.55 and wheels_on_ground >= 3:
 		drift_mode = true
-		_tap_armed = 0.0
 		_drift_v0 = speed
 		# Kick the tail out toward the corner.
-		angular_velocity += up * -signf(float(input.steer)) * (0.55 + 0.1 * float(stats.drift))
+		angular_velocity += up * -signf(float(input.steer)) * (0.5 + 0.08 * float(stats.drift))
 	_prev_thr = thr_in
 	if drift_mode:
-		_drift_lift_t = _drift_lift_t + dt if thr_in < 0.15 else 0.0
-		_drift_low_t = _drift_low_t + dt if absf(beta) < 0.08 else 0.0
-		if speed < 8.0 or forward_speed < 0.0 or _drift_lift_t > 0.45 or _drift_low_t > 0.35 or wheels_on_ground < 2:
+		# Easy way out: lift off, centre the wheel or counter-steer and the car
+		# straightens up straight away (grip mode soaks up the slide).
+		var sd0 := signf(beta) if absf(beta) > 0.03 else signf(-float(input.steer))
+		var into0 := float(input.steer) * -sd0
+		var letting_go := thr_in < 0.3 or steer_in < 0.2 or into0 < -0.15
+		_drift_lift_t = _drift_lift_t + dt if letting_go else 0.0
+		_drift_low_t = _drift_low_t + dt if absf(beta) < 0.1 else 0.0
+		if speed < 10.0 or forward_speed < 0.0 or _drift_lift_t > 0.18 or _drift_low_t > 0.25 or wheels_on_ground < 2:
 			drift_mode = false
 	else:
 		_drift_lift_t = 0.0
@@ -838,7 +841,7 @@ func _physics_step(dt: float) -> void:
 			# bleeding speed, like an arcade racer.
 			var sd := signf(beta) if absf(beta) > 0.03 else signf(-float(input.steer))
 			var into := clampf(float(input.steer) * -sd, -1.0, 1.0)
-			var target_beta := sd * (0.36 + 0.24 * into)
+			var target_beta := sd * (0.3 + 0.18 * into)
 			apply_torque(up * ((target_beta - beta) * 40.0 - (yaw_rate - path_rate) * 6.0) * inertia.y)
 			if tap_drift and throttle > 0.3:
 				# Arcade drift: on the throttle the slide carries its speed instead of scrubbing it off.

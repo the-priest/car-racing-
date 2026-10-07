@@ -22,7 +22,7 @@ func _steps() -> Array:
 		["BRAKE", "Press %s to brake. Slow right down, under 20 km/h." % g.call("brake")],
 		["STEER", "Steer with %s. Weave left and right." % steer],
 		["NITROUS", "Hold %s for a nitrous boost. Near misses, drifts and big air refill it." % g.call("nitro")],
-		["DRIFT", "Above 50 km/h, steer into a turn and quickly lift off %s and press it again (or tap %s while on the gas). Steer to hold the slide." % [g.call("throttle"), g.call("brake")]],
+		["DRIFT", "Above 60 km/h, steer hard into a turn and give %s a quick tap while staying on %s. Steer to hold the slide; centre the wheel or lift off to straighten up." % [g.call("brake"), g.call("throttle")]],
 		["HANDBRAKE", "For tight hairpins: steer hard and tap %s to swing the car around." % g.call("handbrake")],
 		["MAP", "Press %s to open the map. You can zoom, set waypoints and fast travel there. Close it again." % g.call("map")],
 		["PHONE", "Mara has your first job. Press %s to call her." % g.call("phone")],
@@ -141,10 +141,10 @@ func hint() -> String:
 		return ""
 	var name: String = _steps()[step][0]
 	var p: Car = game.player
-	if name == "DRIFT" and p.kmh < 45.0:
+	if name == "DRIFT" and p.kmh < 60.0:
 		return "Speed up a little first."
 	if name == "DRIFT" and step_t > 18.0:
-		return "Hold the steering to one side, then let go of the gas and press it again within a second."
+		return "Keep the gas down, steer hard to one side, then tap the brake quickly (don't hold it)."
 	if name == "STEER" and step_t > 15.0 and p.kmh < 10.0:
 		return "Keep a little speed on while you steer."
 	if name == "HANDBRAKE" and p.kmh < 25.0:

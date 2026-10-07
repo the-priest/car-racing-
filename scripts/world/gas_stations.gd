@@ -264,7 +264,9 @@ static func build(world: World, root: Node3D, stations: Array) -> void:
 			mi.transform = xf
 			mi.visibility_range_end = 1400.0 if pair[0] != scr else 300.0
 			root.add_child(mi)
-		# Forecourt light under the canopy.
+		# Forecourt light under the canopy (Forward+ only; the lit panels carry it otherwise).
+		if world.compat:
+			continue
 		var l := OmniLight3D.new()
 		l.position = xf * Vector3(cx, 4.6, 0)
 		l.light_color = Color(1, 0.96, 0.88)

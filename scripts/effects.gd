@@ -164,8 +164,13 @@ func _tick() -> void:
 		# A damaged engine smokes: grey from half damage, thick black near wrecked.
 		if car.damage > 0.45 or e.has("eng"):
 			if not e.has("eng"):
-				var grey := _emitter(Color(0.55, 0.55, 0.56), 40)
-				var black := _emitter(Color(0.08, 0.08, 0.08), 50)
+				# Few, small puffs: big transparent quads right in front of the chase
+				# camera are expensive to draw.
+				var grey := _emitter(Color(0.55, 0.55, 0.56), 14)
+				var black := _emitter(Color(0.08, 0.08, 0.08), 16)
+				for em in [grey, black]:
+					em.lifetime = 1.6
+					(em.draw_pass_1 as QuadMesh).size = Vector2(0.8, 0.8)
 				add_child(grey)
 				add_child(black)
 				e["eng"] = [grey, black]
@@ -278,7 +283,7 @@ func sparks(pos: Vector3, dir: Vector3, power: float) -> void:
 	p.amount_ratio = clampf(0.25 + power * 0.75, 0.25, 1.0)
 	p.restart()
 	p.emitting = true
-	if power > 0.3:
+	if power > 0.3 and quality >= 1.0: # no dynamic light on the compatibility renderer: every lit mesh would redraw
 		flash.global_position = pos + Vector3.UP * 0.4
 		flash.visible = true
 		flash_t = 0.16
@@ -294,7 +299,7 @@ func set_scrape(on: bool, pos := Vector3.ZERO, dir := Vector3.UP, power := 0.5) 
 		scrape.amount_ratio = clampf(power, 0.2, 1.0)
 		scrape_light.global_position = pos + dir.normalized() * 0.3
 		scrape_light.light_energy = randf_range(0.8, 2.2) * power
-	scrape_light.visible = on
+	scrape_light.visible = on and quality >= 1.0
 	if scrape.emitting != on:
 		scrape.emitting = on
 

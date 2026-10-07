@@ -67,6 +67,7 @@ var last_throttle := 0.0
 var pop_timer := 0.0
 var load_s := 0.0
 var ai_players := {}
+var oneshots_live := 0 # capped so a pile-up can't stack dozens of players
 
 func setup() -> void:
 	if AudioServer.get_bus_index("Music") < 0:
@@ -182,8 +183,9 @@ func set_engine(c: int) -> void:
 		eng_layers_off[i].play(randf() * 0.5)
 
 func play_oneshot(n: String, pitch := 1.0, vol_db := 0.0) -> void:
-	if not streams.has(n):
+	if not streams.has(n) or oneshots_live >= 12:
 		return
+	oneshots_live += 1
 	var p := AudioStreamPlayer.new()
 	p.stream = streams[n]
 	p.bus = "SFX"
@@ -191,7 +193,9 @@ func play_oneshot(n: String, pitch := 1.0, vol_db := 0.0) -> void:
 	p.volume_db = vol_db
 	add_child(p)
 	p.play()
-	p.finished.connect(p.queue_free)
+	p.finished.connect(func():
+		oneshots_live -= 1
+		p.queue_free())
 
 func set_ringing(on: bool) -> void:
 	ring.volume_db = -6.0 if on else -80.0

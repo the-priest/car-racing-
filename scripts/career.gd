@@ -535,7 +535,7 @@ func _update_drift_zone(dt: float, pp: Vector2) -> void:
 				waypoint = dm.b
 				waypoint_label = "Drift to the end of " + str(DRIFT_ZONES[dm.i].name)
 				big.emit("DRIFT ZONE", 1.5)
-				game.tip("drift", "Drift zone: score drift points before you reach the end gate. While steering, lift off the throttle and stab it again to start a drift.")
+				game.tip("drift", "Drift zone: score drift points before you reach the end gate. At speed, steer hard into the corner and tap the brake while staying on the gas to start a drift.")
 				message.emit("%s - drift all the way to the end" % DRIFT_ZONES[dm.i].name, 3.0, "")
 				game.audio.play_oneshot("beep", 1.5)
 				return

@@ -6,6 +6,7 @@ extends MultiMeshInstance3D
 const SPACING := 11.0
 const AHEAD := 180.0
 const COUNT := 18
+const LANE := 2.6
 
 var game: Node
 
@@ -25,8 +26,9 @@ void vertex() {
 	fade = INSTANCE_CUSTOM.a;
 }
 void fragment() {
-	// Chevron pointing toward -Y in UV space (= along the route).
-	vec2 p = UV * 2.0 - 1.0;
+	// The quad's local -Z is the route direction, which is UV.y = 0 on a FACE_Y quad;
+	// flip so the chevron's tip (largest p.y) points that way.
+	vec2 p = vec2(UV.x * 2.0 - 1.0, 1.0 - UV.y * 2.0);
 	float v = abs(p.x) * 0.9 + p.y;
 	float shape = smoothstep(0.1, 0.0, abs(v - 0.1) - 0.32) * step(abs(p.x), 0.95) * step(p.y, 0.95);
 	float a = shape * fade * mix(0.8, 1.0, night);
@@ -63,7 +65,8 @@ func update_route(path: PackedVector2Array, enabled: bool, car_pos := Vector2.ZE
 		var dir := (b - a) / seg
 		var off := SPACING * 0.5
 		while off < seg - SPACING * 0.3 and n < COUNT:
-			var p := a + dir * off
+			# In your lane (right of the centre line), not on it.
+			var p := a + dir * off + Vector2(-dir.y, dir.x) * LANE
 			off += SPACING
 			var to := p - car_pos
 			var d := to.length()

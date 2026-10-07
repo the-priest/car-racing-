@@ -330,7 +330,7 @@ func _build_loading() -> void:
 	box.add_child(loading_bar)
 	loading_label = _text(box, "Loading...")
 	var tips := [
-		"Cars grip by default. To drift: while steering into a corner, lift off the throttle and stab it again. Steer to set the angle, ease off to straighten. The handbrake is for tight hairpins.",
+		"Cars grip by default. To drift: at speed, steer hard into a corner and tap the brake while staying on the gas. Steer to set the angle; centre the wheel or lift off to straighten. The handbrake is for tight hairpins.",
 		"Ram a cop hard while you're the faster car to take it out of the chase - it adds to your bounty.",
 		"Air One can't see you between tall buildings. Head downtown to break its line of sight.",
 		"Roadblocks are just parked cars. Hit them flat out.",
