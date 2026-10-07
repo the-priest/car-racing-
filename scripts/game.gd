@@ -339,6 +339,30 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	if shots_spec == "PROBE":
+		# Walls: neighbouring terrain cells more than 2x the cell size apart (>63 deg),
+		# split into those near a road (what you drive past) and the rest.
+		var walls := 0
+		var near_road := 0
+		var wall_list := PackedStringArray()
+		for gj in range(1, world.N - 1):
+			for gi in range(1, world.N - 1):
+				var k := gj * world.N + gi
+				var hk: float = world.heights[k]
+				var steep := false
+				for o in [1, -1, world.N, -world.N]:
+					if absf(hk - world.heights[k + o]) > world.CELL * 2.0:
+						steep = true
+				if steep:
+					walls += 1
+					if OS.has_environment("WALL_DUMP"):
+						wall_list.append("%d %d" % [gi, gj])
+					if world.height_delta[k] != 0.0:
+						near_road += 1
+		print("[walls] total=", walls, " in road bands=", near_road)
+		if OS.has_environment("WALL_DUMP"):
+			var wf := FileAccess.open(OS.get_environment("WALL_DUMP"), FileAccess.WRITE)
+			wf.store_string("\n".join(wall_list))
+			wf.close()
 		# Surface heights along lines across road joins (debug for snags).
 		var space := get_world_3d().direct_space_state
 		var lines := [[Vector2(0, -600), Vector2(0, -625)], [Vector2(5, -1480), Vector2(5, -1500)], [Vector2(-770, -1440), Vector2(-745, -1465)], [Vector2(-1595, -350), Vector2(-1620, -350)], [Vector2(600, 5), Vector2(625, 5)]]

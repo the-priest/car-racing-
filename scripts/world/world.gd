@@ -220,17 +220,30 @@ func _fix_road_joins() -> void:
 ## terrain collision used to poke up to a metre through road edges and junctions
 ## (hidden by the road mesh: the "invisible" snags).
 func _fit_terrain_to_roads() -> void:
+	# Every road within reach constrains the ground beside it to a cone: level with
+	# the deck across the verge, then at most a CUT slope above it and a BANK slope
+	# below it. A cell takes its natural height clamped into all those cones at once,
+	# so the ground between two roads at different heights (switchbacks, junctions)
+	# is one continuous slope instead of a wall where the nearest road changes.
 	var count := N * N
-	var best_e := PackedFloat32Array()
+	var lo := PackedFloat32Array()
+	lo.resize(count)
+	lo.fill(-INF)
+	var hi := PackedFloat32Array()
+	hi.resize(count)
+	hi.fill(INF)
+	var best_e := PackedFloat32Array() # nearest road: distance and deck height
 	best_e.resize(count)
 	best_e.fill(INF)
 	var best_h := PackedFloat32Array()
 	best_h.resize(count)
+	var e_lo := PackedFloat32Array() # distance to the road that set each bound
+	e_lo.resize(count)
+	var e_hi := PackedFloat32Array()
+	e_hi.resize(count)
 	var cap := PackedFloat32Array()
 	cap.resize(count)
 	cap.fill(INF)
-	var best_r := PackedFloat32Array() # reach of the segment that shaped each cell
-	best_r.resize(count)
 	const REACH := 48.0 # how far from a road edge the shoulders reshape the ground
 	const MAX_REACH := 150.0 # deep cuts through mountains reach further
 	const CAP_REACH := 12.0 # > one heightmap cell diagonal (8 m * sqrt 2)
@@ -282,10 +295,18 @@ func _fit_terrain_to_roads() -> void:
 					var sl := (x - (a.x + tx * t)) * -tz + (z - (a.z + tz * t)) * tx
 					var rh := lerpf(a.y, b.y, t) + lerpf(bank[i], bank[j], t) * clampf(sl / sqrt(l2), -hw, hw)
 					var v := gj * N + gi
+					# The cone widens past the verge and lets go completely at the edge of
+					# the reach, so there's no step where a road's influence ends.
+					var over := maxf(e - VERGE, 0.0) + smoothstep(reach * 0.75, reach, e) * 400.0
 					if e < best_e[v]:
 						best_e[v] = e
 						best_h[v] = rh
-						best_r[v] = reach
+					if rh - over * BANK > lo[v]:
+						lo[v] = rh - over * BANK
+						e_lo[v] = maxf(e, 0.0)
+					if rh + over * CUT < hi[v]:
+						hi[v] = rh + over * CUT
+						e_hi[v] = maxf(e, 0.0)
 					# Only cap against the stretch of road this point actually sits beside;
 					# a neighbouring segment further down a slope would drag the ground
 					# under the road far too low.
@@ -293,24 +314,79 @@ func _fit_terrain_to_roads() -> void:
 						cap[v] = rh
 	height_delta = PackedFloat32Array()
 	height_delta.resize(count)
+	var touched := PackedInt32Array()
 	for v in count:
-		if best_e[v] == INF:
+		if lo[v] == -INF:
 			continue
+		touched.append(v)
 		var city := absf(-HALF + (v % N) * CELL) < 612.0 and absf(-HALF + (v / N) * CELL) < 612.0
 		if city:
 			continue
 		var orig := heights[v]
-		# Level verge next to the road, then a gentle bank up or down to the natural
-		# ground: no cliffs off the road edge and no roads perched on ridges.
-		var e := best_e[v]
-		var over := maxf(e - VERGE, 0.0)
-		var h := best_h[v] + clampf(orig - best_h[v], -over * BANK, over * CUT)
-		# Ease back into the untouched hillside at the edge of the reshaped band.
-		var rr := best_r[v]
-		h = lerpf(h, orig, smoothstep(rr * 0.8, rr, e))
+		var h: float
+		if lo[v] <= hi[v]:
+			h = clampf(orig, lo[v], hi[v])
+		else:
+			# Two roads disagree. Next to a road (junctions) the nearest one wins, so its
+			# verge stays level with it; further out (between switchbacks) lean toward
+			# the nearer road and split it evenly halfway, for one continuous slope.
+			if minf(e_lo[v], e_hi[v]) < VERGE + 6.0:
+				var over_n := maxf(best_e[v] - VERGE, 0.0)
+				h = best_h[v] + clampf(orig - best_h[v], -over_n * BANK, over_n * CUT)
+			else:
+				var w := (e_lo[v] + 0.5) / (e_lo[v] + e_hi[v] + 1.0)
+				h = lerpf(lo[v], hi[v], w)
 		h = minf(h, cap[v])
 		heights[v] = h
 		height_delta[v] = h - orig
+	_relax_walls(best_e, VERGE + 3.0, touched)
+
+## Settles what's left of the walls (where reshaped ground meets steep hillside)
+## into scree slopes. Works only on steep cells and their neighbours, and never
+## touches road verges or the city.
+func _relax_walls(road_e: PackedFloat32Array, keep_within: float, cells: PackedInt32Array) -> void:
+	var talus := CELL * 1.4 # about 54 degrees
+	var nb := [1, -1, N, -N]
+	var protected := func(k: int) -> bool:
+		var x := -HALF + (k % N) * CELL
+		var z := -HALF + (k / N) * CELL
+		return road_e[k] < keep_within or (absf(x) < 640.0 and absf(z) < 640.0)
+	# The baker already eroded the open mountains; walls are left only around the
+	# reshaped bands, so only those cells (and their neighbours) need checking.
+	var active := {}
+	var hs := heights
+	for c in cells:
+		if c <= N or c >= N * (N - 1):
+			continue
+		var hc: float = hs[c]
+		for o in nb:
+			var dh: float = hc - hs[c + o]
+			if dh > talus:
+				active[c] = true
+			elif dh < -talus:
+				active[c + o] = true # the higher cell sheds, whichever side it's on
+	for it in 30:
+		if active.is_empty():
+			break
+		var next := {}
+		for k in active:
+			var gi: int = k % N
+			var gj: int = k / N
+			if gi < 1 or gj < 1 or gi > N - 2 or gj > N - 2 or protected.call(k):
+				continue
+			for o in nb:
+				var d: float = heights[k] - heights[k + o] - talus
+				if d <= 0.0:
+					continue
+				var move := d * 0.4
+				heights[k] -= move
+				height_delta[k] -= move
+				if not protected.call(k + o):
+					heights[k + o] += move
+					height_delta[k + o] += move
+					next[k + o] = true
+				next[k] = true
+		active = next
 
 ## Original heightmap sample (nearest cell), used while fitting before anything moves.
 func _raw_height(x: float, z: float) -> float:
