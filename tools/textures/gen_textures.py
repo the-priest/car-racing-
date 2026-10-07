@@ -201,26 +201,40 @@ def dirt():
     save("dirt", col, h, 5.0, rough)
 
 def rock():
-    """Weathered layered sandstone / granite cliff, ~8 m tile, sampled triplanar."""
+    """Fractured cliff rock, ~8 m tile, sampled triplanar: faceted blocks split by
+    cracks, faint warped layering and vertical weathering streaks."""
     n = N
-    w = warp(n, 70.0, 51, 2.2)
+    rng = np.random.default_rng(56)
+    count = 34
+    w = warp(n, 90.0, 53, 2.0)
+    f1, f2, cid = voronoi(n, count, 52, w)
     yy, xx = np.mgrid[0:n, 0:n].astype(np.float64)
-    strata = 0.5 + 0.5 * np.sin((yy + w[..., 1] * 1.5 + w[..., 0] * 0.6) * (2 * np.pi * 7 / n))
-    strata2 = 0.5 + 0.5 * np.sin((yy + w[..., 1] * 2.2) * (2 * np.pi * 23 / n))
-    ledges = np.floor(strata * 4.0) / 4.0  # stepped ledges along the layers
-    f1, f2, cid = voronoi(n, 90, 52, warp(n, 45.0, 53))
-    crack = np.clip(1.0 - (f2 - f1) / 2.5, 0, 1) * np.clip((fbm(n, 2.2, 59) - 0.4) * 3.0, 0, 1)
-    rough_n = fbm(n, 1.6, 54)
-    big = fbm(n, 2.6, 55)
-    h = big * 0.9 + ledges * 0.45 + strata2 * 0.12 + rough_n * 0.35 - crack * 0.35
-    ao = ao_from_height(h, 8)
-    col = lerp(rgb([0.11, 0.1, 0.09]), rgb([0.3, 0.27, 0.235]), np.clip(0.45 * strata + 0.35 * big + 0.2 * strata2, 0, 1))
-    col = lerp(col, rgb([0.32, 0.21, 0.13]), np.clip((fbm(n, 2.8, 57) - 0.6) * 3.0, 0, 1) * 0.5)  # iron staining
-    lichen = np.clip((fbm(n, 2.2, 58) - 0.7) * 5.0, 0, 1) * np.clip(rough_n * 1.5 - 0.3, 0, 1)
-    col = lerp(col, rgb([0.16, 0.18, 0.1]), lichen * 0.6)
-    col = col * (0.75 + 0.4 * rough_n[..., None]) * (1.0 - 0.4 * crack[..., None]) * ao[..., None]
-    rough = 0.86 - 0.08 * strata
-    save("rock", col, h, 8.0, rough)
+    # Each block is a tilted facet: a random plane per cell gives sharp, chunky light.
+    gx = rng.uniform(-1, 1, count)[cid]
+    gy = rng.uniform(-1, 1, count)[cid]
+    cxs = rng.uniform(0, n, count)
+    facet = (gx * np.sin(xx * 2 * np.pi / n) + gy * np.sin(yy * 2 * np.pi / n)) * 0.5
+    edge = f2 - f1
+    # Only some block edges are open cracks; elsewhere the rock is continuous.
+    crack = np.clip(1.0 - edge / 3.5, 0, 1) * np.clip((fbm(n, 2.4, 64) - 0.42) * 4.0, 0, 1)
+    rim = np.clip(edge / 18.0, 0, 1)  # blocks round off toward their edges
+    sub1, sub2, _ = voronoi(n, 600, 57, warp(n, 12.0, 58))
+    small_crack = np.clip(1.0 - (sub2 - sub1) / 1.4, 0, 1) * np.clip((fbm(n, 2.0, 59) - 0.62) * 5.0, 0, 1)
+    layers = 0.5 + 0.5 * np.sin((yy + w[..., 1] * 3.0 + w[..., 0]) * (2 * np.pi * 5 / n))
+    streaks = fbm(n, 2.2, 60, aniso=(1.0, 0.12))  # vertical: long in Y
+    grain = fbm(n, 1.3, 61)
+    big = fbm(n, 2.4, 55)
+    h = facet * 0.6 + np.sqrt(rim) * 0.35 + big * 0.8 + grain * 0.25 - crack * 0.8 - small_crack * 0.25 + layers * 0.08
+    ao = ao_from_height(h, 10)
+    tone = rng.uniform(0, 1, count)[cid]
+    col = lerp(rgb([0.13, 0.12, 0.11]), rgb([0.3, 0.28, 0.25]), np.clip(0.5 * tone + 0.3 * big + 0.2 * layers, 0, 1))
+    col = lerp(col, rgb([0.3, 0.22, 0.15]), np.clip((fbm(n, 2.8, 62) - 0.62) * 3.0, 0, 1) * 0.5)  # iron stain
+    col = col * (0.82 + 0.25 * streaks[..., None])  # rain streaks down the face
+    lichen = np.clip((fbm(n, 2.2, 63) - 0.7) * 5.0, 0, 1) * np.clip(grain * 1.6 - 0.4, 0, 1)
+    col = lerp(col, rgb([0.15, 0.17, 0.1]), lichen * 0.55)
+    col = col * (0.8 + 0.35 * grain[..., None]) * (1.0 - 0.55 * crack[..., None]) * (1.0 - 0.3 * small_crack[..., None]) * ao[..., None]
+    rough = 0.82 + 0.1 * crack
+    save("rock", col, h, 10.0, rough)
 
 def sand():
     """Beach sand with wind ripples, ~4 m tile."""

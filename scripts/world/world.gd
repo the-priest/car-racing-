@@ -229,10 +229,14 @@ func _fit_terrain_to_roads() -> void:
 	var cap := PackedFloat32Array()
 	cap.resize(count)
 	cap.fill(INF)
+	var best_r := PackedFloat32Array() # reach of the segment that shaped each cell
+	best_r.resize(count)
 	const REACH := 48.0 # how far from a road edge the shoulders reshape the ground
+	const MAX_REACH := 150.0 # deep cuts through mountains reach further
 	const CAP_REACH := 12.0 # > one heightmap cell diagonal (8 m * sqrt 2)
 	const VERGE := 12.0 # flat verge, level with the road, beyond each edge
-	const BANK := 0.4 # steepest shoulder slope after the verge (about 22 degrees)
+	const BANK := 0.4 # fill (embankment down) slope after the verge, about 22 degrees
+	const CUT := 0.85 # cut slope up into a hillside, about 40 degrees, like a rock cutting
 	for ri in d.roads.size():
 		var r: Dictionary = d.roads[ri]
 		var pts: Array = r.pts
@@ -244,7 +248,19 @@ func _fit_terrain_to_roads() -> void:
 			var j := (i + 1) % n
 			var a := Vector3(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2])
 			var b := Vector3(pts[j * 3], pts[j * 3 + 1], pts[j * 3 + 2])
-			var m := hw + REACH
+			# How far this stretch must reshape: far enough for a cut or fill slope to
+			# meet the natural ground (sampled beside the road), else the default.
+			var reach := REACH
+			var side := Vector2(-(b.z - a.z), b.x - a.x).normalized()
+			var mid := (a + b) * 0.5
+			for off in [40.0, 80.0, 120.0]:
+				for sg in [-1.0, 1.0]:
+					var q: Vector2 = Vector2(mid.x, mid.z) + side * float(sg) * (hw + float(off))
+					var dh: float = _raw_height(q.x, q.y) - mid.y
+					var need: float = VERGE + (dh / CUT if dh > 0.0 else -dh / BANK) + 10.0
+					if need > off:
+						reach = maxf(reach, minf(need, MAX_REACH))
+			var m := hw + reach
 			var i0 := maxi(0, floori((minf(a.x, b.x) - m + HALF) / CELL))
 			var i1 := mini(N - 1, ceili((maxf(a.x, b.x) + m + HALF) / CELL))
 			var j0 := maxi(0, floori((minf(a.z, b.z) - m + HALF) / CELL))
@@ -260,7 +276,7 @@ func _fit_terrain_to_roads() -> void:
 					var t := clampf(t_raw, 0.0, 1.0)
 					var dd := Vector2(x - (a.x + tx * t), z - (a.z + tz * t)).length()
 					var e := dd - hw
-					if e > REACH:
+					if e > reach:
 						continue
 					# Deck height here, including any bank (clamped to the deck width).
 					var sl := (x - (a.x + tx * t)) * -tz + (z - (a.z + tz * t)) * tx
@@ -269,6 +285,7 @@ func _fit_terrain_to_roads() -> void:
 					if e < best_e[v]:
 						best_e[v] = e
 						best_h[v] = rh
+						best_r[v] = reach
 					# Only cap against the stretch of road this point actually sits beside;
 					# a neighbouring segment further down a slope would drag the ground
 					# under the road far too low.
@@ -286,13 +303,20 @@ func _fit_terrain_to_roads() -> void:
 		# Level verge next to the road, then a gentle bank up or down to the natural
 		# ground: no cliffs off the road edge and no roads perched on ridges.
 		var e := best_e[v]
-		var room := maxf(e - VERGE, 0.0) * BANK
-		var h := best_h[v] + clampf(orig - best_h[v], -room, room)
-		# Ease back into the untouched hillside so cuts never end in a sheer wall.
-		h = lerpf(h, orig, smoothstep(REACH * 0.45, REACH, e))
+		var over := maxf(e - VERGE, 0.0)
+		var h := best_h[v] + clampf(orig - best_h[v], -over * BANK, over * CUT)
+		# Ease back into the untouched hillside at the edge of the reshaped band.
+		var rr := best_r[v]
+		h = lerpf(h, orig, smoothstep(rr * 0.8, rr, e))
 		h = minf(h, cap[v])
 		heights[v] = h
 		height_delta[v] = h - orig
+
+## Original heightmap sample (nearest cell), used while fitting before anything moves.
+func _raw_height(x: float, z: float) -> float:
+	var gi := clampi(roundi((x + HALF) / CELL), 0, N - 1)
+	var gj := clampi(roundi((z + HALF) / CELL), 0, N - 1)
+	return heights[gj * N + gi]
 
 ## How much the terrain at (x, z) moved in _fit_terrain_to_roads.
 func ground_delta(x: float, z: float) -> float:

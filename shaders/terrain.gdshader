@@ -132,7 +132,18 @@ void fragment() {
 		col = mix(col, a2, dirtw); det = mix(det, n2, dirtw);
 	}
 	if (rockw > 0.01) {
-		rock_layer(wpos, n, 9.0, a2, n2);
+		// Two scales so big cliff faces never show the same tile twice.
+		vec3 a3; vec4 n3;
+		rock_layer(wpos, n, 14.0, a2, n2);
+		rock_layer(wpos + vec3(17.0, 5.0, 31.0), n, 41.0, a3, n3);
+		float rm = smoothstep(0.3, 0.7, texture(noise_a, wpos.xz * 0.004 + wpos.y * 0.003).r);
+		a2 = mix(a2, a3, rm * 0.6);
+		n2 = mix(n2, n3, rm * 0.5);
+		// Big faces: tone variation that also changes with height (xz-only noise would
+		// smear into vertical streaks), plus faint rock layering.
+		float face = texture(noise_b, vec2(wpos.x + wpos.z, wpos.y * 1.7) * 0.006).r;
+		float layer = 0.9 + 0.1 * sin(wpos.y * 0.21 + macro * 7.0 + face * 3.0);
+		a2 *= (0.6 + 0.65 * face) * layer;
 		col = mix(col, a2 * mix(vec3(1.0), vec3(0.85, 0.9, 1.0), macro), rockw); det = mix(det, n2, rockw);
 	}
 	if (snoww > 0.01) {

@@ -63,25 +63,29 @@ static func leaf_texture(pine: bool) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 static func grass_texture() -> ImageTexture:
+	# Separate, thin, tapering blades with gaps between them (a solid base would
+	# read as a dark rectangle), darker at the root and sunlit toward the tips.
 	var w := 128
 	var h := 128
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0.2, 0.3, 0.1, 0.0))
 	var r := _rng(5)
-	for i in 70:
-		var x0 := r.randf_range(4, w - 4)
-		var lean := r.randf_range(-18, 18)
-		var top := r.randf_range(h * 0.05, h * 0.5)
-		var wid := r.randf_range(1.5, 3.2)
-		var g := r.randf_range(0.7, 1.2)
+	for i in 42:
+		var x0 := r.randf_range(6, w - 6)
+		var lean := r.randf_range(-22, 22)
+		var top := r.randf_range(h * 0.05, h * 0.55)
+		var wid := r.randf_range(0.9, 1.8)
+		var g := r.randf_range(0.8, 1.2)
+		var dry := r.randf() < 0.18
 		for y in range(int(top), h):
 			var t := (y - top) / (h - top)
 			var cx := x0 + lean * (1.0 - t) * (1.0 - t)
-			var hw := wid * (0.25 + 0.75 * t)
+			var hw := wid * (0.2 + 0.8 * sqrt(t))
 			for x in range(int(cx - hw), int(cx + hw) + 1):
 				if x >= 0 and x < w:
-					var c := Color(0.22 * g, 0.36 * g, 0.1 * g).lerp(Color(0.5, 0.48, 0.22), (1.0 - t) * 0.35)
-					img.set_pixel(x, y, Color(c.r * (0.55 + t * 0.45), c.g * (0.55 + t * 0.45), c.b, 1.0))
+					var base := Color(0.2 * g, 0.34 * g, 0.08 * g) if not dry else Color(0.38 * g, 0.34 * g, 0.16 * g)
+					var c := base.lerp(Color(0.52, 0.55, 0.24), (1.0 - t) * 0.45)
+					img.set_pixel(x, y, Color(c.r * (0.6 + (1.0 - t) * 0.4), c.g * (0.6 + (1.0 - t) * 0.4), c.b, 1.0))
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
 
