@@ -356,7 +356,7 @@ func _rebuild(name: String) -> void:
 			"main": _screen("main", true)
 			"pause": _screen("pause")
 			"garage": _screen("garage", true)
-			"settings": _screen("settings", false, 760)
+			"settings": _screen("settings", false, 820)
 			"controls": _screen("controls")
 			"credits": _screen("credits")
 			"story": _screen("story")
@@ -623,7 +623,7 @@ const SETTINGS := [
 	["difficulty", "Difficulty", ["easy", "normal", "hard"], ["Easy", "Normal", "Hard"], 0],
 	["assists", "Driving assists", [true, false], ["On", "Off (expert)"], 0],
 	["manual", "Gearbox", [false, true], ["Automatic", "Manual"], 0],
-	["units", "Units", ["kmh", "mph"], ["km/h", "mph"], 0],
+	["units", "Units", ["kmh", "mph"], ["km/h", "mph"], 1],
 	["route_arrows", "Route arrows on the road", [true, false], ["On", "Off"], 0],
 	["traffic", "Traffic density", [0.0, 0.5, 1.0, 1.5], ["Off", "Light", "Normal", "Heavy"], 0],
 	["time_mode", "Time of day", ["dynamic", "day", "dusk", "night"], ["Dynamic cycle", "Always day", "Always dusk", "Always night"], 0],
