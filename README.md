@@ -8,9 +8,10 @@ Open-world getaway-driving game built with **Godot 4.7**. You're a driver for hi
 
 | | |
 |---|---|
-| ![Rain in the city](docs/screenshots/city_rain.png) | ![City at night](docs/screenshots/city_night.png) |
-| ![Stallion '69](docs/screenshots/stallion69.png) | ![Mountain pass](docs/screenshots/mountain_pass.png) |
-| ![Countryside](docs/screenshots/countryside.png) | ![Downtown](docs/screenshots/city_day.png) |
+| ![Rain in the city](docs/screenshots/city_rain.png) | ![Stallion '69](docs/screenshots/stallion69.png) |
+| ![Mountain pass](docs/screenshots/mountain_pass.png) | ![Countryside](docs/screenshots/countryside.png) |
+| ![Downtown](docs/screenshots/city_day.png) | ![Vespera RSR](docs/screenshots/vespera_rsr.png) |
+| ![Downtown at night](docs/screenshots/city_night.png) | |
 
 | | |
 |---|---|
