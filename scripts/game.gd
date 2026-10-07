@@ -1760,6 +1760,10 @@ func _music_mode() -> String:
 	return "cruise"
 
 func _process(delta: float) -> void:
+	# Game speed is never anything but normal in real play (an old slow-motion
+	# effect could leave the whole world crawling until a restart).
+	if Engine.time_scale != 1.0 and shots_spec == "":
+		Engine.time_scale = 1.0
 	if state == State.LOADING or player == null:
 		return
 	var playing := state == State.PLAY

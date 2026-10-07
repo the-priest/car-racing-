@@ -413,7 +413,7 @@ func set_underglow(idx: int) -> void:
 	# lights: looks the same from the chase camera and costs nothing per frame.
 	var pool := MeshInstance3D.new()
 	var q := QuadMesh.new()
-	q.size = Vector2(3.4, 6.2)
+	q.size = Vector2(2.6, 5.0)
 	q.orientation = PlaneMesh.FACE_Y
 	pool.mesh = q
 	var sm := ShaderMaterial.new()
