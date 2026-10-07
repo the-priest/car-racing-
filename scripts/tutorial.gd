@@ -12,6 +12,7 @@ var progress := 0.0
 var done_t := -1.0 # brief pause on a completed step before the next one
 var acc := {}
 var map_opened := false
+var step_t := 0.0 # time spent on the current step
 
 func _steps() -> Array:
 	var g := func(k: String) -> String: return Settings.glyph(k)
@@ -39,6 +40,7 @@ func _next() -> void:
 	done_t = -1.0
 	acc = {}
 	map_opened = false
+	step_t = 0.0
 	var steps := _steps()
 	if step >= steps.size():
 		_finish(false)
@@ -89,6 +91,7 @@ func _process(delta: float) -> void:
 	# Keep the world quiet while learning.
 	game.career.call_timer = maxf(game.career.call_timer, 5.0) if name != "PHONE" else game.career.call_timer
 	var p: Car = game.player
+	step_t += delta
 	if done_t >= 0.0:
 		done_t += delta
 		if done_t > 1.1:
@@ -140,6 +143,10 @@ func hint() -> String:
 	var p: Car = game.player
 	if name == "DRIFT" and p.kmh < 45.0:
 		return "Speed up a little first."
+	if name == "DRIFT" and step_t > 18.0:
+		return "Hold the steering to one side, then let go of the gas and press it again within a second."
+	if name == "STEER" and step_t > 15.0 and p.kmh < 10.0:
+		return "Keep a little speed on while you steer."
 	if name == "HANDBRAKE" and p.kmh < 25.0:
 		return "Get moving, then steer and tap the handbrake."
 	return ""
