@@ -15,6 +15,12 @@ const CONCRETE_SHADER := preload("res://shaders/concrete.gdshader")
 ## Surface texture arrays: asphalt, grass, dirt, rock, sand, gravel, concrete, snow.
 const SURF_ALBEDO := preload("res://assets/textures/surfaces_albedo.jpg")
 const SURF_NRH := preload("res://assets/textures/surfaces_nrh.jpg")
+const PROPS_SHADER := preload("res://shaders/props.gdshader")
+## Surface array slices (tools/textures/gen_textures.py LAYERS order).
+const L_GRASS := 1.0
+const L_LIMESTONE := 10.0
+const L_PAINTED_METAL := 12.0
+const L_BARK := 15.0
 
 const CHUNK := 256.0
 const LAYER_WORLD := 1
@@ -388,6 +394,20 @@ func _relax_walls(road_e: PackedFloat32Array, keep_within: float, cells: PackedI
 				next[k] = true
 		active = next
 
+## Triplanar textured material for vertex-coloured props (see shaders/props.gdshader).
+func prop_material(layer: float, scale: float, color_ref: float, metallic := 0.0, vertex_color := true) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = PROPS_SHADER
+	m.set_shader_parameter("surf_albedo", SURF_ALBEDO)
+	m.set_shader_parameter("surf_nrh", SURF_NRH)
+	m.set_shader_parameter("layer", layer)
+	m.set_shader_parameter("scale", scale)
+	m.set_shader_parameter("alt_layer", L_LIMESTONE)
+	m.set_shader_parameter("color_ref", color_ref)
+	m.set_shader_parameter("metallic_amt", metallic)
+	m.set_shader_parameter("use_vertex_color", vertex_color)
+	return m
+
 ## Original heightmap sample (nearest cell), used while fitting before anything moves.
 func _raw_height(x: float, z: float) -> float:
 	var gi := clampi(roundi((x + HALF) / CELL), 0, N - 1)
@@ -723,11 +743,7 @@ func _build_city() -> void:
 	walk_mat.set_shader_parameter("noise_n", noise_n)
 	walk_mat.set_shader_parameter("surf_albedo", SURF_ALBEDO)
 	walk_mat.set_shader_parameter("surf_nrh", SURF_NRH)
-	var park_mat := StandardMaterial3D.new()
-	park_mat.albedo_color = Color(0.2, 0.32, 0.1)
-	park_mat.albedo_texture = noise_a
-	park_mat.uv1_scale = Vector3(40, 40, 40)
-	park_mat.roughness = 0.9
+	var park_mat := prop_material(L_GRASS, 3.0, 1.0, 0.0, false)
 	var walk := SurfaceTool.new()
 	walk.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var parks := SurfaceTool.new()
@@ -842,9 +858,9 @@ func _build_buildings(root: Node3D) -> void:
 		# Street-level depth: shop awnings over the ground floor on the street sides,
 		# and a stone cornice crowning older (non-glass) blocks.
 		if style != 0:
-			var stone := Color(0.62, 0.6, 0.55) if style == 1 else Color(0.5, 0.42, 0.36)
+			var stone := Color(0.62, 0.6, 0.55, 0.5) if style == 1 else Color(0.5, 0.42, 0.36, 0.5) # alpha 0.5: limestone
 			Proc.box(props, Vector3(cx, h - 0.45, cz), Vector3(w + 0.9, 0.9, dd + 0.9), stone)
-			Proc.box(props, Vector3(cx, h - 1.1, cz), Vector3(w + 0.45, 0.4, dd + 0.45), stone * 0.9)
+			Proc.box(props, Vector3(cx, h - 1.1, cz), Vector3(w + 0.45, 0.4, dd + 0.45), Color(stone.r * 0.9, stone.g * 0.9, stone.b * 0.9, 0.5))
 		if rng.randf() < 0.6:
 			var aw: Color = [Color(0.12, 0.2, 0.16), Color(0.32, 0.08, 0.08), Color(0.1, 0.12, 0.22), Color(0.18, 0.18, 0.19), Color(0.36, 0.26, 0.1)][rng.randi_range(0, 4)]
 			var ay := 3.55 if style == 2 else 3.95
@@ -894,10 +910,7 @@ func _build_buildings(root: Node3D) -> void:
 				2: pos = Vector3(cx + rng.randf_range(-0.3, 0.3) * w, sy, z0 - 0.35); size = Vector3(rng.randf_range(1.2, 2.4), sh, 0.3)
 				_: pos = Vector3(cx + rng.randf_range(-0.3, 0.3) * w, sy, z1 + 0.35); size = Vector3(rng.randf_range(1.2, 2.4), sh, 0.3)
 			signs.append([pos, size, neon])
-	var pmat := StandardMaterial3D.new()
-	pmat.vertex_color_use_as_albedo = true
-	pmat.albedo_texture = noise_a
-	pmat.roughness = 0.85
+	var pmat := prop_material(L_PAINTED_METAL, 1.5, 0.5, 0.3)
 	for tk in tiles:
 		var tile: Dictionary = tiles[tk]
 		var mm := MultiMesh.new()
@@ -948,10 +961,7 @@ func _emissive_boxes(root: Node3D, items: Array, strength: float) -> void:
 	root.add_child(mmi)
 
 func _build_signals(root: Node3D, hw: float) -> void:
-	var pole_mat := StandardMaterial3D.new()
-	pole_mat.vertex_color_use_as_albedo = true
-	pole_mat.metallic = 0.4
-	pole_mat.roughness = 0.5
+	var pole_mat := prop_material(L_PAINTED_METAL, 1.0, 0.5, 0.4)
 	var mesh := Proc.signal_pole_mesh(pole_mat)
 	var xf: Array[Transform3D] = []
 	var lights: Array = []
@@ -988,10 +998,7 @@ func _build_lamps() -> void:
 	var root := Node3D.new()
 	root.name = "Lamps"
 	add_child(root)
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.metallic = 0.5
-	mat.roughness = 0.45
+	var mat := prop_material(L_PAINTED_METAL, 1.0, 0.5, 0.5)
 	var mesh := Proc.lamp_mesh(mat)
 	var L: Array = d.lamps
 	var count := L.size() / 5
@@ -1079,11 +1086,7 @@ func _build_trees() -> void:
 	var root := Node3D.new()
 	root.name = "Trees"
 	add_child(root)
-	var bark := StandardMaterial3D.new()
-	bark.vertex_color_use_as_albedo = true
-	bark.albedo_texture = noise_a
-	bark.uv1_scale = Vector3(3, 6, 1)
-	bark.roughness = 0.95
+	var bark := prop_material(L_BARK, 1.2, 0.17, 0.0)
 	var leaf_b := ShaderMaterial.new()
 	leaf_b.shader = FOLIAGE_SHADER
 	leaf_b.set_shader_parameter("leaf_tex", Proc.leaf_texture(false))

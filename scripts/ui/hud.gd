@@ -918,7 +918,8 @@ static func map_markers(game: Node, full: bool) -> Array:
 	if free or full:
 		out.append([career.LOC.home, Color(0.3, 1.0, 0.55), "home", "HOME"])
 		for m2 in career.race_markers:
-			out.append([m2.pos, Color(0.3, 0.75, 1.0), "race", str(Career.RACES[m2.id].name)])
+			var hot := int(Career.RACES[m2.id].get("heat", 0)) > 0
+			out.append([m2.pos, Color(1.0, 0.3, 0.2) if hot else Color(0.3, 0.75, 1.0), "race", Career.race_title(m2.id)])
 	if free or full:
 		for dm in career.drift_markers:
 			out.append([dm.a, Color(1.0, 0.55, 0.1), "drift", str(Career.DRIFT_ZONES[dm.i].name) if full else ""])
@@ -1162,7 +1163,7 @@ class BigMap extends Control:
 		var career: Career = game.career
 		_targets.append([Career.LOC.home, "Home garage", "home"])
 		for m in career.race_markers:
-			_targets.append([m.pos, str(Career.RACES[m.id].name), "race"])
+			_targets.append([m.pos, Career.race_title(m.id), "race"])
 		for dm in career.drift_markers:
 			_targets.append([dm.a, "Drift zone: " + str(Career.DRIFT_ZONES[dm.i].name), "drift"])
 		for i in Career.SPEED_TRAPS.size():

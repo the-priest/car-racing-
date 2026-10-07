@@ -452,10 +452,12 @@ func _build_pause(box: VBoxContainer) -> void:
 		game._on_resume()
 		game.hud.big_map.open())
 	if career.race != null:
-		_button(box, "RESTART RACE" + ("  (lose the cops first)" if chasing else ""), func():
+		# Heat races bring the cops with them, so they can always be restarted.
+		var blocked: bool = chasing and int(career.race.def.get("heat", 0)) == 0
+		_button(box, "RESTART RACE" + ("  (lose the cops first)" if blocked else ""), func():
 			close_all()
 			game._on_resume()
-			career.restart_race(), chasing)
+			career.restart_race(), blocked)
 	if career.race != null or not career.active.is_empty():
 		var what := "RACE" if career.race else "JOB"
 		_button(box, "ABANDON " + what, func():

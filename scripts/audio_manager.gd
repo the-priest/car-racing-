@@ -5,6 +5,11 @@ extends Node
 ## and menu themes that crossfade with the game state.
 
 const DIR := "res://assets/audio/"
+## Engines are recorded at these rpm points (tools/audio/gen_engines.py); the two
+## nearest are crossfaded and pitch-shifted only slightly, so the exhaust note keeps
+## its body instead of turning into a whine at high revs.
+const ENG_DIR := "res://assets/audio/engines/"
+const ENG_RPMS := [1000, 2000, 3000, 4000, 5000, 6500, 8000, 9500]
 const MUSIC_DIR := "res://assets/music/"
 ## [file, title, artist]. Cruise tracks play through and rotate; themes loop.
 const CRUISE := [
@@ -35,8 +40,10 @@ var radio_title := ""
 var radio_artist := ""
 
 var streams := {}
-var eng_on: AudioStreamPlayer
+var eng_on: AudioStreamPlayer # electric drivetrain only
 var eng_off: AudioStreamPlayer
+var eng_layers_on: Array[AudioStreamPlayer] = []
+var eng_layers_off: Array[AudioStreamPlayer] = []
 var tire: AudioStreamPlayer
 var gravel: AudioStreamPlayer
 var wind: AudioStreamPlayer
@@ -57,6 +64,7 @@ var spool := 0.0
 var cyl := -1
 var last_throttle := 0.0
 var pop_timer := 0.0
+var load_s := 0.0
 var ai_players := {}
 
 func setup() -> void:
@@ -74,6 +82,9 @@ func setup() -> void:
 		streams["engine_%d_off" % c] = _loop("engine_%d_off" % c)
 	eng_on = _player(null)
 	eng_off = _player(null)
+	for i in ENG_RPMS.size():
+		eng_layers_on.append(_player(null))
+		eng_layers_off.append(_player(null))
 	tire = _player(streams.tire_squeal)
 	gravel = _player(streams.gravel)
 	wind = _player(streams.wind)
@@ -110,6 +121,21 @@ func setup() -> void:
 	_load_cruise()
 	apply_volumes()
 
+## Engine loop for `cyl` cylinders at layer `i` (cached).
+func eng_stream(c: int, on: bool, i: int) -> AudioStreamWAV:
+	var key := "e%d_%s_%d" % [c, "on" if on else "off", ENG_RPMS[i]]
+	if not streams.has(key):
+		streams[key] = _loop("engines/" + key)
+	return streams[key]
+
+## Layer index below `rpm` and the blend toward the next one.
+static func eng_layer(rpm: float) -> Array:
+	var r := clampf(rpm, ENG_RPMS[0], ENG_RPMS[ENG_RPMS.size() - 1])
+	for i in ENG_RPMS.size() - 1:
+		if r <= ENG_RPMS[i + 1]:
+			return [i, (r - ENG_RPMS[i]) / float(ENG_RPMS[i + 1] - ENG_RPMS[i])]
+	return [ENG_RPMS.size() - 2, 1.0]
+
 func _loop(n: String) -> AudioStreamWAV:
 	var s: AudioStreamWAV = load(DIR + n + ".wav")
 	if s:
@@ -136,10 +162,22 @@ func set_engine(c: int) -> void:
 	if c == cyl:
 		return
 	cyl = c
-	eng_on.stream = streams["engine_%d_on" % c]
-	eng_off.stream = streams["engine_%d_off" % c]
-	eng_on.play()
-	eng_off.play()
+	if c == 0:
+		eng_on.stream = streams["engine_0_on"]
+		eng_off.stream = streams["engine_0_off"]
+		eng_on.play()
+		eng_off.play()
+		for p in eng_layers_on + eng_layers_off:
+			p.stop()
+		return
+	eng_on.stop()
+	eng_off.stop()
+	for i in ENG_RPMS.size():
+		eng_layers_on[i].stream = eng_stream(c, true, i)
+		eng_layers_off[i].stream = eng_stream(c, false, i)
+		# Stagger start points so layers never phase-lock into a comb.
+		eng_layers_on[i].play(randf() * 0.5)
+		eng_layers_off[i].play(randf() * 0.5)
 
 func play_oneshot(n: String, pitch := 1.0, vol_db := 0.0) -> void:
 	if not streams.has(n):
@@ -164,15 +202,34 @@ func update_player(car: Car, active: bool, delta: float) -> void:
 	var st := car.stats
 	var red: float = st.red
 	var rpm_n := clampf(car.rpm / red, 0.05, 1.05)
-	var pitch := clampf(car.rpm / 3000.0, 0.25, 3.4) if st.cyl > 0 else clampf(0.4 + car.speed / 40.0, 0.4, 3.0)
-	eng_on.pitch_scale = pitch
-	eng_off.pitch_scale = pitch
 	var thr := clampf(float(car.input.throttle), 0.0, 1.0)
 	if car.burnout:
 		thr = 1.0
-	var base := 0.0 if not active else 0.55 + rpm_n * 0.45
-	eng_on.volume_db = _db(base * (0.25 + thr * 0.75))
-	eng_off.volume_db = _db(base * (1.0 - thr) * 0.7)
+	# Smooth the load so tapping the throttle doesn't click between layers.
+	load_s = move_toward(load_s, thr, delta * 8.0)
+	var base := 0.0 if not active else 0.6 + rpm_n * 0.4
+	if int(st.cyl) == 0:
+		var pitch := clampf(0.4 + car.speed / 40.0, 0.4, 3.0)
+		eng_on.pitch_scale = pitch
+		eng_off.pitch_scale = pitch
+		eng_on.volume_db = _db(base * (0.25 + load_s * 0.75))
+		eng_off.volume_db = _db(base * (1.0 - load_s) * 0.7)
+	else:
+		var rpm := maxf(float(car.rpm), 700.0)
+		var lb := eng_layer(rpm)
+		var li: int = lb[0]
+		var t: float = lb[1]
+		for i in ENG_RPMS.size():
+			var w := 0.0
+			if i == li:
+				w = cos(t * PI * 0.5)
+			elif i == li + 1:
+				w = sin(t * PI * 0.5)
+			var pitch := clampf(rpm / float(ENG_RPMS[i]), 0.5, 2.0)
+			eng_layers_on[i].pitch_scale = pitch
+			eng_layers_off[i].pitch_scale = pitch
+			eng_layers_on[i].volume_db = _db(base * w * (0.3 + load_s * 0.7))
+			eng_layers_off[i].volume_db = _db(base * w * (1.0 - load_s) * 0.75)
 	var skid := 0.0
 	for w in car.wheels:
 		if w.surface != "terrain":
@@ -638,15 +695,24 @@ func update_ai(cars: Array, listener: Vector3) -> void:
 			ai_players.erase(c)
 	for c in near:
 		var car: Car = c
+		var c_cyl := int(car.stats.cyl)
+		var li: int = 0
+		if c_cyl > 0:
+			var lb := eng_layer(maxf(float(car.rpm), 700.0))
+			li = int(lb[0]) + (1 if float(lb[1]) > 0.5 else 0)
 		if not ai_players.has(car):
 			var p := AudioStreamPlayer3D.new()
-			p.stream = streams["engine_%d_on" % int(car.stats.cyl)]
 			p.bus = "SFX"
 			p.unit_size = 8.0
 			p.max_distance = 140.0
+			p.set_meta("layer", -1)
 			car.add_child(p)
-			p.play()
 			ai_players[car] = p
 		var ap: AudioStreamPlayer3D = ai_players[car]
-		ap.pitch_scale = clampf(car.rpm / 3000.0, 0.25, 3.4)
+		if int(ap.get_meta("layer")) != li:
+			# Nearest rpm layer for AI (switching is inaudible at a distance).
+			ap.set_meta("layer", li)
+			ap.stream = streams["engine_0_on"] if c_cyl == 0 else eng_stream(c_cyl, true, li)
+			ap.play(randf() * 0.4)
+		ap.pitch_scale = clampf(0.4 + car.speed / 40.0, 0.4, 3.0) if c_cyl == 0 else clampf(maxf(float(car.rpm), 700.0) / float(ENG_RPMS[li]), 0.5, 2.0)
 		ap.volume_db = -4.0 + float(car.input.throttle) * 4.0

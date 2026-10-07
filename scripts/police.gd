@@ -24,6 +24,8 @@ var patrol_timer := 8.0
 var reinforce := 0.0
 var enabled := true
 var min_heat := 0 # contracts can force a minimum heat level
+var locked := false # heat races: the cops stay on you until the finish line
+var cap_heat := 5 # heat races hold the pursuit at their own heat level
 var night := 0.0
 var takedowns := 0
 var bonus := 0 # extra bounty (Kane)
@@ -174,6 +176,8 @@ func _remove(c: Dictionary) -> void:
 	cops.erase(c)
 
 func clear() -> void:
+	locked = false
+	cap_heat = 5
 	for c in cops.duplicate():
 		_remove(c)
 	pursuit = false
@@ -253,6 +257,8 @@ func start_pursuit(reason: String, at_heat := 1) -> void:
 
 func end_pursuit(escaped: bool) -> void:
 	last_stats = {"time": pursuit_time, "heat": heat, "takedowns": takedowns, "kane": bonus > 0}
+	locked = false
+	cap_heat = 5
 	var b := 0
 	if escaped:
 		b = bounty()
@@ -595,7 +601,7 @@ func update(dt: float) -> void:
 		return
 	# Pursuit
 	pursuit_time += dt
-	heat = clampi(maxi(heat, maxi(min_heat, 1 + int(pursuit_time / 35.0))), 1, 5)
+	heat = clampi(maxi(heat, maxi(min_heat, 1 + int(pursuit_time / 35.0))), 1, cap_heat)
 	if heat > last_heat:
 		last_heat = heat
 		game.hud.big("HEAT %d" % heat, 1.4)
@@ -614,15 +620,16 @@ func update(dt: float) -> void:
 	for c in cops:
 		if c.mode == "chase" and c.down <= 0.0:
 			chasing += 1
-	# No reinforcements once you've broken line of contact (cooldown running).
-	if chasing < want and cooldown <= 0.0:
+	# No reinforcements once you've broken line of contact (cooldown running),
+	# except in a heat race, where units keep joining along the route.
+	if chasing < want and (cooldown <= 0.0 or locked):
 		reinforce -= dt
 		if reinforce <= 0.0:
 			reinforce = (5.0 if heat < 4 else 3.5) * float(Settings.diff(1.5, 1.0, 0.75))
 			if not engaged:
 				reinforce = 1.5
 			spawn_near(140.0 if not engaged else 200.0, 320.0 if not engaged else 380.0, "chase")
-	if heat >= 3 and cooldown <= 0.0:
+	if heat >= 3 and (cooldown <= 0.0 or locked):
 		roadblock_timer -= dt
 		if roadblock_timer <= 0.0:
 			roadblock_timer = randf_range(35.0, 55.0) - heat * 4.0
@@ -671,7 +678,9 @@ func update(dt: float) -> void:
 		if cooldown == 0.0:
 			say("Dispatch: Lost visual on the suspect. All units, search the area.")
 		cooldown += dt
-		if cooldown > 10.0:
+		if locked:
+			cooldown = minf(cooldown, 6.0) # they keep sweeping the race route
+		elif cooldown > 10.0:
 			end_pursuit(true)
 			return
 	else:

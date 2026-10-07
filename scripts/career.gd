@@ -179,6 +179,25 @@ const RACES := {
 		"pts": [[-1620, 450], [-2680, 300], [-1600, -350]], "circuit": false},
 	"airstrip": {"name": "Airstrip Drag", "laps": 1, "reward": 9000, "skill": 0.95, "roads": ["runway"],
 		"pts": [[2300, -1280], [2300, 1280]], "circuit": false},
+	"harbor": {"name": "Harbor Run", "laps": 1, "reward": 10000, "skill": 0.91, "roads": ["city", "link", "hwy"],
+		"pts": [[0, 360], [0, 1559], [700, 1470]], "circuit": false},
+	"eastside": {"name": "Eastside Express", "laps": 1, "reward": 11000, "skill": 0.92, "roads": ["city", "link", "hwy"],
+		"pts": [[360, 0], [1600, 0], [1210, -1190]], "circuit": false},
+	"westbound": {"name": "Westbound", "laps": 1, "reward": 12000, "skill": 0.92, "roads": ["city", "link", "hwy", "country"],
+		"pts": [[-360, 0], [-1610, 0], [-1620, 450], [-2680, 300]], "circuit": false},
+	"crosstown": {"name": "Crosstown Dash", "laps": 1, "reward": 7000, "skill": 0.9, "roads": ["city"],
+		"pts": [[-600, -600], [-120, -360], [120, 360], [600, 600]], "circuit": false},
+	"outer": {"name": "Outer Blocks", "laps": 2, "reward": 9000, "skill": 0.9, "roads": ["city"],
+		"pts": [[-480, -480], [480, -480], [480, 480], [-480, 480]], "circuit": true},
+	# Heat races: the cops join at "GO". Pays more; keep your wheels and lose them after.
+	"heat_loop": {"name": "Night Kings Loop", "heat": 3, "laps": 2, "reward": 16000, "skill": 0.93, "roads": ["city"],
+		"pts": [[-360, -360], [360, -360], [360, 360], [-360, 360]], "circuit": true},
+	"heat_runway": {"name": "Runway Raid", "heat": 3, "laps": 1, "reward": 18000, "skill": 0.93, "roads": ["city", "link", "hwy", "runway"],
+		"pts": [[600, 0], [1600, 0], [1580, 400], [2300, 1270], [2300, -1270]], "circuit": false},
+	"heat_coast": {"name": "Coastline Inferno", "heat": 5, "laps": 1, "reward": 32000, "skill": 0.95, "roads": ["hwy"],
+		"pts": [[1600, 0], [0, 1560], [-1610, 0], [0, -1500]], "circuit": false},
+	"heat_summit": {"name": "Summit Descent", "heat": 5, "laps": 1, "reward": 36000, "skill": 0.96, "roads": ["pass", "hwy"],
+		"pts": [[-750, -1450], [350, -2700], [800, -1420]], "circuit": false},
 	"grand": {"name": "Grand Tour", "laps": 1, "reward": 40000, "skill": 0.97, "roads": ["city", "link", "hwy", "pass", "country"],
 		"pts": [[0, 0], [600, 0], [1600, 0], [800, -1420], [350, -2700], [-750, -1450], [-1620, 450], [-2680, 300], [-1600, -350], [-600, 0]], "circuit": false},
 }
@@ -880,6 +899,12 @@ func abandon(why := "Abandoned") -> void:
 		_complete_contract(false, why)
 
 # ---------------------------------------------------------------- races
+## Display name with the heat level for police races ("HEAT 5 · Summit Descent").
+static func race_title(id: String) -> String:
+	var r: Dictionary = RACES[id]
+	var h := int(r.get("heat", 0))
+	return ("HEAT %d  ·  %s" % [h, r.name]) if h > 0 else str(r.name)
+
 func race_near(p: Vector2) -> String:
 	if not idle():
 		return ""
@@ -895,6 +920,8 @@ func restart_race() -> void:
 	var id := race.id
 	var need := race.need_place
 	var bk := race_boss_key
+	if int(race.def.get("heat", 0)) > 0:
+		game.police.clear() # the heat race brings its own cops back at GO
 	race.cleanup()
 	race.queue_free()
 	race = null
@@ -922,6 +949,8 @@ func _race_finished(r: Dictionary) -> void:
 	var def: Dictionary = RACES[r.id]
 	var mult: float = [1.0, 0.5, 0.3, 0.15, 0.1, 0.08][clampi(place - 1, 0, 5)]
 	var reward := int(def.reward * mult)
+	if int(def.get("heat", 0)) > 0 and game.police.pursuit:
+		reward = int(reward * 1.25) # finished with the cops still on you
 	if game.daynight.night > 0.5:
 		reward = int(reward * 1.25)
 	var in_contract: bool = not active.is_empty() and active.steps[step].has("race")

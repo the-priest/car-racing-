@@ -113,6 +113,10 @@ func _ready() -> void:
 			shots_spec = "STORYTEST"
 		if a == "--tutorialtest":
 			shots_spec = "TUTORIALTEST"
+		if a == "--heatracetest":
+			shots_spec = "HEATRACE"
+		if a == "--racecheck":
+			shots_spec = "RACECHECK"
 		if a == "--gpstest":
 			shots_spec = "GPSTEST"
 		if a == "--introshots":
@@ -242,6 +246,59 @@ func _ready() -> void:
 		return
 	if shots_spec == "INTROSHOTS":
 		await _introshots()
+		get_tree().quit()
+		return
+	if shots_spec == "HEATRACE":
+		_on_play()
+		var rid := OS.get_environment("RACE") if OS.has_environment("RACE") else "heat_loop"
+		career.start_race(rid)
+		autopilot = true
+		var bot := AIDriver.new(player, career.race.path, 0.97, 0.0)
+		bot.idx = career.race.p_idx
+		var t := 0
+		var saw_cops := false
+		var res_cash := int(Save.data.cash)
+		while career.race and t < 60 * 60 * 6:
+			var all: Array = [player]
+			for r in career.race.rivals:
+				all.append(r.car)
+			bot.update(1.0 / 60.0, all, career.race.countdown > 0.0)
+			await get_tree().physics_frame
+			t += 1
+			if police.pursuit and not saw_cops:
+				saw_cops = true
+				print("[heat] pursuit started at t=", t / 60, "s heat=", police.heat, " countdown=", snappedf(career.race.countdown, 0.1))
+			if t % 1800 == 0 and career.race:
+				print("[heat] t=", t / 60, "s place=", career.race.place, " lap=", career.race.lap, " cops=", police.cops.size(), " heat=", police.heat, " kmh=", int(player.kmh))
+		print("[heat] race over after ", t / 60, "s  saw_cops=", saw_cops, " pursuit_now=", police.pursuit, " cash ", res_cash, " -> ", Save.data.cash, " state=", state)
+		autopilot = false
+		get_tree().quit()
+		return
+	if shots_spec == "RACECHECK":
+		# Every race's route must exist on its allowed roads (no straight-line fallbacks).
+		for id in Career.RACES:
+			var d: Dictionary = Career.RACES[id]
+			var ids: Array = []
+			for p in d.pts:
+				ids.append(world.nearest_node(Vector2(p[0], p[1]), d.roads))
+			var legs: Array = ids.duplicate()
+			if d.circuit:
+				legs.append(ids[0])
+			var total := 0.0
+			var worst := 0.0
+			var bad := 0
+			for i in legs.size() - 1:
+				var leg := world.route(legs[i], legs[i + 1], d.roads)
+				for k in leg.size() - 1:
+					var seg := world.node_pos[leg[k]].distance_to(world.node_pos[leg[k + 1]])
+					total += seg
+					worst = maxf(worst, seg)
+					if not world.adj[leg[k]].has(leg[k + 1]):
+						bad += 1
+				var off := world.node_pos[ids[i if i < ids.size() else 0]].distance_to(Vector2(d.pts[i if i < ids.size() else 0][0], d.pts[i if i < ids.size() else 0][1]))
+				if off > 40.0:
+					print("[race]   ", id, " waypoint ", i, " is ", int(off), " m from its road")
+			print("[race] ", id, " length=", int(total), " m  worst_seg=", int(worst), "  broken_links=", bad, "  heat=", int(d.get("heat", 0)))
 		get_tree().quit()
 		return
 	if shots_spec == "GPSTEST":
@@ -1803,7 +1860,8 @@ func _update_prompt() -> void:
 	var rid := career.race_near(pp)
 	if rid != "" and not police.pursuit:
 		var r: Dictionary = Career.RACES[rid]
-		prompt_text = "%s  ·  $%s\n[%s] Start race" % [r.name, HUD._fmt(int(r.reward)), key]
+		var hot := int(r.get("heat", 0)) > 0
+		prompt_text = "%s  ·  $%s\n[%s] Start race%s" % [Career.race_title(rid), HUD._fmt(int(r.reward)), key, "  ·  cops join at GO" if hot else ""]
 	elif player_at_home() and career.active.is_empty():
 		prompt_text = "HOME\n[%s] Enter garage" % key if not police.pursuit else "Lose the cops before going home"
 

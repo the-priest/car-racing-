@@ -189,6 +189,11 @@ func update(dt: float) -> void:
 			elif c <= 0:
 				game.hud.big("GO!", 1.0, true)
 				game.audio.play_oneshot("beep", 2.0)
+				var h := int(def.get("heat", 0))
+				if h > 0 and game.police.enabled:
+					game.police.start_pursuit("HEAT %d RACE  ·  COPS INBOUND" % h, h)
+					game.police.locked = true
+					game.police.cap_heat = h
 		# Hold the player on the line (engine can still rev).
 		player.linear_velocity = Vector3(0, player.linear_velocity.y, 0)
 		return
@@ -252,6 +257,10 @@ func update(dt: float) -> void:
 			"order": order.map(func(e): return "YOU" if e.me else str(e.name))}
 
 func cleanup() -> void:
+	if int(def.get("heat", 0)) > 0:
+		# Past the finish (or abandoned): from here it's a normal getaway.
+		game.police.locked = false
+		game.police.cap_heat = 5
 	for r in rivals:
 		game.on_car_removed(r.car)
 		r.car.queue_free()

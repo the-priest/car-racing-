@@ -28,8 +28,9 @@ def fbm(n, beta, seed, lo=1.0, hi=None, aniso=(1.0, 1.0)):
     """Periodic fractal noise, normalised to 0..1. beta: spectral falloff (2 = smooth)."""
     rng = np.random.default_rng(seed)
     white = rng.standard_normal((n, n))
-    fx = np.fft.fftfreq(n)[None, :] * n * aniso[0]
-    fy = np.fft.fftfreq(n)[:, None] * n * aniso[1]
+    # aniso < 1 on an axis stretches features along that axis (aniso=(1, 0.1): long in Y)
+    fx = np.fft.fftfreq(n)[None, :] * n / aniso[0]
+    fy = np.fft.fftfreq(n)[:, None] * n / aniso[1]
     f = np.sqrt(fx * fx + fy * fy)
     f[0, 0] = 1.0
     amp = 1.0 / np.power(f, beta * 0.5)
@@ -118,11 +119,17 @@ def save(name, albedo, height, strength, rough):
 
 
 def write_arrays():
+    """Slices go into an 8-wide grid (row-major), imported as a Texture2DArray."""
     os.makedirs(OUT, exist_ok=True)
+    cols = 8
+    rows = (len(LAYERS) + cols - 1) // cols
     for k, fname, q in [(0, "surfaces_albedo.jpg", 92), (1, "surfaces_nrh.jpg", 89)]:
-        strip = np.concatenate([RESULTS[nm][k] for nm in LAYERS], axis=1)
-        Image.fromarray(strip, "RGB").save(os.path.join(OUT, fname), quality=q, subsampling=0)
-        print("wrote", fname, strip.shape)
+        tiles = [RESULTS[nm][k] for nm in LAYERS]
+        while len(tiles) < rows * cols:
+            tiles.append(np.zeros_like(tiles[0]))
+        grid = np.concatenate([np.concatenate(tiles[r * cols:(r + 1) * cols], axis=1) for r in range(rows)], axis=0)
+        Image.fromarray(grid, "RGB").save(os.path.join(OUT, fname), quality=q, subsampling=0)
+        print("wrote", fname, grid.shape, "slices", len(LAYERS))
 
 
 # ---------------------------------------------------------------- materials
@@ -305,10 +312,200 @@ def snow():
     save("snow", col, h, 2.5, rough)
 
 
+# ---------------------------------------------------------------- building & prop materials
+def bond(n, cols, rows, stagger=0.5, jitter=None):
+    """Running-bond grid that tiles: per-pixel unit id, distance to the nearest joint
+    (pixels) and position inside the unit (0..1)."""
+    yy, xx = np.mgrid[0:n, 0:n].astype(np.float64)
+    if jitter is not None:
+        xx = xx + jitter[..., 0]
+        yy = yy + jitter[..., 1]
+    bw = n / cols
+    bh = n / rows
+    row = np.floor(yy / bh)
+    xs = xx + (row % 2) * stagger * bw
+    col = np.floor(xs / bw)
+    fx = xs / bw - col
+    fy = yy / bh - row
+    dx = np.minimum(fx, 1 - fx) * bw
+    dy = np.minimum(fy, 1 - fy) * bh
+    uid = (np.mod(row, rows) * 1000 + np.mod(col, cols)).astype(np.int64)
+    return uid, np.minimum(dx, dy), fx, fy
+
+
+def per_unit(uid, seed):
+    rng = np.random.default_rng(seed)
+    table = rng.uniform(0, 1, 1000 * 1000 // 50 + 64000)
+    return table[uid % table.size]
+
+
+def brick():
+    """Red brick, running bond, ~2.4 m square tile: 11 bricks across, 32 courses."""
+    n = N
+    uid, edge, fx, fy = bond(n, 11, 32, 0.5, warp(n, 1.2, 101, 2.2))
+    tone = per_unit(uid, 102)
+    tone2 = per_unit(uid, 103)
+    chip = fbm(n, 1.2, 104)
+    mortar = np.clip(1.0 - (edge - 2.0 - chip * 2.5) / 1.5, 0, 1)  # ~1 cm joints, ragged edges
+    face = fbm(n, 0.8, 105)  # sandy brick face
+    big = fbm(n, 2.6, 106)
+    h = (1.0 - mortar) * (0.7 + 0.15 * face) + mortar * 0.15 * fbm(n, 0.5, 107) - (np.clip(1.0 - edge / 6.0, 0, 1) * 0.15)
+    ao = ao_from_height(h, 3)
+    brick_col = lerp(rgb([0.32, 0.1, 0.06]), rgb([0.5, 0.22, 0.13]), tone)
+    brick_col = lerp(brick_col, rgb([0.22, 0.12, 0.09]), (tone2 > 0.88).astype(np.float64) * 0.8)  # dark clinkers
+    brick_col = lerp(brick_col, rgb([0.55, 0.38, 0.28]), (tone2 < 0.07).astype(np.float64) * 0.7)  # pale ones
+    brick_col = brick_col * (0.82 + 0.3 * face[..., None])
+    mortar_col = rgb([0.42, 0.4, 0.36]) * (0.85 + 0.25 * fbm(n, 0.6, 108)[..., None])
+    col = lerp(brick_col, mortar_col, mortar)
+    soot = np.clip((fbm(n, 2.4, 109, aniso=(1.0, 0.25)) - 0.55) * 2.5, 0, 1)  # weathering streaks
+    col = col * (1.0 - 0.3 * soot[..., None]) * (0.9 + 0.2 * big[..., None]) * ao[..., None]
+    rough = 0.82 + 0.1 * mortar
+    save("brick", col, h, 6.0, rough)
+
+
+def stucco():
+    """Painted render / stucco (white-ish, tinted per building in the shader), ~3 m tile."""
+    n = N
+    bump = fbm(n, 1.1, 111)
+    blot = fbm(n, 2.0, 112)
+    big = fbm(n, 2.8, 113)
+    c1, c2, _ = voronoi(n, 40, 114, warp(n, 40.0, 115))
+    crack = np.clip(1.0 - (c2 - c1) / 1.5, 0, 1) * np.clip((fbm(n, 2.2, 116) - 0.62) * 5.0, 0, 1)
+    drip = np.clip((fbm(n, 1.8, 117, aniso=(1.0, 0.08)) - 0.5) * 2.0, 0, 1)
+    h = bump * 0.5 + blot * 0.3 - crack * 0.4
+    col = rgb([0.72, 0.7, 0.66]) * (0.9 + 0.12 * bump[..., None]) * (0.92 + 0.12 * big[..., None])
+    col = col * (1.0 - 0.18 * drip[..., None]) * (1.0 - 0.45 * crack[..., None])
+    rough = 0.88 - 0.05 * blot
+    save("stucco", col, h, 3.5, rough)
+
+
+def limestone():
+    """Limestone cladding: big ashlar blocks 1.2 x 0.6 m with thin joints, ~3.6 m tile."""
+    n = N
+    uid, edge, fx, fy = bond(n, 3, 6, 0.5)
+    tone = per_unit(uid, 121)
+    grain = fbm(n, 0.7, 122)
+    fossils = (fbm(n, 0.4, 123) > 0.82).astype(np.float64)
+    big = fbm(n, 2.6, 124)
+    joint = np.clip(1.0 - (edge - 1.0) / 1.2, 0, 1)
+    h = (1.0 - joint) * (0.8 + 0.1 * grain) - fossils * 0.05
+    col = lerp(rgb([0.62, 0.58, 0.5]), rgb([0.76, 0.72, 0.63]), tone) * (0.9 + 0.15 * grain[..., None])
+    col = col * (1.0 - 0.15 * fossils[..., None]) * (0.9 + 0.15 * big[..., None])
+    col = lerp(col, rgb([0.3, 0.29, 0.27]), joint * 0.8)
+    soot = np.clip((fbm(n, 2.2, 125, aniso=(1.0, 0.2)) - 0.6) * 2.0, 0, 1)
+    col = col * (1.0 - 0.3 * soot[..., None])
+    rough = 0.8 + 0.1 * joint
+    save("limestone", col, h, 4.0, rough)
+
+
+def metal_panel():
+    """Standing-seam metal wall panels, ~3 m tile (8 panels), neutral grey to tint."""
+    n = N
+    xx = np.mgrid[0:n, 0:n][1].astype(np.float64)
+    period = n / 8
+    f = (xx % period) / period
+    seam = np.exp(-((f - 0.0) * period / 2.5) ** 2) + np.exp(-((f - 1.0) * period / 2.5) ** 2)
+    canning = fbm(n, 2.6, 131, aniso=(0.3, 1.0)) * 0.3
+    brushed = fbm(n, 0.9, 132, aniso=(0.04, 1.0))
+    h = seam * 1.0 + canning
+    col = rgb([0.5, 0.51, 0.52]) * (0.9 + 0.12 * brushed[..., None]) * (0.92 + 0.1 * canning[..., None] / 0.3)
+    dirt = np.clip((fbm(n, 2.2, 133, aniso=(1.0, 0.15)) - 0.55) * 2.0, 0, 1)
+    col = col * (1.0 - 0.25 * dirt[..., None])
+    rough = 0.45 + 0.15 * brushed + 0.2 * dirt
+    save("metal_panel", col, h, 5.0, rough)
+
+
+def painted_metal():
+    """Painted steel for poles and props: chipped paint, scratches and rust, ~1 m tile."""
+    n = N
+    rng = np.random.default_rng(141)
+    paint_n = fbm(n, 1.4, 142)
+    rust_mask = np.clip((fbm(n, 2.0, 143) - 0.68) * 5.0, 0, 1)
+    pits = (fbm(n, 0.6, 144) > 0.78).astype(np.float64) * rust_mask
+    scratches = np.zeros((n, n))
+    yy, xx = np.mgrid[0:n, 0:n].astype(np.float64)
+    for i in range(160):
+        x0, y0 = rng.uniform(0, n, 2)
+        ang = rng.normal(0.3, 0.4)
+        ln = rng.uniform(20, 140)
+        d = np.abs((xx - x0) * np.sin(ang) - (yy - y0) * np.cos(ang))
+        t = (xx - x0) * np.cos(ang) + (yy - y0) * np.sin(ang)
+        scratches = np.maximum(scratches, np.clip(1.0 - d / 0.9, 0, 1) * (t > 0) * (t < ln) * rng.uniform(0.3, 1.0))
+    h = paint_n * 0.15 - rust_mask * 0.3 - pits * 0.3 - scratches * 0.2
+    col = rgb([0.5, 0.5, 0.5]) * (0.95 + 0.08 * paint_n[..., None])
+    col = lerp(col, rgb([0.65, 0.66, 0.67]), scratches * 0.8)  # bare steel in scratches
+    rust = lerp(rgb([0.25, 0.1, 0.04]), rgb([0.45, 0.2, 0.07]), fbm(n, 1.0, 145))
+    col = lerp(col, rust, rust_mask * 0.85)
+    rough = 0.4 + 0.45 * rust_mask - 0.15 * scratches
+    save("painted_metal", col, h, 3.0, rough)
+
+
+def roof():
+    """Flat-roof membrane with welded seams, patches and gravel, ~4 m tile."""
+    n = N
+    yy = np.mgrid[0:n, 0:n][0].astype(np.float64)
+    period = n / 4
+    f = (yy % period) / period
+    seam = np.exp(-((f - 0.02) * period / 3.0) ** 2)
+    wrinkle = fbm(n, 2.0, 151) * 0.4
+    grav_d, grav_m, gid = stones(n, 5000, 152, 0.4, 2.0, (0.4, 1.0))
+    gravel_zone = np.clip((fbm(n, 2.4, 153) - 0.55) * 4.0, 0, 1)
+    patch = np.clip((fbm(n, 2.6, 154) - 0.7) * 6.0, 0, 1)
+    h = seam * 0.5 + wrinkle + grav_d * gravel_zone * 0.6
+    col = rgb([0.12, 0.12, 0.125]) * (0.85 + 0.3 * fbm(n, 1.0, 155)[..., None])
+    col = lerp(col, rgb([0.2, 0.2, 0.2]), patch * 0.6)
+    gtone = np.random.default_rng(156).uniform(0, 1, 5000)[gid]
+    col = lerp(col, lerp(rgb([0.25, 0.24, 0.22]), rgb([0.45, 0.43, 0.4]), gtone), grav_m * gravel_zone)
+    col = col * (1.0 - 0.2 * seam[..., None])
+    rough = 0.85 - 0.1 * patch
+    save("roof", col, h, 4.0, rough)
+
+
+def pavers():
+    """Concrete block pavers (20 x 10 cm, herringbone-free running bond), ~2 m tile."""
+    n = N
+    uid, edge, fx, fy = bond(n, 10, 20, 0.5)
+    tone = per_unit(uid, 161)
+    face = fbm(n, 0.8, 162)
+    joint = np.clip(1.0 - (edge - 1.5) / 1.5, 0, 1)
+    bevel = np.clip(edge / 4.0, 0, 1)
+    h = np.sqrt(bevel) * (0.8 + 0.1 * face) - joint * 0.2
+    ao = ao_from_height(h, 3)
+    col = lerp(rgb([0.33, 0.31, 0.29]), rgb([0.47, 0.44, 0.4]), tone) * (0.88 + 0.2 * face[..., None])
+    col = lerp(col, rgb([0.22, 0.2, 0.17]), joint * 0.9)  # sand / dirt in the joints
+    moss = np.clip((fbm(n, 2.0, 163) - 0.7) * 5.0, 0, 1) * joint
+    col = lerp(col, rgb([0.12, 0.16, 0.07]), moss * 0.8)
+    stains = np.clip((fbm(n, 2.6, 164) - 0.62) * 3.0, 0, 1)
+    col = col * (1.0 - 0.3 * stains[..., None]) * ao[..., None]
+    rough = 0.85 - 0.05 * stains
+    save("pavers", col, h, 5.0, rough)
+
+
+def bark():
+    """Tree bark: deep vertical furrows between corky plates, ~1 m tile (wraps a trunk)."""
+    n = N
+    w = warp(n, 30.0, 171, 2.2)
+    furrow_n = fbm(n, 1.6, 172, aniso=(1.0, 0.1))  # long vertical structures
+    plates = sample_wrap(furrow_n, w[..., 0], w[..., 1] * 0.2)
+    ridge = 1.0 - np.abs(plates - 0.5) * 2.0
+    cracks = np.clip((0.35 - ridge) * 4.0, 0, 1)
+    grain = fbm(n, 0.8, 173, aniso=(1.0, 0.3))
+    h = ridge * 0.9 + grain * 0.2 - cracks * 0.5
+    ao = ao_from_height(h, 6)
+    col = lerp(rgb([0.06, 0.045, 0.035]), rgb([0.2, 0.16, 0.12]), np.clip(ridge * 0.8 + grain * 0.3, 0, 1))
+    lichen = np.clip((fbm(n, 2.0, 174) - 0.72) * 5.0, 0, 1) * ridge
+    col = lerp(col, rgb([0.22, 0.26, 0.16]), lichen * 0.6) * ao[..., None]
+    rough = 0.9
+    save("bark", col, h, 9.0, np.full((n, n), rough))
+
+
 # Slice order in the texture arrays (shaders index them with these numbers).
-LAYERS = ["asphalt", "grass", "dirt", "rock", "sand", "gravel", "concrete", "snow"]
+LAYERS = ["asphalt", "grass", "dirt", "rock", "sand", "gravel", "concrete", "snow",
+          "brick", "stucco", "limestone", "metal_panel", "painted_metal", "roof", "pavers", "bark"]
 MATERIALS = {"asphalt": asphalt, "grass": grass, "dirt": dirt, "rock": rock, "sand": sand,
-             "gravel": gravel, "concrete": concrete, "snow": snow}
+             "gravel": gravel, "concrete": concrete, "snow": snow, "brick": brick, "stucco": stucco,
+             "limestone": limestone, "metal_panel": metal_panel, "painted_metal": painted_metal,
+             "roof": roof, "pavers": pavers, "bark": bark}
 
 if __name__ == "__main__":
     for nm in LAYERS:

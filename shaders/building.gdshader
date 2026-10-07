@@ -17,6 +17,13 @@ varying vec3 wpos;
 varying vec3 wnrm;
 varying flat vec4 cust;
 
+const float L_CONCRETE = 6.0;
+const float L_BRICK = 8.0;
+const float L_STUCCO = 9.0;
+const float L_LIMESTONE = 10.0;
+const float L_METAL_PANEL = 11.0;
+const float L_ROOF = 13.0;
+
 vec3 srgb(vec3 c) {
 	return c * (c * (c * 0.305306011 + 0.682171111) + 0.012522878);
 }
@@ -44,10 +51,10 @@ void fragment() {
 	vec3 albedo; float rough = 0.85; float metal = 0.0; vec3 emis = vec3(0.0);
 	vec3 nmap = vec3(0.5, 0.5, 1.0);
 	if (roof) {
-		// Gravel-ballast roofs.
+		// Membrane roofs with seams and gravel.
 		float g = texture(noise_a, wpos.xz * 0.05).r;
-		albedo = srgb(texture(surf_albedo, vec3(wpos.xz / 3.0, 5.0)).rgb) * (0.7 + g * 0.5);
-		vec3 t = texture(surf_nrh, vec3(wpos.xz / 3.0, 5.0)).rgb;
+		albedo = srgb(texture(surf_albedo, vec3(wpos.xz / 4.0, L_ROOF)).rgb) * (0.75 + g * 0.5);
+		vec3 t = texture(surf_nrh, vec3(wpos.xz / 4.0, L_ROOF)).rgb;
 		rough = mix(t.b, 0.2, wetness);
 		nmap = vec3(t.rg, 1.0);
 	} else {
@@ -62,29 +69,30 @@ void fragment() {
 		// Wall material
 		vec3 wall;
 		vec3 wall_t = vec3(0.5, 0.5, 0.85);
+		// Real wall materials from the surface array (image up = world up, so stains run down).
+		vec2 wuv = vec2(u, -v);
+		float layer;
+		vec3 wtint;
+		float scale;
+		int pi = int(pal * 4.99);
 		if (style == 2) {
-			// Brick courses with mortar
-			vec2 b = vec2(u / 0.25 + step(1.0, mod(floor(v / 0.075), 2.0)) * 0.5, v / 0.075);
-			vec2 bf = fract(b);
-			float mortar = step(0.9, bf.x) + step(0.82, bf.y);
-			vec3 brick = mix(vec3(0.33, 0.13, 0.08), vec3(0.47, 0.23, 0.15), h21(floor(b) + seed)) * mix(0.8, 1.0, pal);
-			wall = mix(brick, vec3(0.42, 0.40, 0.36), clamp(mortar, 0.0, 1.0));
-			// Bricks smaller than a couple of pixels shimmer into moire: fade to their average.
-			float bfw = max(fwidth(b.x), fwidth(b.y));
-			vec3 avg_brick = mix(vec3(0.4, 0.18, 0.115) * mix(0.8, 1.0, pal), vec3(0.42, 0.40, 0.36), 0.25);
-			wall = mix(wall, avg_brick, smoothstep(0.25, 0.6, bfw));
+			layer = L_BRICK; scale = 2.4;
+			// red, brown, dark purple-brown, sandy, red again
+			wtint = pi == 0 ? vec3(1.0) : (pi == 1 ? vec3(0.8, 0.72, 0.68) : (pi == 2 ? vec3(0.62, 0.5, 0.52) : (pi == 3 ? vec3(1.25, 1.1, 0.85) : vec3(1.05, 0.95, 0.9))));
 		} else if (style == 1) {
-			// Precast concrete panels: real concrete texture, panel seams per floor.
-			vec3 conc = srgb(texture(surf_albedo, vec3(vec2(v, u) / 4.0 + seed, 6.0)).rgb) / 0.33; // broom marks run vertically, like weathering
-			// Palette: cream, sandstone, warm grey, terracotta, blue-grey.
-			int pi = int(pal * 4.99);
-			vec3 pc = pi == 0 ? vec3(0.62, 0.57, 0.47) : (pi == 1 ? vec3(0.55, 0.47, 0.36) : (pi == 2 ? vec3(0.5, 0.49, 0.46) : (pi == 3 ? vec3(0.48, 0.29, 0.21) : vec3(0.37, 0.41, 0.45))));
-			wall = pc * conc * (0.82 + grime * 0.3);
-			wall_t = texture(surf_nrh, vec3(vec2(v, u) / 4.0 + seed, 6.0)).rgb;
-			wall_t.rg = vec2(wall_t.g, wall_t.r); // swap slope axes to match the rotated UV
+			// cream render, limestone, concrete, terracotta render, blue-grey metal panels
+			if (pi == 0) { layer = L_STUCCO; scale = 3.0; wtint = vec3(0.95, 0.9, 0.78); }
+			else if (pi == 1) { layer = L_LIMESTONE; scale = 3.6; wtint = vec3(1.0); }
+			else if (pi == 2) { layer = L_CONCRETE; scale = 4.0; wtint = vec3(1.45, 1.42, 1.36); }
+			else if (pi == 3) { layer = L_STUCCO; scale = 3.0; wtint = vec3(0.85, 0.52, 0.38); }
+			else { layer = L_METAL_PANEL; scale = 3.0; wtint = vec3(0.7, 0.78, 0.86); }
 		} else {
-			wall = vec3(0.16, 0.17, 0.18) * (0.9 + grime * 0.2);
+			layer = L_METAL_PANEL; scale = 3.0; wtint = vec3(0.32, 0.34, 0.36); // spandrels between glass
 		}
+		vec2 tuv = wuv / scale + vec2(seed * 0.37, seed * 0.11);
+		wall = srgb(texture(surf_albedo, vec3(tuv, layer)).rgb) * wtint;
+		wall_t = texture(surf_nrh, vec3(tuv, layer)).rgb;
+		wall *= 0.85 + grime * 0.25;
 		wall *= 1.0 - smoothstep(0.55, 0.9, streak) * 0.15;
 		// Darken near the ground (dirt, AO)
 		wall *= 0.75 + 0.25 * smoothstep(0.0, 2.5, v);
@@ -135,7 +143,7 @@ void fragment() {
 		vec3 frame = h21(vec2(seed, 2.0)) > 0.5 ? vec3(0.06, 0.06, 0.065) : vec3(0.55, 0.55, 0.53);
 		glass = mix(glass, frame, mull * aa);
 		albedo = mix(wall, glass, win);
-		if (style == 1 && nmap.x == 0.5 && nmap.y == 0.5) nmap = vec3(wall_t.rg, 1.0);
+		if (nmap.x == 0.5 && nmap.y == 0.5) nmap = vec3(wall_t.rg, 1.0);
 		rough = mix(mix(wall_t.b, 0.35, wetness), mix(0.03 + pane * 0.05, 0.5, mull), win);
 		metal = mix(style == 0 ? 0.3 : 0.0, mix(0.9, 0.3, mull), win);
 		nmap = mix(nmap, glass_n, win * (1.0 - mull));
