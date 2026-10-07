@@ -53,6 +53,7 @@ var lamp_lights: Array[SpotLight3D] = []
 var lamp_timer := 0.0
 var road_mats: Array[ShaderMaterial] = []
 var grass_inst: MultiMeshInstance3D
+var gas_stations: Array = [] # see GasStations.place
 
 func build(preset: Dictionary) -> void:
 	q = preset
@@ -83,6 +84,10 @@ func build(preset: Dictionary) -> void:
 	var _t9742 := Time.get_ticks_msec()
 	_build_city()
 	if OS.is_stdout_verbose(): print('[world] _build_city() ', Time.get_ticks_msec() - _t9742, ' ms')
+	var gs_root := Node3D.new()
+	gs_root.name = "GasStations"
+	add_child(gs_root)
+	GasStations.build(self, gs_root, gas_stations)
 	progress.emit("Wiring street lights", 0.6)
 	await get_tree().process_frame
 	var _t9854 := Time.get_ticks_msec()
@@ -111,12 +116,71 @@ func _load_data() -> void:
 	heights = hb.to_float32_array()
 	_fix_road_joins()
 	_fit_terrain_to_roads()
+	gas_stations = GasStations.place(self)
+	_flatten_pads(gas_stations)
 	hb = heights.to_byte_array()
 	var himg := Image.create_from_data(N, N, false, Image.FORMAT_RF, hb)
 	height_tex = ImageTexture.create_from_image(himg)
 	var mb := FileAccess.get_file_as_bytes("res://assets/world/mask.bin")
+	_mask_pads(mb, gas_stations)
 	var mimg := Image.create_from_data(N, N, false, Image.FORMAT_RG8, mb)
 	mask_tex = ImageTexture.create_from_image(mimg)
+
+# ---------------------------------------------------------------- gas station pads
+## Station-local position (x away from the road, z along it) of a world point.
+func _pad_local(st: Dictionary, x: float, z: float) -> Vector2:
+	var b: Basis = st.basis
+	var dx: float = x - st.pos.x
+	var dz: float = z - st.pos.z
+	return Vector2(dx * b.x.x + dz * b.x.z, dx * b.z.x + dz * b.z.z)
+
+## Distance outside a station's footprint (0 inside).
+func _pad_dist(st: Dictionary, x: float, z: float) -> float:
+	var l := _pad_local(st, x, z)
+	var ox := maxf(maxf(GasStations.PAD_X0 + 2.0 - l.x, l.x - GasStations.PAD_X1), 0.0)
+	var oz := maxf(absf(l.y) - GasStations.PAD_Z, 0.0)
+	return Vector2(ox, oz).length()
+
+## True if (x, z) is within margin metres of a station footprint.
+func near_station(x: float, z: float, margin: float) -> bool:
+	for st in gas_stations:
+		if absf(x - st.pos.x) < 40.0 + margin and absf(z - st.pos.z) < 40.0 + margin and _pad_dist(st, x, z) <= margin:
+			return true
+	return false
+
+## Level the ground under each station to the road's height, easing back out.
+func _flatten_pads(stations: Array) -> void:
+	for st in stations:
+		var c: Vector3 = st.pos
+		var y: float = st.road_y - 0.04
+		var i0 := clampi(int((c.x - 50.0 + HALF) / CELL), 0, N - 1)
+		var i1 := clampi(int((c.x + 50.0 + HALF) / CELL) + 1, 0, N - 1)
+		var j0 := clampi(int((c.z - 50.0 + HALF) / CELL), 0, N - 1)
+		var j1 := clampi(int((c.z + 50.0 + HALF) / CELL) + 1, 0, N - 1)
+		for j in range(j0, j1 + 1):
+			for i in range(i0, i1 + 1):
+				var x := i * CELL - HALF
+				var z := j * CELL - HALF
+				var dd := _pad_dist(st, x, z)
+				# One cell of full flattening beyond the slab so bilinear filtering keeps it level.
+				var w := 1.0 - smoothstep(CELL, CELL + 14.0, dd)
+				if w <= 0.0:
+					continue
+				var k := j * N + i
+				var nh := lerpf(heights[k], y, w)
+				height_delta[k] += nh - heights[k]
+				heights[k] = nh
+
+## Gravel shoulder (no grass) under the forecourts.
+func _mask_pads(mb: PackedByteArray, stations: Array) -> void:
+	for st in stations:
+		var c: Vector3 = st.pos
+		for j in range(clampi(int((c.z - 45.0 + HALF) / CELL), 0, N - 1), clampi(int((c.z + 45.0 + HALF) / CELL) + 1, 0, N - 1) + 1):
+			for i in range(clampi(int((c.x - 45.0 + HALF) / CELL), 0, N - 1), clampi(int((c.x + 45.0 + HALF) / CELL) + 1, 0, N - 1) + 1):
+				var dd := _pad_dist(st, i * CELL - HALF, j * CELL - HALF)
+				var v := int(255.0 * (1.0 - smoothstep(2.0, 10.0, dd)))
+				var k := (j * N + i) * 2
+				mb[k] = maxi(mb[k], v)
 
 # ---------------------------------------------------------------- road/terrain fit
 ## Per-vertex change made by _fit_terrain_to_roads (lamps and trees follow it).
@@ -1000,7 +1064,11 @@ func _build_lamps() -> void:
 	add_child(root)
 	var mat := prop_material(L_PAINTED_METAL, 1.0, 0.5, 0.5)
 	var mesh := Proc.lamp_mesh(mat)
-	var L: Array = d.lamps
+	var L: Array = []
+	var src: Array = d.lamps
+	for i in src.size() / 5:
+		if not near_station(src[i * 5], src[i * 5 + 2], 3.0):
+			L.append_array(src.slice(i * 5, i * 5 + 5))
 	var count := L.size() / 5
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -1107,6 +1175,8 @@ func _build_trees() -> void:
 	rng.seed = 4
 	for i in count:
 		if rng.randf() > keep and not in_city(T[i * 6], T[i * 6 + 2]):
+			continue
+		if near_station(T[i * 6], T[i * 6 + 2], 5.0):
 			continue
 		var key := Vector2i(floori((float(T[i * 6]) + HALF) / 512.0), floori((float(T[i * 6 + 2]) + HALF) / 512.0)) * 2 + Vector2i(int(T[i * 6 + 4]), 0)
 		if not tiles.has(key):

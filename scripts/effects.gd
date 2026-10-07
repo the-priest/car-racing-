@@ -121,7 +121,7 @@ func attach(car: Car) -> void:
 func detach(car: Car) -> void:
 	for e in cars.duplicate():
 		if e.car == car:
-			for p in e.smoke + e.dust:
+			for p in e.smoke + e.dust + e.get("eng", []):
 				p.queue_free()
 			cars.erase(e)
 
@@ -161,6 +161,24 @@ func _tick() -> void:
 			sm.amount_ratio = clampf(maxf(skid, wet * clampf(car.speed / 60.0, 0.0, 0.6)), 0.15, 1.0)
 			du.emitting = w.contact and not road and car.speed > 6.0
 			du.amount_ratio = clampf(car.speed / 30.0, 0.2, 1.0)
+		# A damaged engine smokes: grey from half damage, thick black near wrecked.
+		if car.damage > 0.45 or e.has("eng"):
+			if not e.has("eng"):
+				var grey := _emitter(Color(0.55, 0.55, 0.56), 40)
+				var black := _emitter(Color(0.08, 0.08, 0.08), 50)
+				add_child(grey)
+				add_child(black)
+				e["eng"] = [grey, black]
+			var rear: bool = str(car.stats.get("body", "")) == "rsr"
+			var at: Vector3 = car.global_transform * Vector3(0, 0.95, 1.75 if rear else -1.55)
+			var g: GPUParticles3D = e.eng[0]
+			var bl: GPUParticles3D = e.eng[1]
+			g.global_position = at
+			bl.global_position = at
+			g.emitting = car.damage > 0.45
+			g.amount_ratio = clampf((car.damage - 0.45) * 3.0, 0.2, 1.0)
+			bl.emitting = car.damage > 0.8
+			bl.amount_ratio = clampf((car.damage - 0.8) * 5.0, 0.25, 1.0)
 		# Skid marks on all four wheels when sliding on hard surfaces.
 		for i in 4:
 			var w2: Dictionary = car.wheels[i]

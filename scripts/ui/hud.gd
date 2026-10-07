@@ -904,6 +904,14 @@ class Speedo extends Control:
 		# Nitro arc
 		draw_arc(c, R - 44, PI * 0.8, PI * 1.2, 24, Color(1, 1, 1, 0.12), 6.0, true)
 		draw_arc(c, R - 44, PI * 1.2 - PI * 0.4 * car.nitro, PI * 1.2, 24, Color(0.6, 0.85, 1.0) if car.nitro_on else Color(0.2, 0.55, 1.0), 6.0, true)
+		# Car health arc (right side), mirrors the nitrous arc; blinks when nearly wrecked.
+		var hp: float = 1.0 - car.damage
+		draw_arc(c, R - 44, -PI * 0.2, PI * 0.2, 24, Color(1, 1, 1, 0.12), 6.0, true)
+		var hcol := Color(0.3, 1.0, 0.5).lerp(Color(1.0, 0.8, 0.15), clampf((0.75 - hp) / 0.35, 0.0, 1.0))
+		if hp < 0.4:
+			hcol = Color(1.0, 0.2, 0.2, 1.0 if hp > 0.15 or int(Time.get_ticks_msec() / 200) % 2 == 0 else 0.35)
+		if hp > 0.001:
+			draw_arc(c, R - 44, PI * 0.2 - PI * 0.4 * hp, PI * 0.2, 24, hcol, 6.0, true)
 		var spd := car.speed * (2.237 if units_mph else 3.6)
 		draw_string(font, c + Vector2(-90, 18), str(int(spd)), HORIZONTAL_ALIGNMENT_CENTER, 180, 58, Color.WHITE)
 		draw_string(font, c + Vector2(-90, 42), "MPH" if units_mph else "KM/H", HORIZONTAL_ALIGNMENT_CENTER, 180, 15, Color(1, 1, 1, 0.6))
@@ -925,6 +933,9 @@ static func map_markers(game: Node, full: bool) -> Array:
 			out.append([dm.a, Color(1.0, 0.55, 0.1), "drift", str(Career.DRIFT_ZONES[dm.i].name) if full else ""])
 		for tp in Career.SPEED_TRAPS:
 			out.append([tp, Color(0.95, 0.95, 0.95), "trap", "Speed trap" if full else ""])
+	if free or full or game.player.damage > 0.3:
+		for st in game.world.gas_stations:
+			out.append([Vector2(st.pos.x, st.pos.z), Color(0.3, 0.9, 1.0), "gas", str(st.name) if full else ""])
 	if career.race:
 		for r in career.race.rivals:
 			out.append([Vector2(r.car.global_position.x, r.car.global_position.z), Color(1, 0.35, 0.45), "rival", ""])
@@ -965,6 +976,14 @@ static func draw_marker(ci: CanvasItem, p: Vector2, col: Color, kind: String, sz
 			ci.draw_colored_polygon(tri, dark)
 			tri = PackedVector2Array([p + Vector2(0, -r3), p + Vector2(r3, r3 - 1), p + Vector2(-r3, r3 - 1)])
 			ci.draw_colored_polygon(tri, col)
+		"gas":
+			# Fuel pump: body, display window and a hose arm.
+			var r4 := sz * 0.9
+			ci.draw_rect(Rect2(p + Vector2(-r4 * 0.8 - 2, -r4 - 2), Vector2(r4 * 1.3 + 4, r4 * 2 + 4)), dark)
+			ci.draw_rect(Rect2(p + Vector2(-r4 * 0.8, -r4), Vector2(r4 * 1.3, r4 * 2)), col)
+			ci.draw_rect(Rect2(p + Vector2(-r4 * 0.55, -r4 * 0.75), Vector2(r4 * 0.8, r4 * 0.6)), dark)
+			ci.draw_line(p + Vector2(r4 * 0.5, -r4 * 0.4), p + Vector2(r4 * 1.05, r4 * 0.1), dark, 4.0)
+			ci.draw_line(p + Vector2(r4 * 0.5, -r4 * 0.4), p + Vector2(r4 * 1.05, r4 * 0.1), col, 2.0)
 		"race":
 			ci.draw_circle(p, sz + 2.5, dark)
 			ci.draw_circle(p, sz, col)
@@ -1168,6 +1187,8 @@ class BigMap extends Control:
 			_targets.append([dm.a, "Drift zone: " + str(Career.DRIFT_ZONES[dm.i].name), "drift"])
 		for i in Career.SPEED_TRAPS.size():
 			_targets.append([Career.SPEED_TRAPS[i], "Speed trap", "trap"])
+		for st in game.world.gas_stations:
+			_targets.append([Vector2(st.pos.x, st.pos.z), str(st.name) + " (repair)", "gas"])
 		for k in Career.LOC:
 			if k != "home" and k != "depot" and k != "west_gate":
 				_targets.append([Career.LOC[k], str(Career.LOC_NAMES[k]).capitalize(), "place"])
@@ -1411,7 +1432,7 @@ class BigMap extends Control:
 			obj = "Race in progress"
 		draw_multiline_string(font, Vector2(lx, ly + 10), obj, HORIZONTAL_ALIGNMENT_LEFT, 300, 18, -1, Color(1, 0.85, 0.3))
 		ly += 110.0
-		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.95, 0.95, 0.95), "Speed trap"], ["drift", Color(1.0, 0.55, 0.1), "Drift zone"]]
+		var legend := [["mission", Color(1.0, 0.82, 0.1), "Mission / waypoint"], ["home", Color(0.3, 1.0, 0.55), "Home / garage"], ["race", Color(0.3, 0.75, 1.0), "Street race"], ["cop", Color(1, 0.15, 0.2), "Police"], ["trap", Color(0.95, 0.95, 0.95), "Speed trap"], ["drift", Color(1.0, 0.55, 0.1), "Drift zone"], ["gas", Color(0.3, 0.9, 1.0), "Gas station / repair"]]
 		for e in legend:
 			HUD.draw_marker(self, Vector2(lx + 12, ly), e[1], e[0], 8.0)
 			draw_string(font, Vector2(lx + 36, ly + 6), e[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color.WHITE)

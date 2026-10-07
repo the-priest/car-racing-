@@ -45,6 +45,7 @@ var eng_off: AudioStreamPlayer
 var eng_layers_on: Array[AudioStreamPlayer] = []
 var eng_layers_off: Array[AudioStreamPlayer] = []
 var tire: AudioStreamPlayer
+var road: AudioStreamPlayer # tyre roar on tarmac
 var gravel: AudioStreamPlayer
 var wind: AudioStreamPlayer
 var nitro: AudioStreamPlayer
@@ -73,9 +74,9 @@ func setup() -> void:
 		AudioServer.set_bus_name(AudioServer.bus_count - 1, "Music")
 		AudioServer.add_bus()
 		AudioServer.set_bus_name(AudioServer.bus_count - 1, "SFX")
-	for n in ["tire_squeal", "wind", "gravel", "nitro", "siren", "phone_ring"]:
+	for n in ["tire_squeal", "wind", "gravel", "nitro", "siren", "phone_ring", "road"]:
 		streams[n] = _loop(n)
-	for n in ["impact", "blowoff", "backfire", "beep", "whoosh", "reward"]:
+	for n in ["impact", "impact_heavy", "blowoff", "backfire", "beep", "whoosh", "reward", "repair"]:
 		streams[n] = load(DIR + n + ".wav")
 	for c in [0, 4, 6, 8, 10, 12]:
 		streams["engine_%d_on" % c] = _loop("engine_%d_on" % c)
@@ -88,6 +89,7 @@ func setup() -> void:
 	tire = _player(streams.tire_squeal)
 	gravel = _player(streams.gravel)
 	wind = _player(streams.wind)
+	road = _player(streams.road)
 	nitro = _player(streams.nitro)
 	siren = _player(streams.siren)
 	ring = _player(streams.phone_ring)
@@ -238,6 +240,10 @@ func update_player(car: Car, active: bool, delta: float) -> void:
 	tire.pitch_scale = 0.9 + skid * 0.2
 	gravel.volume_db = _db(clampf(car.speed / 30.0, 0.0, 1.0) * 0.6 if active and car.surface == "terrain" else 0.0)
 	wind.volume_db = _db(pow(clampf(car.speed / 90.0, 0.0, 1.0), 2.0) * 0.6 if active else 0.0)
+	wind.pitch_scale = 0.8 + clampf(car.speed / 120.0, 0.0, 0.6)
+	var roll := pow(clampf(car.speed / 45.0, 0.0, 1.0), 0.8) if active and car.on_ground and car.surface != "terrain" else 0.0
+	road.volume_db = _db(roll * (0.32 + 0.6 * (1.0 - Car.wet_grip)))
+	road.pitch_scale = 0.75 + clampf(car.speed / 90.0, 0.0, 0.6)
 	nitro.volume_db = _db(0.35 if active and car.nitro_on else 0.0)
 	# Turbo spools with revs under throttle (turbo upgrade only).
 	var want := thr * rpm_n * rpm_n if active and bool(st.get("turbo", false)) else 0.0

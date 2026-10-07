@@ -119,6 +119,8 @@ func _ready() -> void:
 			shots_spec = "RACECHECK"
 		if a == "--gpstest":
 			shots_spec = "GPSTEST"
+		if a == "--damagetest":
+			shots_spec = "DAMAGETEST"
 		if a == "--introshots":
 			shots_spec = "INTROSHOTS"
 	audio = AudioManager.new()
@@ -303,6 +305,10 @@ func _ready() -> void:
 		return
 	if shots_spec == "GPSTEST":
 		await _gpstest()
+		get_tree().quit()
+		return
+	if shots_spec == "DAMAGETEST":
+		await _damagetest()
 		get_tree().quit()
 		return
 	if shots_spec == "TUTORIALTEST":
@@ -819,6 +825,7 @@ func _spawn_player() -> void:
 		player.reset_to(Transform3D(Basis(Vector3.UP, float(p[3])), Vector3(p[0], float(p[1]) + 1.0, p[2])))
 	else:
 		_place_at_home()
+	player.add_damage(float(Save.data.get("damage", 0.0)))
 	cam.target = player
 	effects.attach(player)
 	player.impact.connect(_on_impact)
@@ -1022,6 +1029,7 @@ func persist() -> void:
 	var p := player.global_position
 	var f := -player.global_transform.basis.z
 	Save.data.pos = [p.x, p.y, p.z, atan2(-f.x, -f.z)]
+	Save.data.damage = player.damage
 	Save.data.hour = daynight.hour
 	Save.save_game()
 
@@ -1352,6 +1360,7 @@ func _on_pursuit_ended(escaped: bool, bounty: int) -> void:
 	else:
 		var fine := mini(int(Save.data.cash), 2500 * maxi(int(police.last_stats.get("heat", 1)), 1))
 		Save.add_cash(-fine)
+		player.repair() # released from impound fixed up
 		hud.big("BUSTED", 2.5, true)
 		if not career.active.is_empty():
 			career.abandon("You got busted  ·  fine $%s" % HUD._fmt(fine))
@@ -1378,9 +1387,11 @@ func _on_impact(strength: float, point := Vector3.INF, normal := Vector3.ZERO) -
 		var tang := v - normal * v.dot(normal)
 		var dir := normal * 0.6 + Vector3.UP * 0.35 + (tang.normalized() * 0.8 if tang.length() > 2.0 else Vector3.ZERO)
 		effects.sparks(point, dir, clampf(strength / 25.0, 0.0, 1.0))
+		if strength > 7.0 and tutorial == null:
+			_damage_player(clampf((strength - 7.0) / 110.0, 0.0, 0.25) * Settings.diff(0.6, 1.0, 1.4))
 	if strength > 4.0:
 		cam.shake = minf(1.0, strength / 25.0)
-		audio.play_oneshot("impact", randf_range(0.85, 1.1), linear_to_db(clampf(strength / 30.0, 0.1, 1.0)))
+		audio.play_oneshot("impact_heavy" if strength > 18.0 else "impact", randf_range(0.85, 1.1), linear_to_db(clampf(strength / 30.0, 0.1, 1.0)))
 		_rumble(clampf(strength / 20.0, 0.2, 1.0), 0.6, 0.25)
 		if strength > 8.0 and drift.chain > 0.0:
 			hud.message("DRIFT CHAIN LOST", 1.2)
@@ -1388,6 +1399,21 @@ func _on_impact(strength: float, point := Vector3.INF, normal := Vector3.ZERO) -
 			drift.mult = 1
 			drift.time = 0.0
 			drift.idle = 0.0
+
+## Body damage from a hit. Costs power and shows on the car; a wreck during a
+## chase is a bust. Gas stations fix it.
+func _damage_player(amount: float) -> void:
+	var before: float = player.damage
+	player.add_damage(amount)
+	if before < 0.5 and player.damage >= 0.5:
+		hud.message("HEAVY DAMAGE  ·  stop at a gas station to repair", 2.5, "dmg")
+		tip("damage", "Crashes damage your car and cost it power. Pull in under the canopy of any gas station (fuel pump icon on the map) to repair and refill your nitrous.")
+	if before < 1.0 and player.damage >= 1.0:
+		hud.big("WRECKED", 2.0, true)
+		if police.pursuit:
+			police.end_pursuit(false)
+		else:
+			hud.message("Your car is wrecked  ·  limp it to a gas station", 3.0, "dmg")
 
 func _on_traffic_hit(strength: float, point: Vector3, normal: Vector3) -> void:
 	_on_impact(strength * 0.5 + 4.0, point, normal)
@@ -1535,6 +1561,7 @@ func _open_garage() -> void:
 	state = State.GARAGE
 	hud.visible = false
 	player.linear_velocity = Vector3.ZERO
+	player.repair() # your own crew fixes it for free
 	menus.garage_sel = Save.data.car
 	_settle_player()
 	var cd: Dictionary = Data.CARS[Save.data.car]
@@ -1757,6 +1784,7 @@ func _process(delta: float) -> void:
 	_update_drift(delta)
 	_update_onboarding(delta)
 	_update_prompt()
+	_update_gas()
 	_update_gps(delta)
 	t0 = _pt("gps/prompt", t0)
 	# Nitrous refills: near misses, big air and high speed.
@@ -1864,6 +1892,54 @@ func _update_prompt() -> void:
 		prompt_text = "%s  ·  $%s\n[%s] Start race%s" % [Career.race_title(rid), HUD._fmt(int(r.reward)), key, "  ·  cops join at GO" if hot else ""]
 	elif player_at_home() and career.active.is_empty():
 		prompt_text = "HOME\n[%s] Enter garage" % key if not police.pursuit else "Lose the cops before going home"
+	elif gas_near >= 0 and career.race == null and (player.damage > 0.01 or player.nitro < 0.98):
+		var st: Dictionary = world.gas_stations[gas_near]
+		if Time.get_ticks_msec() < int(gas_used.get(gas_near, -GAS_COOLDOWN)) + GAS_COOLDOWN:
+			prompt_text = "%s\nService bay busy, try another station" % str(st.name).to_upper()
+		else:
+			prompt_text = "%s\nStop under the canopy  ·  repair $%s + nitrous" % [str(st.name).to_upper(), HUD._fmt(repair_cost())]
+
+## Gas stations: roll to a stop under the canopy to repair and refill nitrous.
+## Works mid-chase too (that's the point), but each station only once a minute.
+const GAS_COOLDOWN := 60000
+var gas_near := -1 # station within prompt range
+var gas_used := {} # station index -> ticks of the last service
+
+func repair_cost() -> int:
+	return int(ceil(player.damage * 2400.0 / 50.0)) * 50
+
+func _update_gas() -> void:
+	gas_near = -1
+	var p := player.global_position
+	for i in world.gas_stations.size():
+		var st: Dictionary = world.gas_stations[i]
+		var c: Vector3 = st.pos
+		if absf(p.x - c.x) < 45.0 and absf(p.z - c.z) < 45.0:
+			gas_near = i
+			var l := world._pad_local(st, p.x, p.z)
+			# Under the canopy: between the road edge and the shop, along the islands.
+			if l.x > GasStations.CANOPY_X0 and l.x < GasStations.CANOPY_X1 and absf(l.y) < GasStations.CANOPY_Z and player.speed < 4.0:
+				_service(i)
+			return
+
+func _service(i: int) -> void:
+	if career.race != null or tutorial != null:
+		return
+	if player.damage <= 0.01 and player.nitro >= 0.98:
+		return
+	var now := Time.get_ticks_msec()
+	if now < int(gas_used.get(i, -GAS_COOLDOWN)) + GAS_COOLDOWN:
+		return
+	gas_used[i] = now
+	var cost := mini(repair_cost(), int(Save.data.cash))
+	var fixed: bool = player.damage > 0.01
+	Save.add_cash(-cost)
+	player.repair()
+	player.nitro = 1.0
+	audio.play_oneshot("repair", 1.0, -2.0)
+	hud.big("REPAIRED" if fixed else "REFUELLED", 1.4, true)
+	hud.message("%s  ·  %s%s" % [str(world.gas_stations[i].name), "repaired and nitrous refilled" if fixed else "nitrous refilled", ("  ·  -$%s" % HUD._fmt(cost)) if cost > 0 else ""], 2.5, "gas")
+	persist()
 
 ## GPS: one route that sticks. It is trimmed as you drive along it and only
 ## recalculated when the destination moves or you leave it (off the line for a
@@ -2093,6 +2169,14 @@ func _run_shots(spec: String) -> void:
 		if p.size() > 8:
 			_build_player(p[8])
 			player.reset_to(Transform3D(Basis(Vector3.UP, deg_to_rad(float(p[3]))), Vector3(x, y, z)))
+		if p[1].begins_with("gs"):
+			# Gas station shot: approach on the road (gsN) or parked at the pumps (gsNin).
+			var st: Dictionary = world.gas_stations[int(p[1].substr(2))]
+			var lp := Vector3(-2.6, 0.0, 2.0) if p[1].ends_with("in") else Vector3(-10.0 - float(p[2]), 0.0, 38.0)
+			var b: Basis = st.basis
+			if float(p[3]) != 0.0:
+				b = b.rotated(Vector3.UP, deg_to_rad(float(p[3])))
+			player.reset_to(Transform3D(b, st.basis * lp + st.pos + Vector3.UP * 0.8))
 		var showcase := int(p[5]) == 4
 		state = State.GARAGE if showcase else State.PLAY
 		hud.visible = not showcase
@@ -2607,6 +2691,48 @@ func _aitest() -> void:
 # ---------------------------------------------------------------- UI test (mouse + gamepad)
 ## Follows GPS routes by teleporting along them and counts reroutes (should be none
 ## while on the line), then leaves the route and turns around (one reroute each).
+## Crash damage, wreck = bust in a chase, repair at every gas station.
+func _damagetest() -> void:
+	_on_play()
+	traffic.set_count(0)
+	police.enabled = false
+	print("[dmg] stations=", world.gas_stations.size())
+	for st in world.gas_stations:
+		# Flatness of the pad after levelling (worst corner vs the road height).
+		var worst := 0.0
+		for lx in [-4.0, 4.0, 12.0, 17.0]:
+			for lz in [-14.0, 0.0, 14.0]:
+				var q: Vector3 = st.basis * Vector3(lx, 0, lz) + st.pos
+				worst = maxf(worst, absf(world.ground(q.x, q.z) - float(st.road_y)))
+		print("[dmg]   ", st.name, " at ", Vector2(st.pos.x, st.pos.z).snapped(Vector2.ONE), " pad_err=", snappedf(worst, 0.01))
+	_on_impact(30.0)
+	print("[dmg] after one big hit damage=", snappedf(player.damage, 0.01))
+	for i in 8:
+		_on_impact(35.0)
+	print("[dmg] after 9 hits damage=", snappedf(player.damage, 0.01), " power=", snappedf(1.0 - 0.4 * player.damage, 0.01))
+	var ok := 0
+	Save.data.cash = 100000
+	for i in world.gas_stations.size():
+		var st: Dictionary = world.gas_stations[i]
+		player.add_damage(0.5)
+		player.nitro = 0.2
+		var cash0 := int(Save.data.cash)
+		player.reset_to(Transform3D(st.basis, st.basis * Vector3(-2.6, 0, 2.0) + st.pos + Vector3.UP * 0.8))
+		player.linear_velocity = Vector3.ZERO
+		await _frames(40)
+		var fixed: bool = player.damage < 0.01 and player.nitro > 0.99
+		if fixed:
+			ok += 1
+		print("[dmg]   ", st.name, " repaired=", fixed, " cost=", cash0 - int(Save.data.cash), " y=", snappedf(player.global_position.y - float(st.road_y), 0.01))
+	print("[dmg] repaired at ", ok, "/", world.gas_stations.size())
+	# Wreck mid-chase is a bust.
+	police.enabled = true
+	police.start_pursuit("test", 1)
+	await _frames(5)
+	_damage_player(1.0)
+	await _frames(5)
+	print("[dmg] wrecked in chase -> pursuit=", police.pursuit, " damage after bust=", player.damage)
+
 func _gpstest() -> void:
 	_on_play()
 	traffic.set_count(0)

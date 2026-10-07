@@ -60,6 +60,8 @@ var _hb_t := 0.0
 var _drift_v0 := 0.0 # speed when the drift started: the slide tries to hold most of it # handbrake turn: the car keeps the new heading after release
 var surface := "road"
 var power_mul := 1.0
+## 0 = like new, 1 = wrecked. Costs engine power and shows on the paint and as smoke.
+var damage := 0.0
 var gear_top: Array[float] = []
 var drive_f := 10000.0
 var power := 500000.0
@@ -473,11 +475,32 @@ func set_paint(c: Color) -> void:
 			m.albedo_color = lv[0] if i % 2 == 0 else lv[1]
 		else:
 			m.albedo_color = c if i % 2 == 0 else c.darkened(0.55)
+		m.set_meta("base_color", m.albedo_color)
 		m.metallic = 0.35
 		m.roughness = 0.3
 		m.clearcoat_enabled = true
 		m.clearcoat = 1.0
 		m.clearcoat_roughness = 0.05
+	_damage_look()
+
+func add_damage(amount: float) -> void:
+	damage = clampf(damage + amount, 0.0, 1.0)
+	_damage_look()
+
+func repair() -> void:
+	damage = 0.0
+	_damage_look()
+
+## Scuffed, dulled, dirtier paint as the car takes damage.
+func _damage_look() -> void:
+	for m in paint_mats:
+		m.roughness = lerpf(0.3, 0.72, damage)
+		m.clearcoat = 1.0 - damage * 0.9
+		m.clearcoat_roughness = lerpf(0.05, 0.6, damage)
+		m.metallic = lerpf(0.35, 0.15, damage)
+		var base: Color = m.get_meta("base_color") if m.has_meta("base_color") else m.albedo_color
+		m.set_meta("base_color", base)
+		m.albedo_color = base.lerp(Color(0.12, 0.11, 0.1), damage * 0.35)
 
 func set_lights(on: bool, night: float) -> void:
 	lights_on = on
@@ -642,7 +665,7 @@ func _physics_step(dt: float) -> void:
 	if throttle > 0.0:
 		var shape := 0.75 + 0.25 * sin(PI * clampf(0.1 + rpm_n * 0.75, 0.0, 1.0)) if gear_top.size() > 1 else 1.0
 		var limiter := 0.0 if rpm_n >= 1.02 or (rpm_n >= 1.0 and gear == gear_top.size() - 1) else 1.0
-		drive = throttle * minf(drive_f, power / maxf(abs_u, 1.0)) * shape * limiter * power_mul
+		drive = throttle * minf(drive_f, power / maxf(abs_u, 1.0)) * shape * limiter * power_mul * (1.0 - 0.4 * damage)
 		if shift_cut > 0.0:
 			drive *= 0.2
 		if drift_mode and assists:
