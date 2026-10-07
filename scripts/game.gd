@@ -1413,6 +1413,8 @@ func _prewarm_fx() -> void:
 		p.restart()
 		p.emitting = false
 
+var free_cam := false # test shots: camera placed by hand, the rig leaves it alone
+
 ## One crash makes several contact reports (body_entered on each collider, car
 ## contacts every physics tick); they are folded into one event so a crash costs one
 ## spark burst, one sound and one dose of damage.
@@ -1824,7 +1826,7 @@ func _process(delta: float) -> void:
 		audio.update_rotor(INF)
 		audio.set_horn(false)
 		return
-	cam.process_mode = Node.PROCESS_MODE_INHERIT
+	cam.process_mode = Node.PROCESS_MODE_DISABLED if free_cam else Node.PROCESS_MODE_INHERIT
 	t0 = _pt("world/fx", t0)
 	traffic.update(delta, player, police.cars())
 	t0 = _pt("traffic", t0)
@@ -2247,6 +2249,16 @@ func _run_shots(spec: String) -> void:
 				player.linear_velocity = -player.global_transform.basis.z * spd
 			player.input.throttle = 0.6 if spd > 0.0 else 0.0
 			await get_tree().process_frame
+		if OS.has_environment("SHOT_CAM"):
+			# Free camera: "x,y,z,look_x,look_y,look_z".
+			var cv := OS.get_environment("SHOT_CAM").split(",")
+			free_cam = true
+			cam.process_mode = Node.PROCESS_MODE_DISABLED
+			cam.global_position = Vector3(float(cv[0]), float(cv[1]), float(cv[2]))
+			cam.look_at(Vector3(float(cv[3]), float(cv[4]), float(cv[5])))
+			hud.visible = false
+			for i in 20:
+				await get_tree().process_frame
 		if OS.has_environment("SHOT_MAP"):
 			hud.big_map.open()
 			await get_tree().process_frame

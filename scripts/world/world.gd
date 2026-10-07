@@ -935,7 +935,10 @@ func _build_buildings(root: Node3D) -> void:
 	body.collision_layer = LAYER_WORLD | LAYER_BUILDINGS
 	root.add_child(body)
 	var signs: Array = []
+	var beacons: Array = []
+	var bi := -1
 	for bld in list:
+		bi += 1
 		var b: Array = bld.b
 		var x0: float = b[0]
 		var z0: float = b[1]
@@ -998,6 +1001,7 @@ func _build_buildings(root: Node3D) -> void:
 		for i in rng.randi_range(1, 3):
 			var s := Vector3(rng.randf_range(2, 5), rng.randf_range(1.5, 3.5), rng.randf_range(2, 5))
 			Proc.box(props, Vector3(cx + rng.randf_range(-0.3, 0.3) * tw, top + s.y * 0.5, cz + rng.randf_range(-0.3, 0.3) * td), s, Color(0.45, 0.46, 0.47))
+		_roof_detail(props, beacons, bi, style, cx, cz, top, tw, td)
 		# Collision for the footprint only (upper tiers are unreachable).
 		var bs := BoxShape3D.new()
 		bs.size = Vector3(w, h, dd)
@@ -1050,6 +1054,74 @@ func _build_buildings(root: Node3D) -> void:
 		pmi.visibility_range_end = 1600.0 # rooftop clutter isn't visible from far away
 		root.add_child(pmi)
 	_emissive_boxes(root, signs, 6.0)
+	_emissive_boxes(root, beacons, 9.0)
+
+## Rooftop clutter by building type. Own RNG per building so it doesn't reshuffle
+## the rest of the city. Brick blocks: wooden water towers; offices: condensers,
+## vents, a stair bulkhead; towers: antenna masts with red aviation beacons.
+func _roof_detail(props: SurfaceTool, beacons: Array, bi: int, style: int, cx: float, cz: float, top: float, tw: float, td: float) -> void:
+	var r := RandomNumberGenerator.new()
+	r.seed = 5000 + bi
+	var grey := Color(0.55, 0.56, 0.57)
+	var dark := Color(0.16, 0.16, 0.17)
+	# Stair / lift bulkhead with a door.
+	var bx := cx + r.randf_range(-0.25, 0.25) * tw
+	var bz := cz + r.randf_range(-0.25, 0.25) * td
+	Proc.box(props, Vector3(bx, top + 1.5, bz), Vector3(3.2, 3.0, 3.6), Color(0.5, 0.49, 0.47))
+	Proc.box(props, Vector3(bx, top + 3.05, bz), Vector3(3.5, 0.15, 3.9), dark)
+	Proc.box(props, Vector3(bx + 1.61, top + 1.1, bz), Vector3(0.04, 2.1, 1.0), Color(0.3, 0.32, 0.35))
+	# Condenser units in a row, fans on top.
+	var n := r.randi_range(2, 6)
+	var ox := cx + r.randf_range(-0.3, 0.1) * tw
+	var oz := cz + (0.3 if bz < cz else -0.3) * td
+	for i in n:
+		var px := ox + i * 1.6
+		if absf(px - cx) > tw * 0.5 - 1.2:
+			break
+		Proc.box(props, Vector3(px, top + 0.55, oz), Vector3(1.3, 1.1, 1.3), grey)
+		Proc._cylinder(props, Vector3(px, top + 1.1, oz), Vector3(px, top + 1.13, oz), 0.5, 0.5, 10, dark)
+	# Vent pipes and a goose-neck.
+	for i in r.randi_range(1, 4):
+		var vx := cx + r.randf_range(-0.4, 0.4) * tw
+		var vz := cz + r.randf_range(-0.4, 0.4) * td
+		var vh := r.randf_range(0.8, 2.2)
+		Proc._cylinder(props, Vector3(vx, top, vz), Vector3(vx, top + vh, vz), 0.18, 0.18, 8, grey.darkened(0.2))
+		Proc._cylinder(props, Vector3(vx, top + vh, vz), Vector3(vx, top + vh + 0.12, vz), 0.28, 0.1, 8, grey.darkened(0.3))
+	if style == 2 and top < 75.0 and r.randf() < 0.55:
+		# Wooden water tower on a steel stand.
+		var wx := cx + (0.25 if r.randf() < 0.5 else -0.25) * tw
+		var wz := cz + (0.25 if r.randf() < 0.5 else -0.25) * td
+		var wood := Color(0.36, 0.25, 0.16)
+		for lx in [-1.6, 1.6]:
+			for lz in [-1.6, 1.6]:
+				Proc.box(props, Vector3(wx + lx, top + 2.2, wz + lz), Vector3(0.22, 4.4, 0.22), dark)
+		Proc.box(props, Vector3(wx, top + 4.45, wz), Vector3(4.0, 0.2, 4.0), dark)
+		Proc._cylinder(props, Vector3(wx, top + 4.55, wz), Vector3(wx, top + 8.3, wz), 2.1, 2.0, 16, wood)
+		for k in 3:
+			Proc._cylinder(props, Vector3(wx, top + 5.2 + k * 1.15, wz), Vector3(wx, top + 5.28 + k * 1.15, wz), 2.14, 2.14, 16, dark)
+		Proc._cylinder(props, Vector3(wx, top + 8.3, wz), Vector3(wx, top + 9.6, wz), 2.2, 0.15, 16, wood.darkened(0.35))
+	elif style == 0 and top > 80.0 and r.randf() < 0.7:
+		# Antenna mast with an aviation beacon.
+		var mh := r.randf_range(10.0, 26.0)
+		var mx := cx + r.randf_range(-0.2, 0.2) * tw
+		var mz := cz + r.randf_range(-0.2, 0.2) * td
+		Proc._cylinder(props, Vector3(mx, top, mz), Vector3(mx, top + mh, mz), 0.45, 0.1, 6, Color(0.7, 0.7, 0.7))
+		for k in 3:
+			var hy := top + mh * (0.3 + k * 0.22)
+			Proc.box(props, Vector3(mx, hy, mz), Vector3(1.6 - k * 0.4, 0.08, 0.08), Color(0.7, 0.7, 0.7))
+		beacons.append([Vector3(mx, top + mh + 0.2, mz), Vector3.ONE * 0.45, Color(1.0, 0.08, 0.05)])
+	elif r.randf() < 0.35:
+		# Satellite dishes.
+		for i in r.randi_range(1, 3):
+			var sx := cx + r.randf_range(-0.35, 0.35) * tw
+			var sz := cz + r.randf_range(-0.35, 0.35) * td
+			Proc._cylinder(props, Vector3(sx, top, sz), Vector3(sx, top + 1.0, sz), 0.06, 0.06, 6, grey)
+			Proc._cylinder(props, Vector3(sx, top + 1.0, sz), Vector3(sx + 0.25, top + 1.5, sz + 0.25), 0.7, 0.1, 12, Color(0.85, 0.85, 0.85))
+	# Corner beacons on the tallest towers.
+	if top > 140.0:
+		for sxv in [-0.5, 0.5]:
+			for szv in [-0.5, 0.5]:
+				beacons.append([Vector3(cx + sxv * (tw - 0.6), top + 1.4, cz + szv * (td - 0.6)), Vector3.ONE * 0.35, Color(1.0, 0.08, 0.05)])
 
 func _emissive_boxes(root: Node3D, items: Array, strength: float) -> void:
 	if items.is_empty():
