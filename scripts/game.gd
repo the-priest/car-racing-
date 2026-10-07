@@ -52,6 +52,7 @@ var photo_hint: Label
 var top_kmh := 0.0
 var intro: Intro = null
 var tutorial: Tutorial = null
+var route_arrows: RouteArrows
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -181,6 +182,9 @@ func _ready() -> void:
 	career.dialogue_clear.connect(func(): hud.clear_dialogue())
 	career.title_card.connect(func(a, b, c): hud.title_card(a, b, c))
 	career.story_complete.connect(_on_story_complete)
+	route_arrows = RouteArrows.new()
+	add_child(route_arrows)
+	route_arrows.setup(self)
 	hud = HUD.new()
 	add_child(hud)
 	_spawn_player()
@@ -1813,6 +1817,7 @@ func _update_gps(delta: float) -> void:
 	if target == Vector2.INF and career.race == null:
 		target = custom_wp
 	if target == Vector2.INF and career.race:
+		route_arrows.update_route(PackedVector2Array(), false)
 		gps_route = PackedVector2Array()
 		gps_goal = Vector2.INF
 		var r := career.race
@@ -1820,6 +1825,7 @@ func _update_gps(delta: float) -> void:
 			gps_route.append(r.path.at(r.p_idx + k))
 		return
 	if target == Vector2.INF:
+		route_arrows.update_route(PackedVector2Array(), false)
 		gps_route = PackedVector2Array()
 		gps_goal = Vector2.INF
 		gps_nodes = PackedInt32Array()
@@ -1842,6 +1848,9 @@ func _update_gps(delta: float) -> void:
 	for id in gps_nodes:
 		gps_route.append(world.node_pos[id])
 	gps_route.append(gps_goal)
+	var leg := PackedVector2Array([gps_prev])
+	leg.append_array(gps_route.slice(1))
+	route_arrows.update_route(leg, bool(Settings.data.get("route_arrows", true)) and pp.distance_to(gps_goal) > 40.0, pp, fwd)
 
 ## Advance along the route; reroute only when clearly off it.
 func _gps_follow(pp: Vector2, v: Vector2, step: float, fwd: Vector2, target: Vector2) -> void:
@@ -1885,29 +1894,47 @@ func _gps_reroute(pp: Vector2, fwd: Vector2, target: Vector2, goal_node: int, ch
 	if not choose_start and not gps_nodes.is_empty() and dist[gps_nodes[0]] < INF:
 		start = gps_nodes[0] # still on the old route: keep going the same way
 	else:
-		# Nearest few nodes; ones behind you cost a U-turn.
+		# Snap onto the street you're on (city nodes are only at intersections, so a
+		# straight line to the nearest node would cut through a block), then leave by
+		# whichever end is better; turning around costs a U-turn.
 		var n0 := world.nearest_node(pp)
-		var cands: Array = [n0]
+		var near: Array = [n0]
 		for k in world.adj[n0]:
-			cands.append(k)
+			near.append(k)
 			for k2 in world.adj[k]:
-				if not cands.has(k2):
-					cands.append(k2)
+				if not near.has(k2):
+					near.append(k2)
+		var edge_d := INF
+		var ea := n0
+		var eb := n0
+		var on_street := pp
+		for u in near:
+			for v in world.adj[u]:
+				var q := Geometry2D.get_closest_point_to_segment(pp, world.node_pos[u], world.node_pos[v])
+				var dq := q.distance_to(pp)
+				if dq < edge_d:
+					edge_d = dq
+					ea = u
+					eb = v
+					on_street = q
 		var best_c := INF
-		for c in cands:
-			var to: Vector2 = world.node_pos[c] - pp
-			var d0 := to.length()
-			if d0 > 160.0 or dist[c] == INF:
+		for c in [ea, eb]:
+			# Leaving by this end only to come straight back along the same street
+			# is just a U-turn with extra steps.
+			if dist[c] == INF or (prev[c] == (eb if c == ea else ea) and ea != eb):
 				continue
+			var to: Vector2 = world.node_pos[c] - on_street
+			var d0 := to.length()
 			var pen := 0.0
-			if d0 > 12.0 and to.normalized().dot(fwd) < -0.2:
+			if d0 > 6.0 and to.normalized().dot(fwd) < -0.2:
 				pen = 250.0
-			var cost := d0 * 1.2 + pen + dist[c]
+			var cost := d0 + pen + dist[c]
 			if cost < best_c:
 				best_c = cost
 				start = c
 		if start < 0:
 			start = n0
+		pp = on_street
 	var nodes := PackedInt32Array()
 	var u := start
 	var guard := 0
@@ -1991,6 +2018,10 @@ func _run_shots(spec: String) -> void:
 			cam.mode = CameraRig.Mode.CHASE
 			menu_t = 2.2
 		var nframes := 90
+		if OS.has_environment("SHOT_WP"):
+			var wp := OS.get_environment("SHOT_WP").split(",")
+			custom_wp = Vector2(float(wp[0]), float(wp[1]))
+			gps_reset()
 		if OS.has_environment("SHOT_CARD"):
 			hud.title_card("ACT II  ·  THE CREW", "ARMORED RUN", "CHAPTER 5  ·  MARA")
 			nframes = 25
@@ -2007,7 +2038,7 @@ func _run_shots(spec: String) -> void:
 		img.save_png(OS.get_environment("SHOT_DIR") + "/" + p[0] + ".png")
 		if hud.big_map.visible:
 			hud.big_map.close()
-		print("shot ", p[0])
+		print("shot ", p[0], " route=", gps_route.size(), " arrows=", route_arrows.multimesh.visible_instance_count, " car=", player.global_position.round(), " first=", route_arrows.multimesh.get_instance_transform(0).origin.round() if route_arrows.multimesh.visible_instance_count > 0 else Vector3.ZERO, " route=", gps_route.slice(0, 4))
 
 # ---------------------------------------------------------------- automated playtest
 func _frames(n: int) -> void:

@@ -624,6 +624,7 @@ const SETTINGS := [
 	["assists", "Driving assists", [true, false], ["On", "Off (expert)"], 0],
 	["manual", "Gearbox", [false, true], ["Automatic", "Manual"], 0],
 	["units", "Units", ["kmh", "mph"], ["km/h", "mph"], 0],
+	["route_arrows", "Route arrows on the road", [true, false], ["On", "Off"], 0],
 	["traffic", "Traffic density", [0.0, 0.5, 1.0, 1.5], ["Off", "Light", "Normal", "Heavy"], 0],
 	["time_mode", "Time of day", ["dynamic", "day", "dusk", "night"], ["Dynamic cycle", "Always day", "Always dusk", "Always night"], 0],
 	["weather", "Weather", ["dynamic", "clear", "rain"], ["Dynamic", "Always clear", "Always rain"], 0],

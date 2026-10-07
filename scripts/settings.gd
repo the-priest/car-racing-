@@ -41,7 +41,7 @@ const QUALITY_NAMES := ["low", "medium", "high", "ultra"]
 var data := {
 	"quality": "", "fullscreen": true, "vsync": true, "render_scale": 0.0, "fov": 72.0,
 	"music": 0.5, "sfx": 0.85, "assists": true, "manual": false, "units": "kmh",
-	"show_fps": false, "traffic": 1.0, "camera": 0, "sensitivity": 1.0,
+	"show_fps": false, "route_arrows": true, "traffic": 1.0, "camera": 0, "sensitivity": 1.0,
 	"vibration": 1.0, "steer_sens": 1.0, "deadzone": 0.08, "steer_curve": 1.3,
 	"speed_fx": true, "cam_shake": 1.0, "time_mode": "dynamic", "weather": "dynamic", "difficulty": "normal",
 	"radio": false, "radio_shuffle": true,

@@ -69,6 +69,10 @@ void fragment() {
 			float mortar = step(0.9, bf.x) + step(0.82, bf.y);
 			vec3 brick = mix(vec3(0.33, 0.13, 0.08), vec3(0.47, 0.23, 0.15), h21(floor(b) + seed)) * mix(0.8, 1.0, pal);
 			wall = mix(brick, vec3(0.42, 0.40, 0.36), clamp(mortar, 0.0, 1.0));
+			// Bricks smaller than a couple of pixels shimmer into moire: fade to their average.
+			float bfw = max(fwidth(b.x), fwidth(b.y));
+			vec3 avg_brick = mix(vec3(0.4, 0.18, 0.115) * mix(0.8, 1.0, pal), vec3(0.42, 0.40, 0.36), 0.25);
+			wall = mix(wall, avg_brick, smoothstep(0.25, 0.6, bfw));
 		} else if (style == 1) {
 			// Precast concrete panels: real concrete texture, panel seams per floor.
 			vec3 conc = srgb(texture(surf_albedo, vec3(vec2(v, u) / 4.0 + seed, 6.0)).rgb) / 0.33; // broom marks run vertically, like weathering
