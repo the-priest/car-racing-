@@ -846,7 +846,7 @@ func _build_buildings(root: Node3D) -> void:
 			Proc.box(props, Vector3(cx, h - 0.45, cz), Vector3(w + 0.9, 0.9, dd + 0.9), stone)
 			Proc.box(props, Vector3(cx, h - 1.1, cz), Vector3(w + 0.45, 0.4, dd + 0.45), stone * 0.9)
 		if rng.randf() < 0.6:
-			var aw := [Color(0.12, 0.2, 0.16), Color(0.32, 0.08, 0.08), Color(0.1, 0.12, 0.22), Color(0.18, 0.18, 0.19), Color(0.36, 0.26, 0.1)][rng.randi_range(0, 4)]
+			var aw: Color = [Color(0.12, 0.2, 0.16), Color(0.32, 0.08, 0.08), Color(0.1, 0.12, 0.22), Color(0.18, 0.18, 0.19), Color(0.36, 0.26, 0.1)][rng.randi_range(0, 4)]
 			var ay := 3.55 if style == 2 else 3.95
 			for side in 4:
 				if rng.randf() < 0.35:
@@ -855,9 +855,9 @@ func _build_buildings(root: Node3D) -> void:
 				var depth := 1.7
 				var off := (dd if side < 2 else w) * 0.5 + depth * 0.5
 				var sgn := -1.0 if side % 2 == 0 else 1.0
-				var pc := Vector3(cx, ay, cz + sgn * off) if side < 2 else Vector3(cx + sgn * off, ay, cz)
-				var size := Vector3(along * 0.92, 0.14, depth) if side < 2 else Vector3(depth, 0.14, along * 0.92)
-				Proc.box(props, pc, size, aw)
+				var apos := Vector3(cx, ay, cz + sgn * off) if side < 2 else Vector3(cx + sgn * off, ay, cz)
+				var asize := Vector3(along * 0.92, 0.14, depth) if side < 2 else Vector3(depth, 0.14, along * 0.92)
+				Proc.box(props, apos, asize, aw)
 		# Parapet and rooftop machinery on the highest tier
 		var pc := Color(0.35, 0.35, 0.36)
 		Proc.box(props, Vector3(cx, top + 0.6, cz - td * 0.5 + 0.2), Vector3(tw, 1.2, 0.4), pc)
