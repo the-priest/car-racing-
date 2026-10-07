@@ -78,7 +78,7 @@ const BODIES := {
 			[-0.72, 0.78, 0.84], [-0.22, 0.7, 1.22], [0.22, 0.67, 1.26], [0.85, 0.64, 1.12], [1.6, 0.66, 0.9],
 		],
 		"n_body": 4.0, "n_cabin": 3.0, "scoop": false, "round_lights": true, "chrome": false, "wing": true,
-		"lamp_z": -1.72, "wing_y": 1.16, "wing_w": 1.86, "splitter": true, "light_bar": true,
+		"lamp_z": -1.72, "wing_y": 1.16, "wing_w": 1.86, "splitter": true, "light_bar": true, "integrated_bumpers": true,
 	},
 	# Plain delivery van for traffic.
 	"delivery": {
@@ -232,9 +232,16 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 	var zf: float = keys[0][0]
 	var zr: float = keys[keys.size() - 1][0]
 	var hwf: float = keys[0][1]
-	_box(root, Vector3(0, 0.42, zf - 0.03), Vector3(hwf * 2.05, 0.13, 0.12), chrome)
-	_box(root, Vector3(0, 0.44, zr + 0.03), Vector3(float(keys[keys.size() - 1][1]) * 2.05, 0.13, 0.12), chrome)
-	_box(root, Vector3(0, 0.6, zf + 0.01), Vector3(hwf * 1.3, 0.2, 0.06), dark)
+	if def.get("integrated_bumpers", false):
+		# Modern racer: bumpers are part of the body; just a low intake and a black
+		# lower valance front and rear.
+		_box(root, Vector3(0, 0.36, zf + 0.02), Vector3(hwf * 1.15, 0.1, 0.06), dark)
+		for sx in [-1.0, 1.0]:
+			_box(root, Vector3(sx * hwf * 0.68, 0.4, zf + 0.05), Vector3(0.32, 0.12, 0.06), dark)
+	else:
+		_box(root, Vector3(0, 0.42, zf - 0.03), Vector3(hwf * 2.05, 0.13, 0.12), chrome)
+		_box(root, Vector3(0, 0.44, zr + 0.03), Vector3(float(keys[keys.size() - 1][1]) * 2.05, 0.13, 0.12), chrome)
+		_box(root, Vector3(0, 0.6, zf + 0.01), Vector3(hwf * 1.3, 0.2, 0.06), dark)
 	var head := StandardMaterial3D.new()
 	head.albedo_color = Color(0.9, 0.9, 0.85)
 	head.emission_enabled = true
@@ -252,25 +259,25 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 			# Frog-eye lamps up on the front wings, tilted with the bonnet.
 			var lz: float = def.lamp_z
 			var bez := CylinderMesh.new()
-			bez.top_radius = 0.135
-			bez.bottom_radius = 0.135
+			bez.top_radius = 0.16
+			bez.bottom_radius = 0.16
 			bez.height = 0.05
 			var rim := MeshInstance3D.new()
 			rim.mesh = bez
 			rim.material_override = dark
-			rim.rotation_degrees = Vector3(62, 0, 0)
-			rim.position = Vector3(sx * _interp(keys, lz, 1) * 0.66, _interp(keys, lz, 3) - 0.03, lz - 0.02)
+			rim.rotation_degrees = Vector3(78, 0, 0)
+			rim.position = Vector3(sx * _interp(keys, lz, 1) * 0.66, _interp(keys, lz, 3) - 0.01, lz - 0.02)
 			root.add_child(rim)
 			var cyl2 := CylinderMesh.new()
-			cyl2.top_radius = 0.11
-			cyl2.bottom_radius = 0.11
+			cyl2.top_radius = 0.13
+			cyl2.bottom_radius = 0.13
 			cyl2.height = 0.06
 			var l2 := MeshInstance3D.new()
 			l2.name = "Headlamp"
 			l2.mesh = cyl2
 			l2.material_override = head
-			l2.rotation_degrees = Vector3(62, 0, 0)
-			l2.position = rim.position + Vector3(0, 0.01, -0.01)
+			l2.rotation_degrees = Vector3(78, 0, 0)
+			l2.position = rim.position + Vector3(0, 0.006, -0.02)
 			root.add_child(l2)
 		elif def.round_lights:
 			var cyl := CylinderMesh.new()
@@ -341,7 +348,7 @@ static func build(id: String, paint: StandardMaterial3D) -> Node3D:
 		_box(root, Vector3(0, 0.27, zf + 0.06), Vector3(hwf * 2.1, 0.03, 0.3), dark)
 		for sx in [-1.0, 1.0]: # side skirts and a rear diffuser
 			_box(root, Vector3(sx * (_interp(keys, 0.0, 1) + 0.01), 0.3, 0.0), Vector3(0.05, 0.08, 2.0), dark)
-		_box(root, Vector3(0, 0.3, zr - 0.05), Vector3(1.4, 0.06, 0.3), dark)
+		_box(root, Vector3(0, 0.3, zr - 0.14), Vector3(1.4, 0.06, 0.16), dark)
 	# Wheels: realistic tyres from the merged wheel mesh, chrome or dark rims.
 	var wr: float = def.wheel_r
 	var wscale := wr / 0.38
