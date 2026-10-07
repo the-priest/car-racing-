@@ -99,6 +99,8 @@ func _ready() -> void:
 			shots_spec = "DRIFTTEST"
 		if a == "--propaudit":
 			shots_spec = "PROPAUDIT"
+		if a == "--rendertest":
+			shots_spec = "RENDERTEST"
 		if a == "--fuzz":
 			shots_spec = "FUZZ"
 		if a == "--raceshot":
@@ -177,7 +179,6 @@ func _ready() -> void:
 		Save.data.cop_takedowns = int(Save.data.get("cop_takedowns", 0)) + 1
 		if bonus >= Police.KANE_BONUS:
 			_award("kane")
-		slowmo(0.45 if bonus < 5000 else 0.9)
 		hud.big("TAKEDOWN", 1.2, true)
 		audio.play_oneshot("impact", 0.7)
 		cam.shake = maxf(cam.shake, 0.8)
@@ -328,6 +329,10 @@ func _ready() -> void:
 		return
 	if shots_spec == "PROPAUDIT":
 		_propaudit()
+		get_tree().quit()
+		return
+	if shots_spec == "RENDERTEST":
+		await _rendertest()
 		get_tree().quit()
 		return
 	if shots_spec == "TUTORIALTEST":
@@ -1267,8 +1272,6 @@ func _on_career_finished(res: Dictionary) -> void:
 		# ESCAPED / BUSTED already on screen: the results card says the rest.
 		if hud.big_t < 0.3:
 			hud.big(t, 1.8, true)
-		if res.ok:
-			slowmo(0.9)
 		await get_tree().create_timer(1.7, true, false, true).timeout
 		while state != State.PLAY:
 			if state == State.MENU or my_session != session_id:
@@ -1335,19 +1338,6 @@ func tip(key: String, text: String) -> void:
 	seen.append(key)
 	Save.data.tips = seen
 	hud.tip(text)
-
-## Brief slow motion for big moments (takedowns). Real-time timer restores it.
-var slowmo_until := 0
-
-func slowmo(secs: float) -> void:
-	if profiling or shots_spec != "":
-		return
-	Engine.time_scale = 0.35
-	# Overlapping slow-mos (takedown, then job done) end at the latest deadline.
-	slowmo_until = maxi(slowmo_until, Time.get_ticks_msec() + int(secs * 1000.0))
-	get_tree().create_timer(secs, true, false, true).timeout.connect(func():
-		if Time.get_ticks_msec() >= slowmo_until - 5:
-			Engine.time_scale = 1.0)
 
 func _on_story_complete() -> void:
 	credits_roll_after_results = true
@@ -2763,6 +2753,86 @@ func _aitest() -> void:
 # ---------------------------------------------------------------- UI test (mouse + gamepad)
 ## Follows GPS routes by teleporting along them and counts reroutes (should be none
 ## while on the line), then leaves the route and turns around (one reroute each).
+## Rendering cost at fixed spots with the current preset: frame time, draw calls,
+## objects and triangles, day and night (night turns the lamp lights on).
+func _rendertest() -> void:
+	Save.data.tutorial_done = true
+	Save.data.intro_seen = true
+	_on_play()
+	state = State.PLAY
+	menus.close_all()
+	hud.visible = true
+	police.enabled = false
+	Settings.data.time_mode = "dynamic"
+	var spots := [["city street", Vector3(-3, 0, -300), 0.0], ["downtown junction", Vector3(5, 0, 30), 0.0],
+		["city edge", Vector3(300, 0, 603), PI * 0.5], ["coast highway", Vector3(1524, 23, 673), 0.0], ["mountains", Vector3(212, 0, -2609), 0.0]]
+	var total_ms := 0.0
+	for hour in [13.0, 22.0]:
+		for sp in spots:
+			var p: Vector3 = sp[1]
+			p.y = (world.drive_y(p.x, p.z) if world.in_city(p.x, p.z) else world.ground(p.x, p.z)) + 0.8
+			player.reset_to(Transform3D(Basis(Vector3.UP, float(sp[2])), p))
+			cam.snap = true
+			daynight.hour = hour
+			for i in 40:
+				await get_tree().process_frame
+			var ms := 0.0
+			var dc := 0.0
+			var obj := 0.0
+			var prim := 0.0
+			var last := Time.get_ticks_usec()
+			var n := 30
+			for i in n:
+				player.linear_velocity = Vector3.ZERO
+				await get_tree().process_frame
+				var now := Time.get_ticks_usec()
+				ms += (now - last) / 1000.0
+				last = now
+				dc += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+				obj += Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)
+				prim += Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+			total_ms += ms / n
+			print("[render] %-18s %s  %6.1f ms  draws %5d  objects %5d  tris %7dk" % [sp[0], "night" if hour > 20.0 else "day  ", ms / n, int(dc / n), int(obj / n), int(prim / n / 1000.0)])
+	print("[render] average %.1f ms" % (total_ms / 10.0))
+	if not OS.has_environment("BREAKDOWN"):
+		return
+	# What each part of the scene costs at the downtown junction / coast (day).
+	for sp in [spots[1], spots[3]]:
+		var p: Vector3 = sp[1]
+		p.y = (world.drive_y(p.x, p.z) if world.in_city(p.x, p.z) else world.ground(p.x, p.z)) + 0.8
+		player.reset_to(Transform3D(Basis(Vector3.UP, float(sp[2])), p))
+		cam.snap = true
+		daynight.hour = 13.0
+		var measure := func() -> Array:
+			for i in 15:
+				await get_tree().process_frame
+			var dc := 0.0
+			var prim := 0.0
+			for i in 10:
+				await get_tree().process_frame
+				dc += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+				prim += Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+			return [dc / 10.0, prim / 10.0]
+		var base: Array = await measure.call()
+		print("[render] -- ", sp[0], ": draws ", int(base[0]), " tris ", int(base[1] / 1000.0), "k")
+		var parts: Array = []
+		for c in world.get_children():
+			if c is Node3D and (c as Node3D).visible:
+				parts.append(c)
+		for c in [traffic, effects, route_arrows, player]:
+			parts.append(c)
+		for c in parts:
+			var n3: Node3D = c
+			n3.visible = false
+			var r: Array = await measure.call()
+			n3.visible = true
+			print("[render]    %-22s draws %4d  tris %6dk" % [n3.name, int(base[0] - r[0]), int((base[1] - r[1]) / 1000.0)])
+		var sun: DirectionalLight3D = daynight.sun
+		sun.shadow_enabled = false
+		var r2: Array = await measure.call()
+		sun.shadow_enabled = true
+		print("[render]    %-22s draws %4d  tris %6dk" % ["sun shadows", int(base[0] - r2[0]), int((base[1] - r2[1]) / 1000.0)])
+
 ## Finds street furniture, trees and buildings standing on a road surface.
 func _propaudit() -> void:
 	var d: Dictionary = world.d

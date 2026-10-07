@@ -62,14 +62,20 @@ static func _build() -> void:
 	_wheel = _commit(wheel_groups, false)
 	root.free()
 
+## Merging drops the import's LODs, so they are generated again here: without them
+## every traffic car drew all ~150k triangles of the model at any distance.
 static func _commit(groups: Dictionary, track: bool) -> ArrayMesh:
-	var mesh := ArrayMesh.new()
-	var idx := 0
+	var im := ImporterMesh.new()
 	for key in groups:
 		var g: Dictionary = groups[key]
 		var st: SurfaceTool = g.st
-		st.commit(mesh)
-		mesh.surface_set_material(idx, g.mat)
+		st.index()
+		im.add_surface(Mesh.PRIMITIVE_TRIANGLES, st.commit_to_arrays(), [], {}, g.mat, String(key))
+	im.generate_lods(25.0, 60.0, [])
+	var mesh := im.get_mesh()
+	var idx := 0
+	for key in groups:
+		var g: Dictionary = groups[key]
 		if track:
 			if String(key).begins_with("Paint"):
 				paint_surfaces.append(idx)

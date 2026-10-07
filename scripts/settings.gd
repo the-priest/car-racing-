@@ -9,9 +9,9 @@ const OVERRIDE := "user://override.cfg"
 const PRESETS := {
 	"low": {
 		"renderer": "gl_compatibility", "scale": 0.8, "msaa": 0, "taa": false, "fxaa": true,
-		"shadow_size": 2048, "shadow_dist": 140.0, "shadow_splits": 2, "soft_shadows": 0,
+		"shadow_size": 2048, "shadow_dist": 70.0, "shadow_splits": 1, "soft_shadows": 0,
 		"ssao": false, "ssr": false, "ssil": false, "sdfgi": false, "vfog": false, "glow": true,
-		"draw": 1300.0, "trees": 0.35, "tree_dist": 450.0, "grass": 0, "lamp_lights": 6,
+		"draw": 1300.0, "trees": 0.35, "tree_dist": 350.0, "grass": 0, "lamp_lights": 2,
 		"lamp_shadows": false, "head_shadows": false, "lod_bias": 2.0, "traffic": 10,
 	},
 	"medium": {
@@ -167,6 +167,8 @@ func _ready() -> void:
 		# Default to High; the player's chosen preset is always respected afterwards.
 		data.quality = "high"
 		save_settings()
+	if OS.has_environment("QUALITY"):
+		data.quality = OS.get_environment("QUALITY") # benchmarks: force a preset for this run
 	apply_window()
 
 func preset() -> Dictionary:
@@ -254,7 +256,7 @@ func apply_graphics(env: Environment, sun: DirectionalLight3D, vp: Viewport, cam
 	RenderingServer.positional_soft_shadow_filter_set_quality(p.soft_shadows)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = p.shadow_dist
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if p.shadow_splits == 4 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if p.shadow_splits == 4 else (DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if p.shadow_splits == 2 else DirectionalLight3D.SHADOW_ORTHOGONAL)
 
 	if not compat:
 		env.ssao_enabled = p.ssao

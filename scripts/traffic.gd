@@ -46,6 +46,11 @@ func setup(w: World, count: int) -> void:
 			vis = BodyGen.build(style, paints[(i * 3 + 1) % paints.size()])
 			for n in vis.find_children("*", "MeshInstance3D", true, false):
 				(n as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if String(n.name).ends_with("Rim") else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		# Distant civilians aren't worth drawing (and their shadows even less).
+		var far := 380.0 if RenderingServer.get_current_rendering_method() == "gl_compatibility" else 650.0
+		for n in vis.find_children("*", "MeshInstance3D", true, false):
+			(n as MeshInstance3D).visibility_range_end = far
+			(n as MeshInstance3D).visibility_range_end_margin = 30.0
 		add_child(vis)
 		vis.visible = false
 		cars.append({"node": vis, "a": 0, "b": 0, "t": 0.0, "speed": 0.0, "yaw": 0.0, "pos": Vector3.ZERO,

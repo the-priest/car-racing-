@@ -718,7 +718,6 @@ func _on_target_hit(hits: int, need: int) -> void:
 		message.emit("The guards called it in - cops are on the way", 2.5, "")
 		game.police.say("Dispatch: Armored car under attack %s! All units, respond!" % game.police.area_name(target.car.global_position), true)
 	if hits >= need:
-		game.slowmo(0.8)
 		big.emit("%s DISABLED" % target.def.name, 2.0)
 		game.audio.play_oneshot("reward")
 	else:

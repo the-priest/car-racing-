@@ -185,7 +185,8 @@ func _mask_pads(mb: PackedByteArray, stations: Array) -> void:
 		for j in range(clampi(int((c.z - 45.0 + HALF) / CELL), 0, N - 1), clampi(int((c.z + 45.0 + HALF) / CELL) + 1, 0, N - 1) + 1):
 			for i in range(clampi(int((c.x - 45.0 + HALF) / CELL), 0, N - 1), clampi(int((c.x + 45.0 + HALF) / CELL) + 1, 0, N - 1) + 1):
 				var dd := _pad_dist(st, i * CELL - HALF, j * CELL - HALF)
-				var v := int(255.0 * (1.0 - smoothstep(2.0, 10.0, dd)))
+				# Only right under the slab (no grass poking through); no gravel apron around it.
+				var v := int(255.0 * (1.0 - smoothstep(0.0, 1.0, dd)))
 				var k := (j * N + i) * 2
 				mb[k] = maxi(mb[k], v)
 
@@ -1194,21 +1195,15 @@ func _build_lamps() -> void:
 				and road_depth(src[i * 5], src[i * 5 + 2]) < -0.6:
 			L.append_array(src.slice(i * 5, i * 5 + 5))
 	var count := L.size() / 5
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = count
-	var bulbs := MultiMesh.new()
-	bulbs.transform_format = MultiMesh.TRANSFORM_3D
-	bulbs.use_custom_data = true
 	var bmat := ShaderMaterial.new()
 	bmat.shader = EMISSIVE_SHADER
 	bmat.set_shader_parameter("strength", 14.0)
 	bmat.set_shader_parameter("day_strength", 0.0)
 	var bmesh := Proc.lamp_bulb_mesh()
 	bmesh.surface_set_material(0, bmat)
-	bulbs.mesh = bmesh
-	bulbs.instance_count = count
+	# Chunked so only nearby lamps are drawn (one multimesh for all 1,800 lamps
+	# meant every lamp in the world went through every pass, shadows included).
+	var tiles := {}
 	for i in count:
 		var p := Vector3(L[i * 5], L[i * 5 + 1], L[i * 5 + 2])
 		lamp_bases.append(Vector2(p.x, p.z))
@@ -1216,20 +1211,37 @@ func _build_lamps() -> void:
 		var dir := Vector3(L[i * 5 + 3], 0, L[i * 5 + 4])
 		var bas := Basis(Vector3.UP, atan2(dir.x, dir.z))
 		var t := Transform3D(bas, p)
-		mm.set_instance_transform(i, t)
-		bulbs.set_instance_transform(i, t)
-		bulbs.set_instance_custom_data(i, Color(1.0, 0.78, 0.5, 0))
+		var tk := Vector2i(floori(p.x / 300.0), floori(p.z / 300.0))
+		if not tiles.has(tk):
+			tiles[tk] = []
+		tiles[tk].append(t)
 		var head := t * Vector3(0, 8.9, 2.9)
 		lamp_pos.append(head)
 		var key := Vector2i(floori(head.x / 100.0), floori(head.z / 100.0))
 		if not lamp_grid.has(key):
 			lamp_grid[key] = PackedInt32Array()
 		lamp_grid[key].append(lamp_pos.size() - 1)
-	for m in [mm, bulbs]:
-		var mmi := MultiMeshInstance3D.new()
-		mmi.multimesh = m
-		mmi.visibility_range_end = 1600.0
-		root.add_child(mmi)
+	var reach := 650.0 if compat else 1000.0
+	for tk in tiles:
+		var list: Array = tiles[tk]
+		for pair in [[mesh, false], [bmesh, true]]:
+			var m := MultiMesh.new()
+			m.transform_format = MultiMesh.TRANSFORM_3D
+			m.use_custom_data = pair[1]
+			m.mesh = pair[0]
+			m.instance_count = list.size()
+			for j in list.size():
+				m.set_instance_transform(j, list[j])
+				if pair[1]:
+					m.set_instance_custom_data(j, Color(1.0, 0.78, 0.5, 0))
+			var mmi := MultiMeshInstance3D.new()
+			mmi.multimesh = m
+			mmi.visibility_range_end = reach
+			mmi.visibility_range_end_margin = 50.0
+			# Thin poles barely show in shadow maps; skip them on the low end.
+			if compat or pair[1]:
+				mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(mmi)
 	# Real light pool, moved to the lamps nearest the camera.
 	for i in int(q.lamp_lights):
 		var l := SpotLight3D.new()
@@ -1334,6 +1346,8 @@ func _build_trees() -> void:
 			if lod == "near":
 				mmi.visibility_range_end = near_end
 				mmi.visibility_range_end_margin = 60.0
+				if compat:
+					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			else:
 				mmi.visibility_range_begin = near_end
 				mmi.visibility_range_begin_margin = 60.0
@@ -1372,6 +1386,8 @@ func _build_street_trees(root: Node3D, meshes: Dictionary) -> void:
 			if lod == "near":
 				mmi.visibility_range_end = minf(float(q.tree_dist), 600.0)
 				mmi.visibility_range_end_margin = 40.0
+				if compat:
+					mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			else:
 				mmi.visibility_range_begin = minf(float(q.tree_dist), 600.0)
 				mmi.visibility_range_begin_margin = 40.0
